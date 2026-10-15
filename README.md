@@ -4,7 +4,10 @@ Free, open-source live production software for students and creators — switch 
 
 Website & downloads: https://studio.btspl.tech · User guide: https://studio.btspl.tech/docs/
 
-## Features (v1.0)
+## Features (v1.1)
+
+New in 1.1: Instant Replay with slow motion, IP camera / SRT / RTMP / RTSP inputs, improved capture-card support (Blackmagic, AVerMedia, Elgato, Magewell), Scripts, input Triggers, Playlist, MIDI controllers, 9 more title templates, adaptive performance governor and automatic crash recovery. See CHANGELOG.md.
+
 
 - **Switcher** — Preview / Output monitors, Quick Play, Cut, 4 programmable transition buttons, manual T-Bar, Fade to Black
 - **Transitions** — Fade, Merge, Zoom, Cross Zoom, Wipes (4 directions + diagonal), Iris, Barn Door, Slide, Push, Fly, Cube, Flip, Dip to Black/White, Blur, 2 Stingers (video with alpha + cut point)

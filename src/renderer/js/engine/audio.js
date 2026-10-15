@@ -32,7 +32,20 @@ class BtsGate extends AudioWorkletProcessor {
     return true;
   }
 }
-registerProcessor('bts-gate', BtsGate);`;
+registerProcessor('bts-gate', BtsGate);
+// PCM player for network-stream audio: interleaved s16 stereo chunks in, low-latency ring buffer out
+class BtsPcm extends AudioWorkletProcessor {
+  constructor(){ super(); this.size = sampleRate; this.L = new Float32Array(this.size); this.R = new Float32Array(this.size); this.w = 0; this.r = 0; this.fill = 0; this.primed = false;
+    this.port.onmessage = (e) => { const d = new Int16Array(e.data.buffer || e.data, e.data.byteOffset || 0, (e.data.byteLength || e.data.length) >> 1); const n = d.length >> 1;
+      for (let i = 0; i < n; i++) { this.L[this.w] = d[2*i] / 32768; this.R[this.w] = d[2*i+1] / 32768; this.w = (this.w + 1) % this.size; }
+      this.fill += n; const max = sampleRate * 0.35; if (this.fill > max) { const drop = this.fill - Math.floor(sampleRate * 0.12); this.r = (this.r + drop) % this.size; this.fill -= drop; } };
+  }
+  process(inputs, outputs){ const o = outputs[0]; const n = o[0].length;
+    if (!this.primed) { if (this.fill < sampleRate * 0.08) return true; this.primed = true; }
+    for (let i = 0; i < n; i++) { if (this.fill > 0) { o[0][i] = this.L[this.r]; if (o[1]) o[1][i] = this.R[this.r]; this.r = (this.r + 1) % this.size; this.fill--; } else { o[0][i] = 0; if (o[1]) o[1][i] = 0; this.primed = false; } }
+    return true; }
+}
+registerProcessor('bts-pcm', BtsPcm);`;
 
   class AudioEngine {
     constructor(sampleRate = 48000) {

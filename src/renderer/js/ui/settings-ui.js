@@ -19,7 +19,9 @@
     { key: 'Shift+1', fn: 'OverlayInput1' }, { key: 'Shift+2', fn: 'OverlayInput2' }, { key: 'Shift+3', fn: 'OverlayInput3' }, { key: 'Shift+4', fn: 'OverlayInput4' },
     { key: 'Shift+0', fn: 'OverlayInputAllOff' }, { key: 'T', fn: 'Transition1' }, { key: 'Y', fn: 'Transition2' }, { key: 'U', fn: 'Transition3' }, { key: 'I', fn: 'Transition4' },
     { key: 'P', fn: 'PlayPause' }, { key: 'R', fn: 'Restart' }, { key: 'N', fn: 'NextItem' }, { key: 'Ctrl+P', fn: 'Snapshot' },
-    { key: 'ArrowRight', fn: 'PreviewInputNext' }, { key: 'ArrowLeft', fn: 'PreviewInputPrevious' }
+    { key: 'ArrowRight', fn: 'PreviewInputNext' }, { key: 'ArrowLeft', fn: 'PreviewInputPrevious' },
+    { key: 'Shift+R', fn: 'ReplayInstant' }, { key: '[', fn: 'ReplayMarkIn' }, { key: ']', fn: 'ReplayMarkOut' }, { key: 'Shift+S', fn: 'ReplaySaveMarks' },
+    { key: 'Shift+P', fn: 'StartPlayList' }, { key: 'Escape', fn: 'ScriptStopAll' }
   ];
   for (let i = 1; i <= 9; i++) { DEFAULT_SHORTCUTS.push({ key: String(i), fn: 'PreviewInput', params: { Input: String(i) } }); DEFAULT_SHORTCUTS.push({ key: 'Ctrl+' + i, fn: 'Cut', params: { Input: String(i) } }); }
 
@@ -112,12 +114,16 @@
       U.el('button', { class: 'btn primary', text: 'Check for updates now', onclick: () => window.bts.update.check() })
     ])]);
 
+    const midiEl = BTS.operatorUI.midiTab();
+    const capBefore = JSON.stringify(s.capture || {}) + JSON.stringify((s.performance || {}).disableGpu);
+    const devEl = BTS.operatorUI.devicesTab();
     const t = BTS.Dialog.tabs([
       { id: 'general', label: 'General', el: general }, { id: 'stream', label: 'Streaming', el: stream }, { id: 'record', label: 'Recording', el: record },
-      { id: 'transitions', label: 'Transitions', el: trans }, { id: 'shortcuts', label: 'Shortcuts', el: sc.el }, { id: 'api', label: 'Web Controller / API', el: api }, { id: 'updates', label: 'Updates', el: upd }
+      { id: 'transitions', label: 'Transitions', el: trans }, { id: 'shortcuts', label: 'Shortcuts', el: sc.el }, { id: 'midi', label: 'MIDI', el: midiEl },
+      { id: 'devices', label: 'Devices & Performance', el: devEl }, { id: 'api', label: 'Web Controller / API', el: api }, { id: 'updates', label: 'Updates', el: upd }
     ]);
     BTS.Dialog.open({
-      title: 'Settings', body: t.el, width: 780,
+      title: 'Settings', body: t.el, width: 820, onClose: () => { if (midiEl._cleanup) midiEl._cleanup(); },
       buttons: [{ label: 'Cancel' }, {
         label: 'Save', primary: true, onClick: async () => {
           const g = gen;
@@ -132,6 +138,7 @@
           st.preloadStingers();
           st.emit('transitions-config');
           BTS.ui.loadShortcuts();
+          if (JSON.stringify(s.capture || {}) + JSON.stringify((s.performance || {}).disableGpu) !== capBefore) U.toast('Capture backend / rendering change applies after restarting BTS Studio', 'info', 8000);
           U.toast('Settings saved', 'ok');
         }
       }]

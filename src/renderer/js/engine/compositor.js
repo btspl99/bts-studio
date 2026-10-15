@@ -27,7 +27,8 @@
       };
       this.active = null;      // running transition
       this.tbar = { value: 0, reversed: false, dragging: false };
-      this.stats = { fps: 0, renderMs: 0, dropped: 0 };
+      this.stats = { fps: 0, renderMs: 0, dropped: 0, perfLevel: 0 };
+      this.perf = { level: 0, previewEvery: 1, thumbEvery: 3, multiviewEvery: 2, healthy: 0 };
       this.liveSet = new Set();
       this.audio = new BTS.AudioEngine(settings.audio.sampleRate || 48000);
       this.gl = new BTS.GLProcessor(Math.max(1920, this.W), Math.max(1080, this.H));
@@ -35,7 +36,13 @@
       this.previewOverlays = false;
       this._setupCanvases();
       this._startLoop();
+      // hot-plug: when a capture device comes back, reconnect inputs that lost it
+      navigator.mediaDevices.addEventListener('devicechange', BTS.U.debounce(() => {
+        for (const i of this.inputs) if (['camera', 'audio'].includes(i.type) && i.status === 'error') i.init();
+        this.emit('devices');
+      }, 800));
       this.on('input-ended', (inp) => {
+        if (this.macros) this.macros.fire(inp, 'Completion');
         if (inp.id === this.programId && inp.props.onEnd === 'next' && this.previewId) this.quickPlay();
         if (inp.id === this.programId && inp.props.onEnd === 'next-input') { const n = this.inputs[this.inputs.indexOf(inp) + 1]; if (n) this.quickPlay(n.id); }
       });
@@ -277,6 +284,8 @@
       let last = 0, frames = 0, fpsT = performance.now(), meterFlip = 0;
       this.worker.onmessage = () => {
         const now = performance.now();
+        // when the page falls behind, queued ticks arrive in a burst — drop them instead of rendering the backlog
+        if (last && now - last < interval * 0.5) return;
         if (last && now - last > interval * 1.8) this.stats.dropped += Math.max(1, Math.round((now - last) / interval) - 1);
         last = now;
         const t0 = performance.now();
@@ -284,10 +293,26 @@
         const dt = performance.now() - t0;
         this.stats.renderMs = this.stats.renderMs * 0.9 + dt * 0.1;
         frames++;
-        if (now - fpsT >= 1000) { this.stats.fps = frames * 1000 / (now - fpsT); frames = 0; fpsT = now; this.emit('stats', this.stats); }
+        if (now - fpsT >= 1000) { this.stats.fps = frames * 1000 / (now - fpsT); frames = 0; fpsT = now; this._governor(); this.emit('stats', this.stats); }
         if ((meterFlip = (meterFlip + 1) % 2) === 0) { this.audio.tickMeters(); this.emit('meters'); }
       };
       this.worker.postMessage(interval);
+    }
+
+    /** Adaptive load governor: protects the programme output by reducing preview / thumbnail / multiview rates under load. */
+    _governor() {
+      const P = this.perf, s = this.stats;
+      if (this.settings.performance && this.settings.performance.governor === false) { P.level = 0; } else {
+        const budget = 1000 / this.fps;
+        const struggling = s.fps < this.fps * 0.88 || s.renderMs > budget * 0.7;
+        if (struggling) { P.healthy = 0; if (P.level < 3) P.level++; }
+        else if (++P.healthy >= 5 && P.level > 0) { P.level--; P.healthy = 0; }
+      }
+      const base = Math.max(1, Math.round(this.fps / ((this.settings.performance && this.settings.performance.thumbnailFps) || 10)));
+      P.previewEvery = [1, 2, 3, 4][P.level];
+      P.thumbEvery = base * [1, 2, 4, 8][P.level];
+      P.multiviewEvery = [2, 3, 4, 6][P.level];
+      s.perfLevel = P.level;
     }
 
     renderFrame(now) {
@@ -311,8 +336,8 @@
       if (f.value !== target) { const p = U.clamp((now - f.t0) / f.duration, 0, 1); f.value = U.lerp(f.from, target, p); }
 
       this._drawProgram(this.pctx, this.W, this.H, now, tp);
-      this._drawPreview(this.vctx, this.previewCanvas.width, this.previewCanvas.height);
-      if (this.multiviewVisible || this.multiviewPopout) { if (this.frameId % 2 === 0) this._drawMultiview(); }
+      if (this.frameId % this.perf.previewEvery === 0) this._drawPreview(this.vctx, this.previewCanvas.width, this.previewCanvas.height);
+      if (this.multiviewVisible || this.multiviewPopout) { if (this.frameId % this.perf.multiviewEvery === 0) { try { this._drawMultiview(); } catch (e) { console.error(e); } } }
       this.emit('frame', now);
     }
 
@@ -431,6 +456,9 @@
         transitions: U.deepClone(this.transitions),
         master: { M: { volume: this.audio.buses.M.volume, muted: this.audio.buses.M.muted }, A: { volume: this.audio.buses.A.volume, muted: this.audio.buses.A.muted }, B: { volume: this.audio.buses.B.volume, muted: this.audio.buses.B.muted } },
         dataSources: this.data ? this.data.serialize() : [],
+        macros: this.macros ? this.macros.serialize() : [],
+        replay: this.replay ? this.replay.serialize() : null,
+        playlist: this.sequencer ? this.sequencer.serialize() : null,
         previewOverlays: this.previewOverlays
       };
     }
@@ -442,6 +470,9 @@
       this.inputs = []; this.previewId = null; this.programId = null;
       this.ftb.on = false; this.ftb.value = 0;
       if (this.data) this.data.clear();
+      if (this.sequencer) this.sequencer.stop();
+      if (this.macros) this.macros.stopAll();
+      if (this.replay && this.replay.running) this.replay.stop();
       this.emit('inputs'); this.emit('bus'); this.emit('mixer'); this.emit('overlays');
     }
 
@@ -462,6 +493,9 @@
       this.previewId = this.byId(p.previewId) ? p.previewId : null;
       this.programId = this.byId(p.programId) ? p.programId : null;
       if (this.data && p.dataSources) this.data.load(p.dataSources);
+      if (this.macros) this.macros.load(p.macros || []);
+      if (this.replay && p.replay) this.replay.loadCfg(p.replay);
+      if (this.sequencer) this.sequencer.load(p.playlist);
       this.preloadStingers();
       this._updateLive();
       this.emit('inputs'); this.emit('bus'); this.emit('mixer'); this.emit('overlays'); this.emit('transitions-config');

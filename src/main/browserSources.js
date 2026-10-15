@@ -30,15 +30,20 @@ function create(id, cfg) {
   const src = { win, cfg: { ...cfg, width, height }, lastSend: 0, busy: false };
   sources.set(id, src);
 
-  win.webContents.on('paint', (event, dirty, image) => {
+  // Back-pressure: only one frame in flight; the newest frame waits for the renderer's ack.
+  const sendFrame = (image) => {
     const main = ctx.getWin();
-    if (!main || main.isDestroyed() || src.busy) return;
+    if (!main || main.isDestroyed()) return;
     const size = image.getSize();
     if (!size.width || !size.height) return;
-    src.busy = true;
-    // toBitmap returns BGRA, premultiplied
-    main.webContents.send('browser:frame', id, size.width, size.height, image.toBitmap());
-    setImmediate(() => { src.busy = false; });
+    src.waiting = true; src.sentAt = Date.now();
+    main.webContents.send('browser:frame', id, size.width, size.height, image.toBitmap()); // BGRA premultiplied
+  };
+  src.flush = () => { src.waiting = false; if (src.pending) { const img = src.pending; src.pending = null; sendFrame(img); } };
+  win.webContents.on('paint', (event, dirty, image) => {
+    if (src.waiting && Date.now() - src.sentAt < 1000) { src.pending = image; return; }
+    src.pending = null;
+    sendFrame(image);
   });
   win.webContents.on('did-finish-load', () => {
     if (src.cfg.css) win.webContents.insertCSS(src.cfg.css).catch(() => {});
@@ -100,6 +105,7 @@ function registerIpc(ipcMain) {
   ipcMain.handle('browser:reload', (e, id) => { const s = sources.get(id); if (s) s.win.webContents.reloadIgnoringCache(); });
   ipcMain.handle('browser:exec', (e, id, js) => { const s = sources.get(id); return s ? s.win.webContents.executeJavaScript(js, true) : null; });
   ipcMain.handle('browser:devtools', (e, id) => { const s = sources.get(id); if (s) s.win.webContents.openDevTools({ mode: 'detach' }); });
+  ipcMain.on('browser:ack', (e, id) => { const s = sources.get(id); if (s && s.flush) s.flush(); });
   ipcMain.handle('browser:input', (e, id, ev) => { const s = sources.get(id); if (s) s.win.webContents.sendInputEvent(ev); });
 }
 

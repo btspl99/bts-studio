@@ -20,6 +20,7 @@ uniform float u_bright, u_contrast, u_sat, u_hue, u_gamma, u_temp, u_tint;
 uniform int u_chroma; uniform vec3 u_key; uniform float u_sim, u_smooth, u_spill;
 uniform int u_luma; uniform float u_lumaLo, u_lumaHi, u_lumaSmooth; uniform int u_lumaInvert;
 uniform float u_opacity;
+uniform int u_deint; uniform float u_texelY;
 
 vec2 cbcr(vec3 c){ return vec2(-0.168736*c.r - 0.331264*c.g + 0.5*c.b, 0.5*c.r - 0.418688*c.g - 0.081312*c.b); }
 vec3 hueRotate(vec3 c, float a){
@@ -29,6 +30,7 @@ vec3 hueRotate(vec3 c, float a){
 }
 void main(){
   vec4 t = texture2D(u_tex, v_uv);
+  if (u_deint == 1) t = 0.5 * t + 0.25 * texture2D(u_tex, v_uv + vec2(0.0, u_texelY)) + 0.25 * texture2D(u_tex, v_uv - vec2(0.0, u_texelY));
   if (u_swizzle == 1) t = t.bgra;
   vec3 rgb = t.rgb; float a = t.a;
   if (u_premulIn == 1 && a > 0.0001) rgb /= a;
@@ -91,7 +93,7 @@ void main(){
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       this.u = {};
-      ['u_tex', 'u_swizzle', 'u_premulIn', 'u_bright', 'u_contrast', 'u_sat', 'u_hue', 'u_gamma', 'u_temp', 'u_tint', 'u_chroma', 'u_key', 'u_sim', 'u_smooth', 'u_spill', 'u_luma', 'u_lumaLo', 'u_lumaHi', 'u_lumaSmooth', 'u_lumaInvert', 'u_opacity']
+      ['u_tex', 'u_swizzle', 'u_premulIn', 'u_bright', 'u_contrast', 'u_sat', 'u_hue', 'u_gamma', 'u_temp', 'u_tint', 'u_chroma', 'u_key', 'u_sim', 'u_smooth', 'u_spill', 'u_luma', 'u_lumaLo', 'u_lumaHi', 'u_lumaSmooth', 'u_lumaInvert', 'u_opacity', 'u_deint', 'u_texelY']
         .forEach(n => { this.u[n] = gl.getUniformLocation(p, n); });
       gl.clearColor(0, 0, 0, 0);
       this.canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.lost = true; });
@@ -128,6 +130,8 @@ void main(){
       gl.uniform1f(u.u_lumaSmooth, lk.smooth ?? 0.02);
       gl.uniform1i(u.u_lumaInvert, lk.invert ? 1 : 0);
       gl.uniform1f(u.u_opacity, 1);
+      gl.uniform1i(u.u_deint, fx.deinterlace ? 1 : 0);
+      gl.uniform1f(u.u_texelY, 1 / Math.max(1, opts.srcH || 1080));
     }
 
     _copyOut(w, h, out) {
@@ -153,7 +157,7 @@ void main(){
       gl.bindTexture(gl.TEXTURE_2D, this.tex);
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
       try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source); } catch (e) { return null; }
-      this._setUniforms(fx, {});
+      this._setUniforms(fx, { srcH: sh });
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       return this._copyOut(w, h, out);
     }

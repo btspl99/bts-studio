@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld('bts', {
     exec: (id, js) => ipcRenderer.invoke('browser:exec', id, js),
     devtools: (id) => ipcRenderer.invoke('browser:devtools', id),
     input: (id, ev) => ipcRenderer.invoke('browser:input', id, ev),
+    ack: (id) => ipcRenderer.send('browser:ack', id),
     onFrame: listen('browser:frame'),
     onStatus: listen('browser:status')
   },
@@ -74,5 +75,21 @@ contextBridge.exposeInMainWorld('bts', {
     state: () => ipcRenderer.invoke('update:state'),
     onStatus: listen('update:status')
   },
-  onMenu: listen('menu')
+  onMenu: listen('menu'),
+  onNotice: listen('engine:notice'),
+  log: (level, msg) => ipcRenderer.send('log', level, String(msg).slice(0, 4000)),
+  stream: {
+    start: (id, cfg) => ipcRenderer.invoke('stream:start', id, cfg),
+    stop: (id) => ipcRenderer.invoke('stream:stop', id),
+    onStatus: listen('stream:status'),
+    onAudio: listen('stream:audio')
+  },
+  replay: {
+    start: (id, cfg) => ipcRenderer.invoke('replay:start', id, cfg),
+    chunk: (id, buf) => ipcRenderer.send('replay:chunk', id, buf),
+    stop: (id) => ipcRenderer.invoke('replay:stop', id),
+    clip: (id, opts) => ipcRenderer.invoke('replay:clip', id, opts),
+    status: (id) => ipcRenderer.invoke('replay:status', id),
+    deleteClip: (file) => ipcRenderer.invoke('replay:delete-clip', file)
+  }
 });

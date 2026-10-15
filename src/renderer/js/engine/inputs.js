@@ -8,6 +8,8 @@
 
   const TYPE_INFO = {
     camera: { label: 'Camera', icon: '🎥' },
+    stream: { label: 'Stream / IP Cam', icon: '📡' },
+    replay: { label: 'Replay', icon: '⏪' },
     screen: { label: 'Desktop Capture', icon: '🖥️' },
     video: { label: 'Video', icon: '🎞️' },
     'audio-file': { label: 'Audio File', icon: '🎵' },
@@ -70,7 +72,7 @@
 
     fxActive() {
       const fx = this.props.effects;
-      return (fx.color && fx.color.enabled) || (fx.chroma && fx.chroma.enabled) || (fx.luma && fx.luma.enabled);
+      return (fx.color && fx.color.enabled) || (fx.chroma && fx.chroma.enabled) || (fx.luma && fx.luma.enabled) || !!fx.deinterlace;
     }
 
     /** processed frame for this render tick */
@@ -87,8 +89,34 @@
       return (this._fxResult = f);
     }
 
-    /** Draw into ctx within target rect */
-    draw(ctx, tx = 0, ty = 0, tw = ctx.canvas.width, th = ctx.canvas.height, depth = 0) {
+    /** Draw into ctx within target rect — fault-isolated so one bad source never stops the engine */
+    draw(ctx, tx = 0, ty = 0, tw = ctx.canvas.width, th = ctx.canvas.height) {
+      if (this._suspendUntil && performance.now() < this._suspendUntil) return this._slate(ctx, tx, ty, tw, th);
+      try {
+        const ok = this._draw(ctx, tx, ty, tw, th);
+        this._faults = 0;
+        if (!ok && this.wantsSlate && this.wantsSlate()) this._slate(ctx, tx, ty, tw, th);
+        return ok;
+      } catch (e) {
+        try { ctx.restore(); } catch { /* noop */ }
+        if (++this._faults > 20) { this._suspendUntil = performance.now() + 2000; this._faults = 0; console.error(`[input ${this.title}] suspended after repeated errors`, e); window.bts.log('error', `Input ${this.title}: ${e.message}`); }
+        return false;
+      }
+    }
+    /** "No signal" slate for live devices */
+    _slate(ctx, x, y, w, h) {
+      const c = Input._slateCanvas || (Input._slateCanvas = document.createElement('canvas'));
+      if (c.width !== 640) { c.width = 640; c.height = 360; }
+      const g = c.getContext('2d');
+      g.fillStyle = '#0d0e11'; g.fillRect(0, 0, 640, 360);
+      for (let i = 0; i < 640; i += 40) { g.fillStyle = i % 80 ? '#15171c' : '#111317'; g.fillRect(i, 0, 40, 360); }
+      g.fillStyle = '#e2453c'; g.font = '700 38px Segoe UI'; g.textAlign = 'center'; g.fillText('NO SIGNAL', 320, 170);
+      g.fillStyle = '#a9adb7'; g.font = '500 20px Segoe UI'; g.fillText(this.title + (this.statusMsg ? ' — ' + this.statusMsg.slice(0, 40) : ''), 320, 210);
+      const r = BTS.U.fit(640, 360, w, h);
+      ctx.drawImage(c, x + r.x, y + r.y, r.w, r.h);
+      return false;
+    }
+    _draw(ctx, tx = 0, ty = 0, tw = ctx.canvas.width, th = ctx.canvas.height) {
       const f = this.frame();
       if (!f) return false;
       const P = this.props.position, C = this.props.crop;
@@ -105,6 +133,7 @@
       ctx.save();
       if (this.props.opacity < 1) ctx.globalAlpha *= this.props.opacity;
       if (P.rotate) { const cx = dx + dw / 2, cy = dy + dh / 2; ctx.translate(cx, cy); ctx.rotate(P.rotate * Math.PI / 180); ctx.translate(-cx, -cy); }
+      if (P.flipH || P.flipV) { const cx = dx + dw / 2, cy = dy + dh / 2; ctx.translate(cx, cy); ctx.scale(P.flipH ? -1 : 1, P.flipV ? -1 : 1); ctx.translate(-cx, -cy); }
       if (P.shadow) { ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = Math.max(8, tw * 0.012); ctx.shadowOffsetY = tw * 0.004; }
       if (P.radius) {
         const r = Math.min(P.radius * (tw / 1920), dw / 2, dh / 2);
@@ -140,6 +169,7 @@
         else if (this.props.autoPause) this.pause();
       }
       this.onLive(on);
+      if (this.app.macros) this.app.macros.fire(this, on ? 'TransitionIn' : 'TransitionOut');
       this.emit('live', on);
     }
     onLive() { }
@@ -223,6 +253,8 @@
         const el = this.el = document.createElement(this.isAudioOnly ? 'audio' : 'video');
         el.preload = 'auto'; el.playsInline = true; el.crossOrigin = 'anonymous';
         el.addEventListener('ended', () => this._onEnded());
+        el.preservesPitch = false;
+        el.addEventListener('loadedmetadata', () => { el.playbackRate = this.props.speed || 1; });
         el.addEventListener('timeupdate', () => this._onTime());
         el.addEventListener('error', () => this.setStatus('error', el.error ? `Media error ${el.error.code}: ${el.error.message || ''}` : 'Media error'));
         el.addEventListener('loadeddata', () => this.setStatus('ok'));
@@ -266,6 +298,7 @@
     get duration() { return this.el && isFinite(this.el.duration) ? this.el.duration : 0; }
     get currentTime() { return this.el ? this.el.currentTime : 0; }
     setLoop(v) { this.props.loop = v; if (this.el) this.el.loop = v && this.props.markOut == null; }
+    setSpeed(v) { this.props.speed = v; if (this.el) this.el.playbackRate = v; this.emit('state'); }
     destroy() { if (this.el) { this.el.pause(); this.el.removeAttribute('src'); this.el.load(); } super.destroy(); }
     getMediaStream() { return this.el && this.el.captureStream ? this.el.captureStream() : null; }
   }
@@ -335,44 +368,109 @@
   }
 
   /* ---------------- Camera / Capture card ---------------- */
+  // Works with UVC webcams and capture cards exposed through Media Foundation / DirectShow:
+  // Blackmagic DeckLink / UltraStudio / Intensity (WDM driver), AVerMedia Live Gamer, Elgato, Magewell, generic USB3/HDMI grabbers.
+  const CARD_HINTS = [
+    [/blackmagic|decklink|intensity|ultrastudio/i, 'Blackmagic: set the input format in Blackmagic Desktop Video Setup to match your source (e.g. 1080p50 or 1080i50). If the card is not listed, switch Settings → Devices → Capture backend to DirectShow.'],
+    [/avermedia|live gamer|gc5\d\d|gc57/i, 'AVerMedia: close RECentral/Streaming Center before using the card here; choose the resolution and frame rate of your source.'],
+    [/elgato|cam link|hd60/i, 'Elgato: close 4K Capture Utility; use the source\'s native resolution.'],
+    [/magewell|usb capture/i, 'Magewell: native format recommended; audio appears as a separate device.'],
+    [/usb3|hdmi|capture|video capture|ms2109|ms2130/i, 'HDMI capture device: select the source resolution/frame rate; audio is usually a separate "Digital Audio Interface" device.']
+  ];
+  const cardHint = (label) => (CARD_HINTS.find(([re]) => re.test(label || '')) || [])[1] || '';
+  const tokens = (s) => String(s || '').toLowerCase().replace(/\(.*?\)/g, ' ').split(/[^a-z0-9]+/).filter(t => t.length > 2 && !['video', 'audio', 'input', 'device', 'microphone', 'capture', 'usb'].includes(t));
+  async function findPairedAudio(videoDev) {
+    const list = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications');
+    if (!videoDev) return null;
+    const same = list.find(d => d.groupId && d.groupId === videoDev.groupId);
+    if (same) return same;
+    const vt = tokens(videoDev.label);
+    let best = null, score = 0;
+    for (const d of list) { const sc = tokens(d.label).filter(t => vt.includes(t)).length; if (sc > score) { score = sc; best = d; } }
+    if (best) return best;
+    if (/usb3|hdmi|capture|ms21/i.test(videoDev.label)) return list.find(d => /digital audio interface|hdmi|capture|usb3/i.test(d.label)) || null;
+    return null;
+  }
+
   class CameraInput extends Input {
+    wantsSlate() { return true; }
     async init() {
       this.setStatus('loading');
       this.stopStream();
+      clearTimeout(this._retry);
       const c = this.cfg;
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const vdev = devices.find(d => d.kind === 'videoinput' && d.deviceId === c.deviceId) || devices.find(d => d.kind === 'videoinput' && c.label && d.label === c.label);
+      if (vdev && vdev.deviceId !== c.deviceId) c.deviceId = vdev.deviceId; // device IDs can change between sessions
+      const video = { resizeMode: c.scale ? 'crop-and-scale' : 'none' };
+      if (c.deviceId) video.deviceId = { exact: c.deviceId };
+      if (c.width && c.height) { video.width = { ideal: c.width }; video.height = { ideal: c.height }; }
+      if (c.fps) video.frameRate = { ideal: c.fps };
+      let audioId = c.audioDeviceId;
+      if (audioId === 'auto') { const pa = await findPairedAudio(vdev); audioId = pa ? pa.deviceId : 'none'; this.pairedAudio = pa ? pa.label : ''; }
+      const audio = audioId && audioId !== 'none' ? { deviceId: { exact: audioId }, echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 }, sampleRate: 48000 } : false;
       try {
-        const video = {
-          deviceId: c.deviceId ? { exact: c.deviceId } : undefined,
-          width: { ideal: c.width || 1920 }, height: { ideal: c.height || 1080 }, frameRate: { ideal: c.fps || 30 }
-        };
-        let audio = false;
-        if (c.audioDeviceId && c.audioDeviceId !== 'none') audio = { deviceId: { exact: c.audioDeviceId }, echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2, sampleRate: 48000 };
-        this.stream = await navigator.mediaDevices.getUserMedia({ video, audio });
+        try { this.stream = await navigator.mediaDevices.getUserMedia({ video, audio }); }
+        catch (e) {
+          if (e.name !== 'OverconstrainedError' && e.name !== 'NotReadableError') throw e;
+          // fall back to the device's default format (common with DeckLink when the format doesn't match the signal)
+          this.stream = await navigator.mediaDevices.getUserMedia({ video: c.deviceId ? { deviceId: { exact: c.deviceId } } : true, audio });
+          this.formatFallback = true;
+        }
       } catch (e) {
-        this.setStatus('error', e.name === 'NotReadableError' ? 'Device busy (used by another app?)' : e.message || e.name);
+        const msg = e.name === 'NotReadableError' ? 'Device busy or no signal (close other apps using it)' : e.name === 'NotFoundError' || e.name === 'OverconstrainedError' ? 'Device not found — reconnect it' : (e.message || e.name);
+        this.setStatus('error', msg);
+        this._scheduleReconnect();
         return;
       }
       const el = this.el || (this.el = document.createElement('video'));
       el.muted = true; el.playsInline = true; el.srcObject = this.stream;
       await el.play().catch(() => {});
+      this._lastFrameAt = performance.now();
+      const onFrame = () => { this._lastFrameAt = performance.now(); if (this.el === el && this.stream) el.requestVideoFrameCallback(onFrame); };
+      if (el.requestVideoFrameCallback) el.requestVideoFrameCallback(onFrame);
       const at = this.stream.getAudioTracks()[0];
       if (at) { const ch = this.ensureChannel(); ch.setSource(this.app.audio.ctx.createMediaStreamSource(new MediaStream([at]))); }
-      else if (this.channel) { this.channel.setSource(null); }
+      else if (this.channel) this.channel.setSource(null);
       const vt = this.stream.getVideoTracks()[0];
       if (vt) {
-        vt.addEventListener('ended', () => this.setStatus('error', 'Device disconnected'));
-        const s = vt.getSettings(); this.trackInfo = `${s.width}×${s.height}@${Math.round(s.frameRate || 0)}`;
+        vt.addEventListener('ended', () => { this._grabLast(); this.setStatus('error', 'Signal lost / device disconnected'); this._scheduleReconnect(); });
+        const s = vt.getSettings();
+        this.trackInfo = `${s.width}×${s.height}@${Math.round(s.frameRate || 0)}${this.formatFallback ? ' (device default)' : ''}`;
+        this.capabilities = vt.getCapabilities ? vt.getCapabilities() : null;
       }
+      this.hint = cardHint(vdev && vdev.label);
+      this._retries = 0;
       this.setStatus('ok');
     }
-    getFrame() { const el = this.el; return el && el.videoWidth ? { src: el, w: el.videoWidth, h: el.videoHeight } : null; }
+    _scheduleReconnect() {
+      if (this.destroyed || this.cfg.autoReconnect === false) return;
+      clearTimeout(this._retry);
+      this._retries = (this._retries || 0) + 1;
+      this._retry = setTimeout(() => { if (!this.destroyed && this.status !== 'ok') this.init(); }, Math.min(15000, 2000 + this._retries * 1000));
+    }
+    _grabLast() {
+      if (!this.el || !this.el.videoWidth || !this.cfg.keepLastFrame) return;
+      const c = this.lastFrame || (this.lastFrame = document.createElement('canvas'));
+      c.width = this.el.videoWidth; c.height = this.el.videoHeight;
+      c.getContext('2d').drawImage(this.el, 0, 0);
+    }
+    get stalled() { return this.status === 'ok' && performance.now() - (this._lastFrameAt || 0) > 3000 && !!this.el.requestVideoFrameCallback; }
+    getFrame() {
+      const el = this.el;
+      if (el && el.videoWidth && this.status === 'ok' && !this.stalled) return { src: el, w: el.videoWidth, h: el.videoHeight };
+      if (this.cfg.keepLastFrame && this.lastFrame) return { src: this.lastFrame, w: this.lastFrame.width, h: this.lastFrame.height };
+      return null;
+    }
+    fxActive() { return super.fxActive() || !!this.props.effects.deinterlace; }
     stopStream() { if (this.stream) { this.stream.getTracks().forEach(t => t.stop()); this.stream = null; } }
-    destroy() { this.stopStream(); super.destroy(); }
+    destroy() { clearTimeout(this._retry); this.stopStream(); super.destroy(); }
     getMediaStream() { return this.stream; }
   }
 
   /* ---------------- Screen / window capture ---------------- */
   class ScreenInput extends CameraInput {
+    get stalled() { return false; } // desktop capture only sends frames when the screen changes
     async init() {
       this.setStatus('loading');
       this.stopStream();
@@ -392,6 +490,39 @@
       this.stream.getVideoTracks()[0]?.addEventListener('ended', () => this.setStatus('error', 'Capture ended (window closed?)'));
       this.setStatus('ok');
     }
+  }
+
+  /* ---------------- Network stream (IP camera / SRT / RTMP / RTSP / HLS / UDP) ---------------- */
+  class StreamInput extends Input {
+    wantsSlate() { return true; }
+    async init() {
+      this.setStatus('loading', 'Connecting…');
+      await window.bts.stream.stop(this.id);
+      const r = await window.bts.stream.start(this.id, { url: this.cfg.url, transport: this.cfg.transport || 'tcp', fps: this.cfg.fps || 30, width: this.cfg.width || 1920, quality: this.cfg.quality || 4, audio: this.cfg.audio !== false, lowLatency: this.cfg.lowLatency !== false, listen: !!this.cfg.listen });
+      if (!r.ok) { this.setStatus('error', r.error); return; }
+      this.port = r.port;
+      this._connectImg();
+      if (this.cfg.audio !== false) {
+        const ch = this.ensureChannel();
+        const ok = await this.app.audio.workletReady;
+        if (ok && !this.pcm) { this.pcm = new AudioWorkletNode(this.app.audio.ctx, 'bts-pcm', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] }); ch.setSource(this.pcm); }
+      }
+    }
+    _connectImg() {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.decoding = 'sync';
+      img.src = `http://127.0.0.1:${this.port}/?t=${Date.now()}`;
+      this.img = img;
+    }
+    onStreamStatus(s) {
+      if (s.state === 'live') { if (this.status !== 'ok') this._connectImg(); this.setStatus('ok'); }
+      else if (s.state === 'reconnecting') this.setStatus('error', 'Reconnecting… ' + (s.message || ''));
+      else if (s.state === 'error') this.setStatus('error', s.message || 'Stream error');
+    }
+    onAudio(buf) { if (this.pcm) this.pcm.port.postMessage(buf, [buf.buffer]); }
+    getFrame() { const i = this.img; return i && i.naturalWidth && this.status === 'ok' ? { src: i, w: i.naturalWidth, h: i.naturalHeight } : null; }
+    destroy() { window.bts.stream.stop(this.id); if (this.img) this.img.src = ''; super.destroy(); }
   }
 
   /* ---------------- Audio device ---------------- */
@@ -442,12 +573,13 @@
       if (this.pending) {
         const { w, h, bytes } = this.pending;
         this.last = this.pending; this.pending = null; this._fxSig = sig;
-        if (this.app.gl.ok) this.app.gl.uploadBGRA(bytes, w, h, this.fxActive() ? this.props.effects : null, this.canvas);
+        if (this.app.gl.ok) { this.app.gl.uploadBGRA(bytes, w, h, this.fxActive() ? this.props.effects : null, this.canvas); window.bts.browser.ack(this.id); }
         else { // CPU fallback
           this.canvas.width = w; this.canvas.height = h;
           const id = new ImageData(w, h); const d = id.data;
           for (let i = 0; i < d.length; i += 4) { const a = bytes[i + 3] || 1; d[i] = bytes[i + 2] * 255 / a; d[i + 1] = bytes[i + 1] * 255 / a; d[i + 2] = bytes[i] * 255 / a; d[i + 3] = bytes[i + 3]; }
           this.canvas.getContext('2d').putImageData(id, 0, 0);
+          window.bts.browser.ack(this.id);
         }
       }
       return this.last ? { src: this.canvas, w: this.canvas.width, h: this.canvas.height, processed: true } : null;
@@ -526,7 +658,7 @@
     setLive(on) { super.setLive(on); }
   }
 
-  const CLASSES = { color: ColorInput, image: ImageInput, video: VideoInput, 'audio-file': VideoInput, playlist: PlaylistInput, camera: CameraInput, screen: ScreenInput, audio: AudioDeviceInput, browser: BrowserInput, title: TitleInput, scene: SceneInput };
+  const CLASSES = { stream: StreamInput, replay: VideoInput, color: ColorInput, image: ImageInput, video: VideoInput, 'audio-file': VideoInput, playlist: PlaylistInput, camera: CameraInput, screen: ScreenInput, audio: AudioDeviceInput, browser: BrowserInput, title: TitleInput, scene: SceneInput };
 
   function create(app, data) {
     const C = CLASSES[data.type];
@@ -534,5 +666,5 @@
     return new C(app, data);
   }
 
-  BTS.Inputs = { create, TYPE_INFO, DEFAULT_PROPS, Input };
+  BTS.Inputs = { create, TYPE_INFO, DEFAULT_PROPS, Input, cardHint, findPairedAudio };
 })(window.BTS);

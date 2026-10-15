@@ -16,9 +16,12 @@
       let tick = 0;
       studio.on('frame', () => {
         tick++;
-        const every = Math.max(1, Math.round(studio.fps / 10));
-        if (tick % every) return;
-        for (const [id, c] of this.cards) this.drawThumb(id, c);
+        // thumbnails are staggered across frames and slowed by the load governor
+        const every = Math.max(1, studio.perf ? studio.perf.thumbEvery : Math.round(studio.fps / 10));
+        const ids = [...this.cards.keys()];
+        if (!ids.length) return;
+        const slot = tick % every;
+        ids.forEach((id, n) => { if (n % every === slot) this.drawThumb(id, this.cards.get(id)); });
       });
       setInterval(() => this.updateTimes(), 250);
       this._setupDnD();
@@ -35,6 +38,7 @@
         c.el.querySelector('.ic-title').textContent = inp.title;
         c.el.querySelector('.ic-title').title = inp.title;
         c.el.querySelector('.ic-iso').classList.toggle('on', !!inp.iso);
+        if (inp.props.colorTag) { c.el.dataset.tag = '1'; c.el.style.setProperty('--tag', inp.props.colorTag); } else { delete c.el.dataset.tag; }
         if (this.root.children[idx] !== c.el) this.root.insertBefore(c.el, this.root.children[idx] || null);
       });
       this.tally();
@@ -99,12 +103,21 @@
         '-',
         { label: 'Rename…', onClick: async () => { const n = await BTS.Dialog.prompt('Rename input', inp.title); if (n) st.renameInput(inp.id, n); } },
         { label: 'Duplicate', onClick: () => st.duplicateInput(inp.id) },
+        { label: 'Colour Tag…', onClick: () => this.colourTag(inp) },
         inp.getMediaStream() ? { label: inp.iso ? 'Stop ISO Recording' : 'Start ISO Recording', onClick: () => (inp.iso ? st.outputs.stopIso(inp.id) : st.outputs.startIso(inp.id)) } : null,
         { label: 'Snapshot Input', onClick: () => BTS.Functions.call('SnapshotInput', { Input: inp.id }).then(r => r.ok && U.toast('Saved ' + r.data, 'ok')) },
         '-',
         { label: 'Remove', onClick: () => st.removeInput(inp.id) }
       ];
       BTS.Dialog.ctxMenu(x, y, items);
+    }
+
+    colourTag(inp) {
+      const cols = ['', '#e2453c', '#f28b1f', '#f5c344', '#2fbf62', '#1fb5a8', '#3d8bfd', '#8a63d2', '#d6409f', '#8d939e'];
+      const box = U.el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } });
+      let dlg;
+      for (const c of cols) box.append(U.el('button', { class: 'btn', title: c || 'None', style: { width: '40px', height: '40px', background: c || 'transparent', border: c === (inp.props.colorTag || '') ? '2px solid #fff' : '' }, text: c ? '' : '∅', onclick: () => { inp.props.colorTag = c; this.render(); dlg.close(); } }));
+      dlg = BTS.Dialog.open({ title: `Colour tag — ${inp.title}`, body: box, buttons: [] });
     }
 
     drawThumb(id, c) {

@@ -120,6 +120,40 @@
   def('DataSourceSelectRow', 'Data', ['Value', 'Index'], (p) => S().data.selectRow(p.Value, num(p.Index, 1) - 1));
   def('DataSourceRefresh', 'Data', ['Value'], (p) => { const s = S().data.get(p.Value); if (!s) throw new Error('Unknown data source'); S().data.refresh(s); return true; });
 
+  // ---- instant replay
+  const R = () => S().replay;
+  def('ReplayStartRecording', 'Replay', [], () => R().start().then(ok => ok || { ok: false, error: 'No replay source could be started' }), 'Start the replay buffer');
+  def('ReplayStopRecording', 'Replay', [], () => R().stop().then(() => true));
+  def('ReplayStartStopRecording', 'Replay', [], () => (R().running ? R().stop().then(() => true) : R().start()));
+  def('ReplayMarkIn', 'Replay', [], () => R().markIn());
+  def('ReplayMarkOut', 'Replay', [], () => R().markOut());
+  def('ReplayMarkInOut', 'Replay', ['Value?'], async (p) => { const ev = await R().clip({ last: num(p.Value, R().cfg.lastSeconds) }); return ev ? { ok: true, data: ev.file } : { ok: false, error: 'Clip failed' }; }, 'Save the last N seconds (Value) as an event');
+  def('ReplaySaveMarks', 'Replay', [], async () => { const ev = await R().clip({ marks: true }); return ev ? { ok: true, data: ev.file } : { ok: false, error: 'Set Mark In first' }; });
+  def('ReplayPlayLastEvent', 'Replay', ['Value?'], async (p) => R().load(R().events[0], { speed: p.Value ? num(p.Value, 50) / 100 : undefined, toOutput: true }));
+  def('ReplayPlayEvent', 'Replay', ['Value'], async (p) => R().load(R().events[num(p.Value, 1) - 1], { toOutput: true }), 'Value = event number (1 = newest)');
+  def('ReplayInstant', 'Replay', ['Value?'], (p) => R().instant(num(p.Value, R().cfg.lastSeconds)), 'Clip last N seconds and play it to Output in slow motion');
+  def('ReplaySetSpeed', 'Replay', ['Value'], (p) => R().setSpeed(U.clamp(num(p.Value, 50) / 100, 0.05, 2)), 'Value percent (25, 50, 75, 100)');
+  def('ReplaySelectCamera', 'Replay', ['Value'], (p) => { const keys = [...R().active.keys()]; const k = keys[num(p.Value, 1) - 1]; if (!k) throw new Error('No such replay camera'); R().cfg.current = k; R().emit('change'); return true; });
+
+  // ---- scripting (macros)
+  def('ScriptStart', 'Scripting', ['Value'], (p) => S().macros.run(p.Value), 'Value = macro name');
+  def('ScriptStop', 'Scripting', ['Value'], (p) => S().macros.stop(p.Value));
+  def('ScriptStopAll', 'Scripting', [], () => { S().macros.stopAll(); return true; });
+
+  // ---- playlist
+  def('StartPlayList', 'Playlist', [], () => S().sequencer.start());
+  def('StopPlayList', 'Playlist', [], () => S().sequencer.stop());
+  def('NextPlayListEntry', 'Playlist', [], () => S().sequencer.next());
+  def('PreviousPlayListEntry', 'Playlist', [], () => S().sequencer.prev());
+
+  // ---- tickers / speed
+  def('PauseTicker', 'Titles', ['Input', 'SelectedName?'], (p) => { need(inp(p)).renderer.tickerCmd(p.SelectedName, 'pause'); return true; });
+  def('ResumeTicker', 'Titles', ['Input', 'SelectedName?'], (p) => { need(inp(p)).renderer.tickerCmd(p.SelectedName, 'play'); return true; });
+  def('ResetTicker', 'Titles', ['Input', 'SelectedName?'], (p) => { need(inp(p)).renderer.tickerCmd(p.SelectedName, 'reset'); return true; });
+  def('SetTickerSpeed', 'Titles', ['Input', 'Value', 'SelectedName?'], (p) => { const r = need(inp(p)).renderer; for (const e of r.t.elements.filter(x => x.type === 'ticker' && (!p.SelectedName || x.name === p.SelectedName))) e.speed = num(p.Value, 120); return true; }, 'pixels per second');
+  def('SetRate', 'Playback', ['Input', 'Value'], (p) => { const i = need(inp(p)); if (!i.setSpeed) throw new Error('Not a media input'); i.setSpeed(U.clamp(num(p.Value, 1), 0.1, 4)); return true; }, 'Playback speed, 1 = normal');
+  def('SetColourTag', 'General', ['Input', 'Value'], (p) => { const i = need(inp(p)); i.props.colorTag = p.Value || ''; S().emit('inputs'); return true; }, 'Value = #hex or empty');
+
   // ---- general
   def('AddInput', 'General', ['Value'], async (p) => { const [type, ...rest] = String(p.Value || '').split('|'); const v = rest.join('|'); const map = { Video: 'video', Image: 'image', Browser: 'browser', Colour: 'color', Color: 'color', Title: 'title' }; const t = map[type] || type.toLowerCase(); const cfg = t === 'browser' ? { url: v } : t === 'color' ? { color: v || '#000000' } : t === 'title' ? { templateId: v || 'lower-third' } : { path: v }; const i = await S().addInput({ type: t, cfg, title: v ? U.baseName(v) : undefined }); return { ok: true, data: i.id }; }, 'Value "Video|C:\\file.mp4", "Browser|https://..", "Title|lower-third"');
   def('RemoveInput', 'General', ['Input'], (p) => { S().removeInput(need(inp(p)).id); return true; });

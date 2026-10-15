@@ -2,6 +2,10 @@
 /** BTS Studio — renderer bootstrap */
 (async function (BTS) {
   const U = BTS.U;
+  // never let a script error go unnoticed: log to file, keep running
+  window.addEventListener('error', (e) => window.bts.log('error', `${e.message} @ ${e.filename}:${e.lineno}`));
+  window.addEventListener('unhandledrejection', (e) => window.bts.log('error', 'Unhandled: ' + (e.reason && (e.reason.stack || e.reason.message) || e.reason)));
+  const query = new URLSearchParams(location.search);
   try {
     const settings = await window.bts.settings.get();
     BTS.settings = settings;
@@ -10,9 +14,15 @@
     st.version = info.version;
     st.outputs = new BTS.OutputManager(st);
     st.data = new BTS.DataSources(st);
+    st.macros = new BTS.Macros(st);
+    st.replay = new BTS.Replay(st);
+    st.sequencer = new BTS.Sequencer(st);
+    st.midi = new BTS.Midi(st);
+    st.midi.init().then(ok => { if (ok && st.midi.devices.length) U.toast('MIDI controller: ' + st.midi.devices.join(', ')); });
     BTS.ui = new BTS.MainUI(st);
     BTS.inputsUI = new BTS.InputsUI(st);
     BTS.mixerUI = new BTS.MixerUI(st);
+    BTS.operatorUI = new BTS.OperatorUI(st);
 
     // main-process bridges
     window.bts.onMenu((m) => BTS.ui.handleMenu(m));
@@ -33,6 +43,9 @@
       else if (s.loaded) { i.pageTitle = s.title; if (i.status !== 'ok') i.setStatus('ok'); }
     });
     window.bts.update.onStatus((s) => BTS.SettingsUI.onUpdateStatus(s));
+    window.bts.onNotice((n) => U.toast(n.message, n.level || 'info', 9000));
+    window.bts.stream.onStatus((s) => { const i = st.byId(s.id); if (i && i.onStreamStatus) i.onStreamStatus(s); });
+    window.bts.stream.onAudio((id, buf) => { const i = st.byId(id); if (i && i.onAudio) i.onAudio(buf); });
 
     // startup: file passed on command line, crash recovery, or first-run demo
     const pending = await window.bts.project.pending();
@@ -40,7 +53,11 @@
     localStorage.setItem('bts.cleanExit', '0');
     window.addEventListener('beforeunload', () => { localStorage.setItem('bts.cleanExit', '1'); st.outputs.stopAll(); });
 
-    if (pending) await BTS.ui.openProject(pending);
+    if (query.get('recover') === '1') {
+      const auto = await window.bts.project.autosaveRead();
+      if (auto) await st.load(auto);
+      U.toast(`The engine was restarted after a problem (${query.get('reason') || 'unknown'}). Your last autosave was restored — restart streaming/recording if needed.`, 'error', 12000);
+    } else if (pending) await BTS.ui.openProject(pending);
     else {
       const auto = await window.bts.project.autosaveRead();
       if (auto && auto.inputs && auto.inputs.length && clean === '0') {
@@ -58,7 +75,7 @@
       }
     }
     BTS.ui.updateFormatInfo();
-    setInterval(() => BTS.ui.saveAutosave(), 30000);
+    setInterval(() => BTS.ui.saveAutosave(), 20000);
     document.body.classList.add('ready');
   } catch (e) {
     console.error(e);

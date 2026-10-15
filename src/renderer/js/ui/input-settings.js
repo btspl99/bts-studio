@@ -14,6 +14,7 @@
       tabs.push({ id: 'key', label: 'Keying', el: keying(inp) });
     }
     if (inp.channel) tabs.push({ id: 'audio', label: 'Audio', el: audio(inp, st) });
+    tabs.push({ id: 'triggers', label: 'Triggers', el: BTS.operatorUI.triggersTab(inp) });
     const t = BTS.Dialog.tabs(tabs);
     const dlg = BTS.Dialog.open({ title: `${inp.number}. ${inp.title} — ${inp.info.label}`, body: t.el, width: 720, buttons: [{ label: 'Close', primary: true }] });
     t.show(tabs.find(x => x.id === tab) ? tab : 'general');
@@ -45,12 +46,34 @@
           { label: 'Custom CSS', key: 'css', type: 'textarea', rows: 3, mono: true, onChange: () => inp.update({}) },
           { label: 'Page audio', key: 'audio', type: 'checkbox', onChange: () => inp.update({}) });
         break;
-      case 'camera': case 'screen':
-        rows.push({ custom: U.el('div', {}, [
-          U.el('button', { class: 'btn', text: 'Restart device', onclick: () => inp.init() }), ' ',
-          U.el('span', { class: 'hint', text: inp.trackInfo ? 'Current: ' + inp.trackInfo : '' })
-        ]) });
-        rows.push({ label: 'Include in MultiCorder', key: 'isoEnabled', type: 'checkbox' });
+      case 'camera': {
+        const devSel = U.el('select', { style: { width: '100%' } });
+        BTS.AddInput.devices('videoinput').then(list => { for (const d of list) { const op = U.el('option', { value: d.deviceId, text: d.label || 'Camera' }); if (d.deviceId === c.deviceId) op.selected = true; devSel.append(op); } });
+        devSel.onchange = () => { c.deviceId = devSel.value; c.label = devSel.selectedOptions[0].text; inp.init(); };
+        const fmt = U.el('select', { style: { width: '100%' } });
+        const MODES = ['auto', '3840x2160@30', '3840x2160@25', '2560x1440@30', '1920x1080@60', '1920x1080@59.94', '1920x1080@50', '1920x1080@30', '1920x1080@29.97', '1920x1080@25', '1280x720@60', '1280x720@50', '1280x720@30', '1280x720@25', '720x576@25', '720x480@29.97'];
+        const cur = c.width ? `${c.width}x${c.height}@${c.fps}` : 'auto';
+        for (const m of MODES) { const op = U.el('option', { value: m, text: m === 'auto' ? 'Auto — device / signal default' : m.replace('@', ' @ ') }); if (m === cur) op.selected = true; fmt.append(op); }
+        fmt.onchange = () => { if (fmt.value === 'auto') { c.width = c.height = c.fps = 0; } else { const [wh, f] = fmt.value.split('@'); [c.width, c.height] = wh.split('x').map(Number); c.fps = +f; } inp.init(); };
+        rows.push({ label: 'Device', custom: devSel }, { label: 'Format', custom: fmt },
+          { custom: U.el('div', { class: 'hint', text: `Current: ${inp.trackInfo || '—'}${inp.pairedAudio ? ' • Audio: ' + inp.pairedAudio : ''}` }) },
+          inp.hint ? { custom: U.el('div', { class: 'hint', style: { color: 'var(--accent2)' }, text: inp.hint }) } : null,
+          { label: 'Hold last frame on signal loss', key: 'keepLastFrame', type: 'checkbox' },
+          { label: 'Auto reconnect', key: 'autoReconnect', type: 'checkbox' },
+          { label: 'Include in MultiCorder', key: 'isoEnabled', type: 'checkbox' },
+          { custom: U.el('button', { class: 'btn', text: 'Restart device', onclick: () => inp.init() }) });
+        break;
+      }
+      case 'screen':
+        rows.push({ custom: U.el('button', { class: 'btn', text: 'Restart capture', onclick: () => inp.init() }) }, { label: 'Include in MultiCorder', key: 'isoEnabled', type: 'checkbox' });
+        break;
+      case 'stream':
+        rows.push({ label: 'Stream URL', key: 'url', onChange: () => inp.init() },
+          { label: 'RTSP transport', key: 'transport', type: 'select', options: [['tcp', 'TCP'], ['udp', 'UDP']], onChange: () => inp.init() },
+          { label: 'Max width', key: 'width', type: 'select', number: true, options: [[1280, '1280'], [1920, '1920'], [3840, '3840']], onChange: () => inp.init() },
+          { label: 'Frame rate', key: 'fps', type: 'select', number: true, options: [[25, '25'], [30, '30'], [50, '50'], [60, '60']], onChange: () => inp.init() },
+          { label: 'Include audio', key: 'audio', type: 'checkbox', onChange: () => inp.init() },
+          { custom: U.el('button', { class: 'btn', text: 'Reconnect now', onclick: () => inp.init() }) });
         break;
       case 'audio':
         rows.push({ label: 'Noise suppression', key: 'noise', type: 'checkbox', onChange: () => inp.init() }, { label: 'Echo cancellation', key: 'echo', type: 'checkbox', onChange: () => inp.init() });
@@ -63,7 +86,7 @@
         rows.push({ label: 'Background', key: 'background', type: 'color' });
         break;
     }
-    if (rows.length) box.append(U.el('div', { style: { height: '10px' } }), F(rows, c));
+    if (rows.length) box.append(U.el('div', { style: { height: '10px' } }), F(rows.filter(Boolean), c));
     if (inp.isMedia) {
       box.append(U.el('div', { style: { height: '10px' } }), F([
         { section: 'Playback' },
@@ -165,7 +188,11 @@
       { label: 'Border width', key: 'position.borderWidth', type: 'range', min: 0, max: 30, step: 1, default: 0, unit: 'px' },
       { label: 'Border colour', key: 'position.borderColor', type: 'color' },
       { label: 'Corner radius', key: 'position.radius', type: 'range', min: 0, max: 120, step: 1, default: 0, unit: 'px' },
-      { label: 'Drop shadow', key: 'position.shadow', type: 'checkbox' }
+      { label: 'Drop shadow', key: 'position.shadow', type: 'checkbox' },
+      { section: 'Orientation' },
+      { label: 'Mirror horizontally', key: 'position.flipH', type: 'checkbox' },
+      { label: 'Flip vertically', key: 'position.flipV', type: 'checkbox' },
+      { label: 'Deinterlace (blend)', key: 'effects.deinterlace', type: 'checkbox' }
     ], p);
     refresh();
     box.append(U.el('p', { class: 'hint', text: 'Double-click a slider to reset it. Use the PiP presets with Overlay channels for picture-in-picture.' }));

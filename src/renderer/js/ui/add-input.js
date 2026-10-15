@@ -4,7 +4,8 @@
   const U = BTS.U;
 
   const TYPES = [
-    ['camera', '🎥', 'Camera', 'Webcam, capture card, NDI virtual cam'],
+    ['camera', '🎥', 'Camera / Capture', 'Webcam, Blackmagic, AVerMedia, Elgato…'],
+    ['stream', '📡', 'Stream / IP Cam', 'RTSP, SRT, RTMP, HLS, UDP'],
     ['screen', '🖥️', 'Desktop Capture', 'Screen or application window'],
     ['video', '🎞️', 'Video', 'MP4, MOV, MKV, WebM… or URL'],
     ['image', '🖼️', 'Image', 'PNG, JPG, GIF, SVG, WebP'],
@@ -44,6 +45,7 @@
     }
 
     async function select(id) {
+      if (right._cleanup) { right._cleanup(); right._cleanup = null; }
       current = id;
       U.$$('.type-card', left).forEach(c => c.classList.toggle('on', c.dataset.t === id));
       right.innerHTML = '<div class="hint">Loading…</div>';
@@ -51,7 +53,7 @@
     }
 
     const dlg = BTS.Dialog.open({
-      title: 'Add Input', body, width: 860,
+      title: 'Add Input', body, width: 960, onClose: () => { if (right._cleanup) right._cleanup(); },
       buttons: [
         { label: 'Cancel' },
         {
@@ -73,21 +75,98 @@
     async camera(el) {
       const vids = await devices('videoinput');
       const auds = await devices('audioinput');
-      const o = { deviceId: vids[0]?.deviceId || '', res: '1920x1080', fps: 30, audioDeviceId: 'none', title: '' };
+      const o = { deviceId: vids[0]?.deviceId || '', mode: 'auto', audioDeviceId: 'auto', deinterlace: false, keepLastFrame: true, autoReconnect: true, flipH: false, title: '' };
+      el.innerHTML = '';
+      if (!vids.length) {
+        el.append(U.el('div', { class: 'hint', style: { lineHeight: '1.7' }, html: '<b>No cameras or capture cards found.</b><br>• Connect the device and install its driver (Blackmagic Desktop Video, AVerMedia driver, etc.).<br>• Blackmagic DeckLink / UltraStudio: enable <b>Settings → Devices → Capture backend: DirectShow</b> and restart.<br>• For IP cameras, SRT or RTMP feeds use <b>Stream / IP Cam</b>.' }),
+          U.el('button', { class: 'btn', text: 'Refresh devices', onclick: () => PANES.camera(el) }));
+        return () => null;
+      }
+      const video = U.el('video', { muted: true, autoplay: true, playsinline: true, style: { width: '100%', aspectRatio: '16/9', background: '#000', borderRadius: '4px', display: 'block' } });
+      const info = U.el('div', { class: 'hint', style: { margin: '6px 0' } });
+      const hint = U.el('div', { class: 'hint', style: { color: 'var(--accent2)', lineHeight: '1.5' } });
+      const modeSel = U.el('select', { style: { width: '100%' } });
+      let probe = null;
+      const MODES = [['3840x2160@60', '2160p60 (4K)'], ['3840x2160@30', '2160p30 (4K)'], ['3840x2160@25', '2160p25 (4K)'], ['2560x1440@60', '1440p60'], ['2560x1440@30', '1440p30'], ['1920x1080@60', '1080p60'], ['1920x1080@59.94', '1080p59.94'], ['1920x1080@50', '1080p50'], ['1920x1080@30', '1080p30'], ['1920x1080@29.97', '1080p29.97'], ['1920x1080@25', '1080p25'], ['1920x1080@24', '1080p24'], ['1280x720@60', '720p60'], ['1280x720@50', '720p50'], ['1280x720@30', '720p30'], ['1280x720@25', '720p25'], ['720x576@25', '576p25 (PAL SD)'], ['720x480@29.97', '480p29.97 (NTSC SD)'], ['640x480@30', '480p30 (VGA)']];
+      const fillModes = (caps) => {
+        modeSel.innerHTML = '';
+        modeSel.append(U.el('option', { value: 'auto', text: 'Auto — device / signal default' }));
+        for (const [v, l] of MODES) {
+          const [wh, f] = v.split('@'); const [w, h] = wh.split('x').map(Number);
+          if (caps && caps.width && (w > caps.width.max || h > caps.height.max || +f > (caps.frameRate?.max || 60) + 0.5)) continue;
+          modeSel.append(U.el('option', { value: v, text: l }));
+        }
+        modeSel.value = o.mode;
+        if (modeSel.value !== o.mode) { modeSel.value = 'auto'; o.mode = 'auto'; }
+      };
+      modeSel.onchange = () => { o.mode = modeSel.value; };
+      const preview = async () => {
+        if (probe) probe.getTracks().forEach(t => t.stop());
+        video.srcObject = null; info.textContent = 'Opening device…';
+        const d = vids.find(v => v.deviceId === o.deviceId);
+        hint.textContent = BTS.Inputs.cardHint(d && d.label);
+        try {
+          probe = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: o.deviceId } } });
+          video.srcObject = probe;
+          const t = probe.getVideoTracks()[0]; const caps = t.getCapabilities ? t.getCapabilities() : null; const st = t.getSettings();
+          info.textContent = `Signal: ${st.width}×${st.height} @ ${Math.round(st.frameRate || 0)} fps` + (caps && caps.width ? ` • Max ${caps.width.max}×${caps.height.max} @ ${Math.round(caps.frameRate?.max || 0)}` : '');
+          fillModes(caps);
+        } catch (e) { info.textContent = 'Cannot open device: ' + (e.name === 'NotReadableError' ? 'it is busy (close other apps) or has no signal' : e.message || e.name); fillModes(null); }
+        const pa = await BTS.Inputs.findPairedAudio(d);
+        autoOpt.textContent = 'Auto — ' + (pa ? `paired: ${pa.label}` : 'no matching audio device');
+      };
+      const devSel = U.el('select', { style: { width: '100%' } });
+      for (const d of vids) devSel.append(U.el('option', { value: d.deviceId, text: d.label || 'Camera' }));
+      devSel.onchange = () => { o.deviceId = devSel.value; preview(); };
+      const audSel = U.el('select', { style: { width: '100%' } });
+      const autoOpt = U.el('option', { value: 'auto', text: 'Auto — match capture card audio' });
+      audSel.append(autoOpt, U.el('option', { value: 'none', text: 'None (video only)' }), ...auds.map(d => U.el('option', { value: d.deviceId, text: d.label || 'Microphone' })));
+      audSel.onchange = () => { o.audioDeviceId = audSel.value; };
+      const left = U.el('div', { style: { flex: 1 } }, [video, info, hint]);
+      const form = BTS.Dialog.form([
+        { label: 'Device', custom: devSel },
+        { label: 'Format', custom: modeSel },
+        { label: 'Audio', custom: audSel },
+        { label: 'Deinterlace', key: 'deinterlace', type: 'checkbox', hint: 'For interlaced sources (1080i50 / 1080i59.94) from broadcast cameras.' },
+        { label: 'Hold last frame on signal loss', key: 'keepLastFrame', type: 'checkbox' },
+        { label: 'Auto reconnect', key: 'autoReconnect', type: 'checkbox' },
+        { label: 'Mirror', key: 'flipH', type: 'checkbox' },
+        { label: 'Title', key: 'title', placeholder: 'Optional' }
+      ], o);
+      el.append(U.el('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1.1fr', gap: '14px' } }, [left, form]),
+        U.el('div', { style: { marginTop: '8px' } }, [U.el('button', { class: 'btn', text: '↻ Refresh devices', onclick: () => { if (probe) probe.getTracks().forEach(t => t.stop()); PANES.camera(el); } })]));
+      el._cleanup = () => { if (probe) probe.getTracks().forEach(t => t.stop()); };
+      preview();
+      return () => {
+        if (probe) probe.getTracks().forEach(t => t.stop());
+        if (!o.deviceId) { U.toast('No camera selected', 'error'); return null; }
+        let w = 0, h = 0, fps = 0;
+        if (o.mode !== 'auto') { const [wh, f] = o.mode.split('@'); [w, h] = wh.split('x').map(Number); fps = +f; }
+        const label = vids.find(v => v.deviceId === o.deviceId)?.label || 'Camera';
+        return [{ type: 'camera', title: o.title || label.replace(/\s*\(.*\)$/, ''), props: { position: { flipH: o.flipH }, effects: { deinterlace: o.deinterlace } },
+          cfg: { deviceId: o.deviceId, label, width: w, height: h, fps, audioDeviceId: o.audioDeviceId, keepLastFrame: o.keepLastFrame, autoReconnect: o.autoReconnect } }];
+      };
+    },
+
+    async stream(el) {
+      const o = { url: '', transport: 'tcp', width: 1920, fps: 30, quality: 4, audio: true, lowLatency: true, listen: false, title: '' };
       el.innerHTML = '';
       el.append(BTS.Dialog.form([
-        { label: 'Device', key: 'deviceId', type: 'select', options: vids.length ? vids.map(d => [d.deviceId, d.label || 'Camera']) : [['', 'No cameras found']] },
-        { label: 'Resolution', key: 'res', type: 'select', options: [['640x360', '360p'], ['1280x720', '720p HD'], ['1920x1080', '1080p Full HD'], ['2560x1440', '1440p'], ['3840x2160', '2160p 4K']] },
+        { label: 'Stream URL', key: 'url', placeholder: 'rtsp://user:pass@192.168.1.64:554/Streaming/Channels/101' },
+        { custom: U.el('div', { class: 'hint', style: { lineHeight: '1.7' }, html: 'Examples:<br>• IP camera / CCTV: <span class="kbd">rtsp://192.168.1.64:554/stream1</span><br>• SRT (receive from encoder/phone): <span class="kbd">srt://0.0.0.0:9000?mode=listener&amp;latency=200000</span><br>• RTMP pull: <span class="kbd">rtmp://server/live/key</span> • HLS: <span class="kbd">https://…/index.m3u8</span><br>• UDP / MPEG-TS: <span class="kbd">udp://0.0.0.0:1234</span> • NDI: use an NDI → RTSP/SRT bridge' }) },
+        { label: 'RTSP transport', key: 'transport', type: 'select', options: [['tcp', 'TCP (reliable, recommended)'], ['udp', 'UDP (lowest latency)']] },
+        { label: 'RTMP: listen for incoming', key: 'listen', type: 'checkbox', hint: 'Lets an encoder push to rtmp://THIS-PC:1935/live/key' },
+        { label: 'Max width', key: 'width', type: 'select', number: true, options: [[1280, '1280 (720p)'], [1920, '1920 (1080p)'], [3840, '3840 (4K)']] },
         { label: 'Frame rate', key: 'fps', type: 'select', number: true, options: [[25, '25'], [30, '30'], [50, '50'], [60, '60']] },
-        { label: 'Audio', key: 'audioDeviceId', type: 'select', options: [['none', 'None (video only)'], ...auds.map(d => [d.deviceId, d.label || 'Microphone'])] },
+        { label: 'Quality', key: 'quality', type: 'select', number: true, options: [[2, 'Highest'], [4, 'High'], [7, 'Medium (lower CPU)']] },
+        { label: 'Include audio', key: 'audio', type: 'checkbox' },
+        { label: 'Low latency', key: 'lowLatency', type: 'checkbox' },
         { label: 'Title', key: 'title', placeholder: 'Optional' }
       ], o));
-      el.append(U.el('p', { class: 'hint', text: 'Capture cards (e.g. HDMI-USB) appear as cameras. NDI sources can be used through NDI Webcam Input / NDI Virtual Input.' }));
       return () => {
-        if (!o.deviceId) { U.toast('No camera selected', 'error'); return null; }
-        const [w, h] = o.res.split('x').map(Number);
-        const label = vids.find(v => v.deviceId === o.deviceId)?.label || 'Camera';
-        return [{ type: 'camera', title: o.title || label.replace(/\s*\(.*\)$/, ''), cfg: { deviceId: o.deviceId, label, width: w, height: h, fps: o.fps, audioDeviceId: o.audioDeviceId } }];
+        if (!o.url) { U.toast('Enter a stream URL', 'error'); return null; }
+        let host = ''; try { host = new URL(o.url).hostname; } catch { /* noop */ }
+        return [{ type: 'stream', title: o.title || ('Stream ' + (host || '')).trim(), cfg: { url: o.url, transport: o.transport, width: o.width, fps: o.fps, quality: o.quality, audio: o.audio, lowLatency: o.lowLatency, listen: o.listen } }];
       };
     },
 

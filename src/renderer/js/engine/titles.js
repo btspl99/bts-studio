@@ -146,12 +146,122 @@
         E({ type: 'text', name: 'When', x: 1440, y: 240, w: 400, h: 40, text: 'in 5 minutes', size: 24, ...BASE_TEXT, weight: 500, color: '#a9adb7', delay: 160 })
       ]
     }),
+    'lower-third-logo': () => ({
+      name: 'Lower Third + Logo', width: 1920, height: 1080,
+      animIn: { type: 'slide-left', duration: 550 }, animOut: { type: 'slide-left', duration: 400 },
+      elements: [
+        E({ type: 'rect', name: 'LogoBox', x: 110, y: 812, w: 146, h: 146, fill: '#ffffff', radius: 10 }),
+        E({ type: 'image', name: 'Logo', x: 120, y: 822, w: 126, h: 126, src: '', fit: 'contain', delay: 60 }),
+        E({ type: 'rect', name: 'NameBar', x: 256, y: 812, w: 760, h: 86, fill: '#0f2d52', fill2: '#173f70', delay: 80 }),
+        E({ type: 'rect', name: 'TitleBar', x: 256, y: 898, w: 640, h: 60, fill: '#ffffff', delay: 140 }),
+        E({ type: 'text', name: 'Name', x: 286, y: 812, w: 710, h: 86, text: 'Guest Name', size: 48, ...BASE_TEXT, delay: 110, typewriter: false }),
+        E({ type: 'text', name: 'Title', x: 286, y: 898, w: 590, h: 60, text: 'Designation • Organisation', size: 30, ...BASE_TEXT, weight: 600, color: '#0f2d52', delay: 170 })
+      ]
+    }),
+    'news-strap': () => ({
+      name: 'News Strap (2 lines)', width: 1920, height: 1080,
+      animIn: { type: 'wipe', duration: 500 }, animOut: { type: 'fade', duration: 300 },
+      elements: [
+        E({ type: 'rect', name: 'Tag', x: 80, y: 820, w: 230, h: 56, fill: '#d91e18' }),
+        E({ type: 'text', name: 'TagText', x: 80, y: 820, w: 230, h: 56, text: 'LIVE', size: 34, ...BASE_TEXT, weight: 800, align: 'center' }),
+        E({ type: 'rect', name: 'Strap', x: 80, y: 876, w: 1760, h: 92, fill: '#ffffff', delay: 60 }),
+        E({ type: 'text', name: 'Headline', x: 110, y: 876, w: 1700, h: 92, text: 'Main headline of the story goes here', size: 50, ...BASE_TEXT, color: '#111', delay: 100, typewriter: true }),
+        E({ type: 'rect', name: 'SubBar', x: 80, y: 968, w: 1760, h: 50, fill: '#13161c', delay: 120 }),
+        E({ type: 'text', name: 'Sub', x: 110, y: 968, w: 1700, h: 50, text: 'Location • supporting detail', size: 28, ...BASE_TEXT, weight: 500, delay: 160 })
+      ]
+    }),
+    'live-bug': () => ({
+      name: 'LIVE Bug', width: 1920, height: 1080,
+      animIn: { type: 'fade', duration: 300 }, animOut: { type: 'fade', duration: 300 },
+      elements: [
+        E({ type: 'rect', name: 'Live', x: 60, y: 50, w: 120, h: 50, fill: '#e2453c', radius: 6 }),
+        E({ type: 'text', name: 'LiveText', x: 60, y: 50, w: 120, h: 50, text: '● LIVE', size: 26, ...BASE_TEXT, weight: 800, align: 'center' }),
+        E({ type: 'rect', name: 'ClockBg', x: 186, y: 50, w: 150, h: 50, fill: '#101318', radius: 6, opacity: 0.85 }),
+        E({ type: 'clock', name: 'Clock', x: 186, y: 50, w: 150, h: 50, format: 'HH:mm', size: 26, ...BASE_TEXT, align: 'center' })
+      ]
+    }),
+    'quote': () => ({
+      name: 'Quote', width: 1920, height: 1080,
+      animIn: { type: 'fade', duration: 500 }, animOut: { type: 'fade', duration: 400 },
+      elements: [
+        E({ type: 'rect', name: 'Panel', x: 260, y: 300, w: 1400, h: 440, fill: '#0f1218', opacity: 0.92, radius: 16 }),
+        E({ type: 'text', name: 'Mark', x: 300, y: 300, w: 120, h: 160, text: '“', size: 200, ...BASE_TEXT, color: '#f0a53a' }),
+        E({ type: 'text', name: 'Quote', x: 380, y: 380, w: 1200, h: 200, text: 'An inspiring quote goes here.', size: 56, ...BASE_TEXT, weight: 500, italic: true, align: 'center', typewriter: true, delay: 150 }),
+        E({ type: 'text', name: 'Author', x: 380, y: 620, w: 1200, h: 60, text: '— Author Name', size: 34, ...BASE_TEXT, weight: 600, color: '#f0a53a', align: 'center', delay: 400 })
+      ]
+    }),
+    'leaderboard': () => {
+      const els = [E({ type: 'rect', name: 'Panel', x: 560, y: 180, w: 800, h: 720, fill: '#0f1218', opacity: 0.95, radius: 14 }),
+        E({ type: 'rect', name: 'Header', x: 560, y: 180, w: 800, h: 90, fill: '#f0a53a', radius: 14 }),
+        E({ type: 'text', name: 'Heading', x: 600, y: 180, w: 720, h: 90, text: 'LEADERBOARD', size: 46, ...BASE_TEXT, weight: 800, color: '#1a1205', align: 'center' })];
+      for (let i = 1; i <= 8; i++) {
+        const y = 290 + (i - 1) * 74;
+        els.push(E({ type: 'rect', name: 'Row' + i, x: 580, y, w: 760, h: 64, fill: i % 2 ? '#1b2030' : '#151925', radius: 6, delay: i * 50 }));
+        els.push(E({ type: 'text', name: 'Pos' + i, x: 600, y, w: 60, h: 64, text: String(i), size: 30, ...BASE_TEXT, color: '#f0a53a', align: 'center', delay: i * 50 }));
+        els.push(E({ type: 'text', name: 'Name' + i, x: 680, y, w: 480, h: 64, text: 'Name ' + i, size: 30, ...BASE_TEXT, weight: 600, delay: i * 50 }));
+        els.push(E({ type: 'text', name: 'Score' + i, x: 1170, y, w: 150, h: 64, text: '0', size: 30, ...BASE_TEXT, align: 'right', delay: i * 50 }));
+      }
+      return { name: 'Leaderboard (8 rows)', width: 1920, height: 1080, animIn: { type: 'slide-up', duration: 500 }, animOut: { type: 'fade', duration: 300 }, elements: els };
+    },
+    'cricket-batting-card': () => {
+      const els = [E({ type: 'rect', name: 'Panel', x: 360, y: 150, w: 1200, h: 780, fill: '#0e1a2b', opacity: 0.97, radius: 12 }),
+        E({ type: 'rect', name: 'Header', x: 360, y: 150, w: 1200, h: 90, fill: '#f0a53a', radius: 12 }),
+        E({ type: 'text', name: 'Team', x: 400, y: 150, w: 700, h: 90, text: 'INDIA — BATTING', size: 44, ...BASE_TEXT, weight: 800, color: '#1a1205' }),
+        E({ type: 'text', name: 'Total', x: 1100, y: 150, w: 420, h: 90, text: '245/6 (40.0)', size: 44, ...BASE_TEXT, weight: 800, color: '#1a1205', align: 'right' }),
+        E({ type: 'text', name: 'ColR', x: 1100, y: 250, w: 100, h: 40, text: 'R', size: 24, ...BASE_TEXT, color: '#9fb3cc', align: 'right' }),
+        E({ type: 'text', name: 'ColB', x: 1210, y: 250, w: 100, h: 40, text: 'B', size: 24, ...BASE_TEXT, color: '#9fb3cc', align: 'right' }),
+        E({ type: 'text', name: 'ColSR', x: 1330, y: 250, w: 190, h: 40, text: '4s / 6s', size: 24, ...BASE_TEXT, color: '#9fb3cc', align: 'right' })];
+      for (let i = 1; i <= 8; i++) {
+        const y = 290 + (i - 1) * 76;
+        els.push(E({ type: 'rect', name: 'Row' + i, x: 380, y, w: 1160, h: 66, fill: i % 2 ? '#13253d' : '#102036', radius: 4, delay: i * 40 }));
+        els.push(E({ type: 'text', name: 'Batter' + i, x: 400, y: y + 2, w: 420, h: 36, text: 'Batter ' + i, size: 28, ...BASE_TEXT, weight: 600, delay: i * 40 }));
+        els.push(E({ type: 'text', name: 'Dismissal' + i, x: 400, y: y + 34, w: 680, h: 28, text: 'c Fielder b Bowler', size: 20, ...BASE_TEXT, weight: 400, color: '#9fb3cc', delay: i * 40 }));
+        els.push(E({ type: 'text', name: 'R' + i, x: 1100, y, w: 100, h: 66, text: '0', size: 30, ...BASE_TEXT, align: 'right', delay: i * 40 }));
+        els.push(E({ type: 'text', name: 'B' + i, x: 1210, y, w: 100, h: 66, text: '0', size: 26, ...BASE_TEXT, weight: 500, color: '#c2cfe0', align: 'right', delay: i * 40 }));
+        els.push(E({ type: 'text', name: 'X' + i, x: 1330, y, w: 190, h: 66, text: '0 / 0', size: 26, ...BASE_TEXT, weight: 500, color: '#c2cfe0', align: 'right', delay: i * 40 }));
+      }
+      return { name: 'Cricket Batting Card', width: 1920, height: 1080, animIn: { type: 'fade', duration: 450 }, animOut: { type: 'fade', duration: 300 }, elements: els };
+    },
+    'match-intro': () => ({
+      name: 'Match Intro (Team vs Team)', width: 1920, height: 1080,
+      animIn: { type: 'zoom', duration: 600 }, animOut: { type: 'fade', duration: 400 },
+      elements: [
+        E({ type: 'rect', name: 'Bg', x: 0, y: 0, w: 1920, h: 1080, fill: '#0b1220', fill2: '#2a1606' }),
+        E({ type: 'image', name: 'LogoA', x: 260, y: 300, w: 360, h: 360, src: '', delay: 100 }),
+        E({ type: 'image', name: 'LogoB', x: 1300, y: 300, w: 360, h: 360, src: '', delay: 100 }),
+        E({ type: 'text', name: 'TeamA', x: 160, y: 690, w: 560, h: 90, text: 'TEAM A', size: 64, ...BASE_TEXT, weight: 800, align: 'center', delay: 200 }),
+        E({ type: 'text', name: 'TeamB', x: 1200, y: 690, w: 560, h: 90, text: 'TEAM B', size: 64, ...BASE_TEXT, weight: 800, align: 'center', delay: 200 }),
+        E({ type: 'text', name: 'VS', x: 760, y: 420, w: 400, h: 160, text: 'VS', size: 140, ...BASE_TEXT, weight: 900, align: 'center', color: '#f0a53a', delay: 300 }),
+        E({ type: 'text', name: 'Event', x: 160, y: 120, w: 1600, h: 90, text: 'TOURNAMENT NAME 2026', size: 56, ...BASE_TEXT, weight: 700, align: 'center', delay: 0 }),
+        E({ type: 'text', name: 'Venue', x: 160, y: 860, w: 1600, h: 70, text: 'Venue • Date • Time', size: 36, ...BASE_TEXT, weight: 500, align: 'center', color: '#c9ccd4', delay: 350 })
+      ]
+    }),
+    'end-credits': () => ({
+      name: 'End Credits (roll)', width: 1920, height: 1080,
+      animIn: { type: 'fade', duration: 500 }, animOut: { type: 'fade', duration: 500 },
+      elements: [
+        E({ type: 'rect', name: 'Bg', x: 0, y: 0, w: 1920, h: 1080, fill: '#000000' }),
+        E({ type: 'crawl', name: 'Credits', x: 360, y: 60, w: 1200, h: 960, text: 'PRODUCED BY\nBhoomiputra Tech Solutions\n\nDIRECTOR\nName\n\nCAMERA\nName\nName\n\nGRAPHICS\nBTS Studio\n\nThank you for watching', size: 46, speed: 70, ...BASE_TEXT, weight: 500, align: 'center', loop: false })
+      ]
+    }),
+    'ticker': () => ({
+      name: 'Ticker (bottom)', width: 1920, height: 1080,
+      animIn: { type: 'slide-up', duration: 400 }, animOut: { type: 'slide-up', duration: 300 },
+      elements: [
+        E({ type: 'rect', name: 'Bar', x: 0, y: 1010, w: 1920, h: 60, fill: '#101318', opacity: 0.95 }),
+        E({ type: 'rect', name: 'Label', x: 0, y: 1010, w: 220, h: 60, fill: '#f0a53a' }),
+        E({ type: 'text', name: 'LabelText', x: 0, y: 1010, w: 220, h: 60, text: 'UPDATES', size: 30, ...BASE_TEXT, weight: 800, color: '#1a1205', align: 'center' }),
+        E({ type: 'ticker', name: 'Ticker', x: 230, y: 1010, w: 1690, h: 60, text: 'First headline • Second headline • Third headline', separator: '   ◆   ', speed: 150, size: 30, ...BASE_TEXT, weight: 500 })
+      ]
+    }),
     'blank': () => ({ name: 'Blank Title', width: 1920, height: 1080, animIn: { type: 'fade', duration: 300 }, animOut: { type: 'fade', duration: 300 }, elements: [] })
   };
 
   const TEMPLATE_LIST = [
     ['lower-third', 'Lower Third — Classic'], ['lower-third-modern', 'Lower Third — Modern'], ['breaking-news', 'Breaking News + Ticker'],
     ['cricket-scorebug', 'Cricket Score Bar'], ['sports-score', 'Sports Score (2 teams)'], ['clock', 'Clock'], ['countdown', 'Countdown'],
+    ['lower-third-logo', 'Lower Third + Logo'], ['news-strap', 'News Strap (2 lines)'], ['ticker', 'Ticker (bottom)'], ['live-bug', 'LIVE Bug + Clock'],
+    ['cricket-batting-card', 'Cricket Batting Card'], ['match-intro', 'Match Intro (Team vs Team)'], ['leaderboard', 'Leaderboard (8 rows)'], ['quote', 'Quote'], ['end-credits', 'End Credits (roll)'],
     ['fullscreen-title', 'Full Screen Title'], ['social', 'Social Handle'], ['up-next', 'Up Next'], ['blank', 'Blank (design your own)']
   ];
 
@@ -185,7 +295,8 @@
       this.canvas.height = t.height || 1080;
       for (const e of t.elements) if (e.type === 'countdown' && !this.timers[e.id]) this.timers[e.id] = { running: false, value: e.seconds || 0, startedAt: 0 };
     }
-    get fields() { return this.t.elements.filter(e => ['text', 'image', 'countdown', 'ticker', 'rect'].includes(e.type)); }
+    get fields() { return this.t.elements.filter(e => ['text', 'image', 'countdown', 'ticker', 'crawl', 'rect'].includes(e.type)); }
+    tickerCmd(name, cmd) { for (const e of this.t.elements.filter(x => x.type === 'ticker' && (!name || x.name.toLowerCase() === String(name).toLowerCase()))) { const st = this.tickers[e.id] || (this.tickers[e.id] = { t0: performance.now() }); if (cmd === 'pause' && !st.paused) { st.paused = true; st.pausedAt = performance.now() - st.t0; } else if (cmd === 'play') st.paused = false; else if (cmd === 'reset') { st.t0 = performance.now(); st.paused = false; } } }
     find(name) { const n = String(name).toLowerCase().replace(/\.(text|source|fill)$/, ''); return this.t.elements.find(e => e.name.toLowerCase() === n || e.id === name); }
     setText(name, value) { const e = this.find(name); if (!e) return false; if (e.type === 'countdown') { this.setTimer(e, value); return true; } e.text = String(value ?? ''); return true; }
     setImage(name, src) { const e = this.find(name); if (!e || e.type !== 'image') return false; e.src = src; return true; }
@@ -242,9 +353,9 @@
         } else if (!editing) p = this.progress;
         if (p <= 0) continue;
         ctx.save();
-        this._applyAnim(ctx, e, anim ? anim.type : 'fade', p, W, H);
+        if (!(e.typewriter && this.animDir > 0)) this._applyAnim(ctx, e, anim ? anim.type : 'fade', p, W, H);
         ctx.globalAlpha *= (e.opacity ?? 1);
-        this._drawEl(ctx, e, now);
+        this._drawEl(ctx, e, now, editing ? 1 : p);
         ctx.restore();
       }
       return this.canvas;
@@ -284,7 +395,7 @@
       ctx.fillText(str, x, y);
     }
 
-    _drawEl(ctx, e, now) {
+    _drawEl(ctx, e, now, p = 1) {
       switch (e.type) {
         case 'rect': {
           ctx.fillStyle = this._fillStyle(ctx, e);
@@ -294,7 +405,21 @@
           if (e.stroke && e.strokeWidth) { ctx.lineWidth = e.strokeWidth; ctx.strokeStyle = e.stroke; ctx.stroke(); }
           break;
         }
-        case 'text': this._text(ctx, e, String(e.text ?? '')); break;
+        case 'text': { const t = String(e.text ?? ''); this._text(ctx, e, e.typewriter && p < 1 ? t.slice(0, Math.ceil(t.length * p)) : t); break; }
+        case 'crawl': {
+          ctx.beginPath(); ctx.rect(e.x, e.y, e.w, e.h); ctx.clip();
+          const size = e.size || 40, lh = size * (e.lineHeight || 1.5);
+          ctx.font = `${e.italic ? 'italic ' : ''}${e.weight || 500} ${size}px "${e.font || 'Segoe UI'}", "Segoe UI", sans-serif`;
+          ctx.fillStyle = e.color || '#fff'; ctx.textAlign = e.align || 'center'; ctx.textBaseline = 'top';
+          const lines = String(e.text || '').split(/\r?\n/);
+          const total = lines.length * lh + e.h;
+          const st = this.tickers[e.id] || (this.tickers[e.id] = { t0: now });
+          let off = (now - st.t0) / 1000 * (e.speed || 60);
+          if (e.loop !== false) off %= total; else off = Math.min(off, total);
+          const x = e.align === 'left' ? e.x : e.align === 'right' ? e.x + e.w : e.x + e.w / 2;
+          lines.forEach((l, i) => { const y = e.y + e.h - off + i * lh; if (y > e.y - lh && y < e.y + e.h) ctx.fillText(l, x, y); });
+          break;
+        }
         case 'clock': this._text(ctx, e, formatClock(e.format)); break;
         case 'countdown': this._text(ctx, e, formatTimer(this.timerValue(e))); break;
         case 'image': {
@@ -313,11 +438,15 @@
           const size = e.size || 28;
           ctx.font = `${e.italic ? 'italic ' : ''}${e.weight || 500} ${size}px "${e.font || 'Segoe UI'}", "Segoe UI", sans-serif`;
           ctx.fillStyle = e.color || '#fff'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-          const txt = (e.uppercase ? String(e.text).toUpperCase() : String(e.text)) + '      •      ';
+          const sep = e.separator ?? '      •      ';
+          const raw = Array.isArray(e.items) && e.items.length ? e.items.join(sep) : String(e.text);
+          const txt = (e.uppercase ? raw.toUpperCase() : raw) + sep;
           const tw = Math.max(1, ctx.measureText(txt).width);
           const st = this.tickers[e.id] || (this.tickers[e.id] = { t0: now });
+          if (st.paused) st.t0 = now - st.pausedAt;
           const off = ((now - st.t0) / 1000 * (e.speed || 120)) % tw;
-          for (let x = e.x - off; x < e.x + e.w; x += tw) ctx.fillText(txt, x, e.y + e.h / 2);
+          if (e.direction === 'ltr') { for (let x = e.x + off - tw; x < e.x + e.w; x += tw) ctx.fillText(txt, x, e.y + e.h / 2); }
+          else for (let x = e.x - off; x < e.x + e.w; x += tw) ctx.fillText(txt, x, e.y + e.h / 2);
           break;
         }
       }

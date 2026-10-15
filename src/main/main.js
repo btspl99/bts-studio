@@ -13,6 +13,8 @@ const outputs = require('./outputs');
 const browserSources = require('./browserSources');
 const api = require('./api');
 const updater = require('./updater');
+const streamInputs = require('./streamInputs');
+const replay = require('./replay');
 
 log.initialize();
 log.transports.file.level = 'info';
@@ -33,7 +35,18 @@ app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 app.commandLine.appendSwitch('force-color-profile', 'srgb');
-app.commandLine.appendSwitch('enable-features', 'PlatformHEVCEncoderSupport,MediaRecorderEnableMp4Muxer');
+app.commandLine.appendSwitch('enable-features', 'PlatformHEVCEncoderSupport,MediaRecorderEnableMp4Muxer,CanvasOopRasterization');
+// Prefer the discrete GPU on dual-GPU laptops, never throttle when covered by other windows
+app.commandLine.appendSwitch('force_high_performance_gpu');
+app.commandLine.appendSwitch('max-active-webgl-contexts', '32');
+{
+  const early = readJSON(SETTINGS_FILE, {});
+  const disable = ['CalculateNativeWinOcclusion', 'HardwareMediaKeyHandling'];
+  // DirectShow capture backend: needed for Blackmagic DeckLink / UltraStudio and some older capture cards
+  if (early.capture && early.capture.backend === 'directshow') disable.push('MediaFoundationVideoCapture');
+  app.commandLine.appendSwitch('disable-features', disable.join(','));
+  if (early.performance && early.performance.disableGpu) app.disableHardwareAcceleration();
+}
 if (process.platform === 'linux' && process.getuid && process.getuid() === 0) app.commandLine.appendSwitch('no-sandbox');
 
 let mainWin = null;
@@ -60,7 +73,10 @@ const DEFAULT_SETTINGS = {
   api: { enabled: true, port: 8088, allowRemote: true },
   updates: { autoCheck: true, url: '' },
   ui: { theme: 'dark', showMultiview: true, tbarReverse: false },
-  shortcuts: null
+  shortcuts: null,
+  capture: { backend: 'mediafoundation' },
+  performance: { governor: true, thumbnailFps: 10, disableGpu: false },
+  midi: { enabled: true, mappings: [] }
 };
 
 function deepMerge(base, over) {
@@ -137,6 +153,30 @@ function createMainWindow() {
   mainWin.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file:')) { e.preventDefault(); shell.openExternal(url); } });
 
   mainWin.loadFile(path.join(ROOT, 'renderer', 'index.html'));
+
+  // ---- crash resilience ----
+  let crashes = 0;
+  mainWin.webContents.on('render-process-gone', (e, details) => {
+    log.error('Renderer gone', details);
+    if (details.reason === 'clean-exit' || !mainWin || mainWin.isDestroyed()) return;
+    outputs.stopAll();
+    browserSources.destroyAll();
+    streamInputs.stopAll(); replay.stopAll();
+    crashes++;
+    if (crashes > 5) { dialog.showErrorBox('BTS Studio', 'The production engine keeps stopping. Please check your graphics drivers, then restart BTS Studio.'); return; }
+    setTimeout(() => { if (mainWin && !mainWin.isDestroyed()) mainWin.loadFile(path.join(ROOT, 'renderer', 'index.html'), { query: { recover: '1', reason: details.reason } }); }, 800);
+  });
+  let hangTimer = null;
+  mainWin.on('unresponsive', () => {
+    log.warn('Main window unresponsive');
+    clearTimeout(hangTimer);
+    hangTimer = setTimeout(async () => {
+      if (!mainWin || mainWin.isDestroyed()) return;
+      const r = await dialog.showMessageBox(mainWin, { type: 'warning', buttons: ['Keep waiting', 'Reload engine'], defaultId: 0, title: 'BTS Studio', message: 'BTS Studio is not responding.', detail: 'Your session is autosaved. Reloading restores the last autosave.' });
+      if (r.response === 1) { outputs.stopAll(); browserSources.destroyAll(); mainWin.loadFile(path.join(ROOT, 'renderer', 'index.html'), { query: { recover: '1', reason: 'hang' } }); }
+    }, 8000);
+  });
+  mainWin.on('responsive', () => clearTimeout(hangTimer));
   mainWin.once('ready-to-show', () => {
     mainWin.maximize();
     mainWin.show();
@@ -155,10 +195,12 @@ function createMainWindow() {
       return;
     }
   });
-  mainWin.on('closed', () => { mainWin = null; browserSources.destroyAll(); outputs.stopAll(); });
+  mainWin.on('closed', () => { mainWin = null; browserSources.destroyAll(); outputs.stopAll(); streamInputs.stopAll(); replay.stopAll(); });
 
   outputs.init({ getWin: () => mainWin, getSettings: () => settings, resourcesPath: process.resourcesPath, isPackaged: app.isPackaged, root: path.join(ROOT, '..') });
   browserSources.init({ getWin: () => mainWin });
+  streamInputs.init({ getWin: () => mainWin });
+  replay.init({ getWin: () => mainWin, getSettings: () => settings });
   updater.init({ getWin: () => mainWin, getSettings: () => settings, isPackaged: app.isPackaged });
   restartApi();
 }
@@ -329,6 +371,8 @@ function registerIpc() {
     return fs.readFileSync(url.replace(/^file:\/\//, ''), 'utf8');
   });
 
+  ipcMain.on('log', (e, level, msg) => { (log[level] || log.info)('[renderer]', msg); });
+
   // Power save while live
   ipcMain.on('power:live', (e, on) => {
     if (on && psbId === null) psbId = powerSaveBlocker.start('prevent-display-sleep');
@@ -337,6 +381,8 @@ function registerIpc() {
 
   outputs.registerIpc(ipcMain);
   browserSources.registerIpc(ipcMain);
+  streamInputs.registerIpc(ipcMain);
+  replay.registerIpc(ipcMain);
   api.registerIpc(ipcMain);
   updater.registerIpc(ipcMain);
 }
@@ -360,7 +406,11 @@ if (!gotLock) {
   app.on('open-file', (e, f) => { e.preventDefault(); if (mainWin) send('menu', { id: 'open-file', file: f }); else pendingOpenFile = f; });
 
   app.whenReady().then(() => {
-    session.defaultSession.setPermissionRequestHandler((wc, permission, cb) => cb(['media', 'display-capture', 'fullscreen', 'clipboard-read', 'clipboard-sanitized-write', 'notifications'].includes(permission)));
+    session.defaultSession.setPermissionRequestHandler((wc, permission, cb) => cb(['media', 'display-capture', 'fullscreen', 'clipboard-read', 'clipboard-sanitized-write', 'notifications', 'midi', 'midiSysex'].includes(permission)));
+    app.on('child-process-gone', (e, d) => {
+      log.error('Child process gone', d);
+      if (d.type === 'GPU') send('engine:notice', { level: 'error', message: `Graphics process restarted (${d.reason}). If this repeats, update your GPU driver or enable Settings → Performance → Software rendering.` });
+    });
     session.defaultSession.setPermissionCheckHandler(() => true);
     session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
       desktopCapturer.getSources({ types: ['screen'] }).then(s => callback({ video: s[0], audio: process.platform === 'win32' ? 'loopback' : undefined }));
@@ -372,5 +422,5 @@ if (!gotLock) {
   });
 
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-  app.on('before-quit', () => { outputs.stopAll(); browserSources.destroyAll(); api.stop(); });
+  app.on('before-quit', () => { outputs.stopAll(); browserSources.destroyAll(); streamInputs.stopAll(); replay.stopAll(); api.stop(); });
 }
