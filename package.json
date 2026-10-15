@@ -94,8 +94,8 @@
     ],
     "appx": {
       "identityName": "BTSPL.BTSStudio",
-      "publisher": "CN=REPLACE_WITH_PARTNER_CENTER_PUBLISHER_ID",
-      "publisherDisplayName": "Bhoomiputra Tech Solutions Pvt Ltd",
+      "publisher": "CN=1083D034-8784-47FC-A79A-FB1BC9BE8E80",
+      "publisherDisplayName": "BTSPL",
       "applicationId": "BTSStudio",
       "displayName": "BTS Studio",
       "backgroundColor": "#1b1c20",

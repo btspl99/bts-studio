@@ -31,14 +31,8 @@ jobs:
       - name: Build installer (NSIS)
         run: npx electron-builder --win nsis --x64 --publish never
 
-      - name: Build Microsoft Store package (MSIX/APPX)
-        if: ${{ vars.STORE_PUBLISHER != '' }}
-        shell: bash
-        run: >
-          npx electron-builder --win appx --x64 --publish never
-          -c.appx.identityName="${{ vars.STORE_IDENTITY_NAME }}"
-          -c.appx.publisher="${{ vars.STORE_PUBLISHER }}"
-          -c.appx.publisherDisplayName="${{ vars.STORE_PUBLISHER_DISPLAY_NAME }}"
+      - name: Build Microsoft Store package (APPX, identity from Partner Center)
+        run: npx electron-builder --win appx --x64 --publish never
 
       - uses: actions/upload-artifact@v4
         with:
