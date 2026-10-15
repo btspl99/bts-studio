@@ -10,7 +10,22 @@
 
   /* ---------------- floating panel ---------------- */
   const panels = new Map();
-  function floatPanel(id, title, build, { width = 420 } = {}) {
+  const HOSTS = { playlist: '#playlistModule', scripts: '#scriptsModule' };
+  function floatPanel(id, title, build, { width = 420, mountOnly = false } = {}) {
+    const hostSel = HOSTS[id];
+    if (hostSel && U.$(hostSel)) {
+      // docked module: build once into its workspace container, then just bring it to front
+      if (!panels.has(id)) {
+        const host = U.$(hostSel);
+        const body = U.el('div', { class: 'module-body' });
+        host.innerHTML = ''; host.append(body);
+        const api = { el: host, body, close: () => BTS.layout && BTS.layout.hide(id), refresh: null };
+        panels.set(id, api);
+        build(api);
+      }
+      if (!mountOnly && BTS.layout) BTS.layout.activate(id);
+      return panels.get(id);
+    }
     if (panels.has(id)) { const p = panels.get(id); p.el.style.zIndex = ++floatPanel.z; return p; }
     const saved = (() => { try { return JSON.parse(localStorage.getItem('bts.panel.' + id) || 'null'); } catch { return null; } })();
     const el = U.el('div', { class: 'float-panel', style: { width: width + 'px', left: (saved?.x ?? 120 + panels.size * 40) + 'px', top: (saved?.y ?? 80 + panels.size * 30) + 'px', zIndex: ++floatPanel.z } });
@@ -51,12 +66,15 @@
       U.$('#btnReplay').onclick = () => this.replayPanel();
       U.$('#btnPlaylist').onclick = () => this.playlistPanel();
       U.$('#btnScripts').onclick = () => this.scriptsPanel();
-      studio.replay.on('change', () => U.$('#btnReplay').classList.toggle('on', studio.replay.running));
       studio.sequencer.on('change', () => U.$('#btnPlaylist').classList.toggle('on', studio.sequencer.running));
     }
 
     /* ================= Instant Replay ================= */
-    replayPanel() {
+    mountModules() { this.playlistPanel({ mountOnly: true }); this.scriptsPanel({ mountOnly: true }); }
+
+    replayPanel() { if (BTS.layout) { BTS.layout.activate('replay'); return; } return this._legacyReplayPanel(); }
+
+    _legacyReplayPanel() {
       const st = this.studio, R = st.replay;
       return floatPanel('replay', '⏪ Instant Replay', (p) => {
         const draw = () => {
@@ -110,7 +128,7 @@
     }
 
     /* ================= Playlist ================= */
-    playlistPanel() {
+    playlistPanel(opts = {}) {
       const st = this.studio, Q = st.sequencer;
       return floatPanel('playlist', '📃 Playlist', (p) => {
         const draw = () => {
@@ -146,11 +164,11 @@
         draw();
         const off = Q.on('change', draw);
         p.onClose = off;
-      }, { width: 480 });
+      }, { width: 480, ...opts });
     }
 
     /* ================= Scripts (macros) ================= */
-    scriptsPanel() {
+    scriptsPanel(opts = {}) {
       const st = this.studio, M = st.macros;
       let cur = M.list[0]?.id;
       return floatPanel('scripts', '⚡ Scripts', (p) => {
@@ -190,7 +208,7 @@
         draw();
         const off = M.on('change', draw);
         p.onClose = off;
-      }, { width: 760 });
+      }, { width: 760, ...opts });
     }
 
     /* ================= Input triggers (tab in Input Settings) ================= */

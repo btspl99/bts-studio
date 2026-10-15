@@ -23,6 +23,9 @@
     BTS.inputsUI = new BTS.InputsUI(st);
     BTS.mixerUI = new BTS.MixerUI(st);
     BTS.operatorUI = new BTS.OperatorUI(st);
+    BTS.workspaceUI = new BTS.WorkspaceUI(st);
+    BTS.operatorUI.mountModules();
+    if (localStorage.getItem('bts.density') === 'compact') document.body.classList.add('compact');
 
     // main-process bridges
     window.bts.onMenu((m) => BTS.ui.handleMenu(m));

@@ -12,7 +12,7 @@ const log = require('electron-log/main');
 
 let ctx = null;
 const bufs = new Map(); // id -> state
-const SEG = 2; // seconds per segment
+const SEG = 1; // seconds per segment (shorter = replays available sooner)
 
 function init(c) { ctx = c; }
 
@@ -64,9 +64,18 @@ function status(id) {
 }
 
 /** opts: { last: seconds } or { inWall, outWall } (ms timestamps) */
-function clip(id, opts) {
+async function clip(id, opts) {
   const st = bufs.get(id);
-  if (!st) return Promise.resolve({ ok: false, error: 'Replay buffer not running' });
+  if (!st) return { ok: false, error: 'Replay buffer not running' };
+  // the segment being written is not in the list yet — wait (briefly) until the buffer covers the out point
+  if (opts.inWall && st.firstWrite) {
+    const want = ((opts.outWall || Date.now()) - st.firstWrite) / 1000 - 0.3;
+    for (let i = 0; i < 16; i++) { const sg = segments(st); if (sg.length && sg.at(-1).end >= want - 0.05) break; await new Promise(r => setTimeout(r, 250)); }
+  }
+  return cut(st, opts);
+}
+
+function cut(st, opts) {
   const segs = segments(st);
   if (!segs.length) return Promise.resolve({ ok: false, error: 'Buffer is still filling — try again in a few seconds' });
   const latest = segs.at(-1).end;

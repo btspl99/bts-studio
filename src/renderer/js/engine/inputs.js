@@ -293,14 +293,22 @@
     play() { if (this.el) { if (this.el.ended) this.el.currentTime = this.props.markIn || 0; this.el.play().catch(() => {}); } }
     pause() { if (this.el) this.el.pause(); }
     restart() { if (this.el) this.el.currentTime = this.props.markIn || 0; }
-    seek(t) { if (this.el && isFinite(t)) this.el.currentTime = U.clamp(t, 0, this.duration || 0); }
+    seek(t) {
+      if (!this.el || !isFinite(t)) return;
+      if (this.el.readyState < 1 || !this.duration) { this.el.addEventListener('loadedmetadata', () => this.seek(t), { once: true }); return; } // defer until the media is known
+      this.el.currentTime = U.clamp(t, 0, this.duration);
+    }
     get playing() { return !!this.el && !this.el.paused && !this.el.ended; }
     get duration() { return this.el && isFinite(this.el.duration) ? this.el.duration : 0; }
     get currentTime() { return this.el ? this.el.currentTime : 0; }
     setLoop(v) { this.props.loop = v; if (this.el) this.el.loop = v && this.props.markOut == null; }
     setSpeed(v) { this.props.speed = v; if (this.el) this.el.playbackRate = v; this.emit('state'); }
     destroy() { if (this.el) { this.el.pause(); this.el.removeAttribute('src'); this.el.load(); } super.destroy(); }
-    getMediaStream() { return this.el && this.el.captureStream ? this.el.captureStream() : null; }
+    getMediaStream() {
+      if (!this.el || !this.el.captureStream) return null;
+      if (!this._capStream || this._capStream.getTracks().every(t => t.readyState === 'ended')) this._capStream = this.el.captureStream();
+      return this._capStream;
+    }
   }
 
   /* ---------------- Playlist (List) ---------------- */

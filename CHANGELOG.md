@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.2.0 — 2026-10-15
+
+### New interface
+- **Dockable workspace** — every panel is a module (Preview, Output, Transitions, Inputs, Audio Mixer, Multiview, Instant Replay, Playlist, Scripts, Statistics). Drag a module's tab onto the edge of another panel to split it, onto its centre to add it as a tab, or onto the window edge to dock it across the whole workspace. Resize with the gutters (double-click to equalise), close modules, re-open them from **Modules**.
+- **Workspaces** — six built-in layouts (Classic Switcher, Sports & Replay, Multiview Director, Audio Focus, Laptop / Compact, Broadcast Studio), save your own, lock the layout during a show.
+- **Modern theme** — new app bar, refreshed controls, five themes (Graphite, Midnight, Carbon, Slate, Light), any accent colour, compact density. Tally colours stay fixed.
+- Inputs module: filter box and card-size slider. New Statistics module.
+
+### Instant Replay, rebuilt
+- Multi-angle events: every event captures all replay cameras (up to 8) at the same moment.
+- Switch camera angle while a replay plays — the playhead stays in place.
+- Replay monitor with jog (mouse wheel), frame step, seek bar, speed lever (5–200 %) and presets.
+- Mark In / Mark Out / Save Event, Last 5/10/20 s, Instant Replay, Play to Output, Return to Live (back to whatever was live before), Play Highlights (starred events back-to-back).
+- Event list with labels, stars, filter; transitions into/out of replay (Quick Play, Cut or a Stinger), auto-return, pre-roll.
+- Clips are frame-accurate to the out point; buffer segments shortened to 1 s.
+- New functions: ReplayCamera1–8, ReplayReturnToLive, ReplayPlay, ReplayPause, ReplayPlayHighlights, ReplayJog.
+
+### Fixes
+- Seeking media before it has loaded now waits for the file instead of jumping to 0.
+- Media-file inputs used as replay cameras start reliably.
+
 ## 1.1.0 — 2026-10-15
 
 ### New

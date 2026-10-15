@@ -8,64 +8,30 @@
 </head>
 <body>
 <div id="app">
-  <!-- ================= TOP: PREVIEW | TRANSITIONS | OUTPUT ================= -->
-  <section id="top">
-    <div id="monitors">
-      <div class="monitor" id="previewPanel">
-        <div class="mon-head"><span class="mon-tag preview">PREVIEW</span><span class="mon-name" id="pvName">—</span><span class="mon-res" id="pvInfo"></span></div>
-        <div class="mon-body"><canvas id="previewCanvas"></canvas><div class="safe" id="pvSafe"></div></div>
-        <div class="mon-foot" id="pvTransport">
-          <button class="tbtn" data-act="pv-restart" title="Restart">⏮</button>
-          <button class="tbtn" data-act="pv-play" title="Play / Pause" id="pvPlayBtn">▶</button>
-          <button class="tbtn" data-act="pv-loop" title="Loop" id="pvLoopBtn">⟳</button>
-          <input type="range" id="pvSeek" min="0" max="1000" value="0" step="1">
-          <span class="time" id="pvTime">00:00:00 / 00:00:00</span>
-          <button class="tbtn" data-act="pv-prev" title="Previous item">⏪</button>
-          <button class="tbtn" data-act="pv-next" title="Next item">⏩</button>
-          <button class="tbtn" data-act="pv-settings" title="Input settings">⚙</button>
-        </div>
-      </div>
-
-      <div id="transPanel">
-        <button class="trans-main" id="btnQuickPlay" data-fn="QuickPlay">Quick Play</button>
-        <button class="trans-main cut" id="btnCut" data-fn="Cut">Cut</button>
-        <div id="transButtons"></div>
-        <div id="tbarWrap" title="T-Bar — drag to transition manually">
-          <div id="tbarTrack"><div id="tbarFill"></div><div id="tbarHandle"></div></div>
-        </div>
-        <button class="trans-main ftb" id="btnFTB" data-fn="FadeToBlack">FTB</button>
-      </div>
-
-      <div class="monitor" id="programPanel">
-        <div class="mon-head"><span class="mon-tag program">OUTPUT</span><span class="mon-name" id="pgName">—</span><span class="mon-res" id="pgInfo"></span></div>
-        <div class="mon-body"><canvas id="programCanvas"></canvas><div class="safe" id="pgSafe"></div><div class="ftb-badge" id="ftbBadge">FADE TO BLACK</div></div>
-        <div class="mon-foot" id="pgFoot">
-          <div class="ovl-group" id="overlayStatus"></div>
-          <div class="spacer"></div>
-          <button class="tbtn" data-act="safe" title="Title-safe guides">▣</button>
-          <button class="tbtn" data-act="snapshot" title="Snapshot (PNG)">📷</button>
-          <button class="tbtn" data-act="fullscreen" title="Fullscreen output">⛶</button>
-        </div>
-      </div>
+  <!-- ================= APP BAR ================= -->
+  <header id="appbar">
+    <div class="brand"><span class="logo"></span><b>BTS</b>&nbsp;Studio</div>
+    <div class="ab-group">
+      <label class="ab-label" for="layoutSelect">Workspace</label>
+      <select id="layoutSelect" title="Workspace layout"></select>
+      <button class="abtn" id="btnModules" title="Show / hide modules">▦ Modules</button>
+      <button class="abtn" id="btnSaveLayout" title="Save this workspace layout">💾</button>
+      <button class="abtn" id="btnLockLayout" title="Lock layout (prevent accidental moves)">🔓</button>
     </div>
-    <div id="multiview" class="hidden">
-      <canvas id="multiviewCanvas"></canvas>
+    <div class="spacer"></div>
+    <div class="ab-status">
+      <span class="chip" id="chipStream"><i></i>LIVE <b id="chipStreamTime">00:00:00</b></span>
+      <span class="chip" id="chipRec"><i></i>REC <b id="chipRecTime">00:00:00</b></span>
+      <span class="chip" id="chipReplay"><i></i>REPLAY</span>
     </div>
-  </section>
-
-  <div id="splitter" title="Drag to resize"></div>
-
-  <!-- ================= BOTTOM: INPUTS | AUDIO MIXER ================= -->
-  <section id="bottom">
-    <div id="inputsArea">
-      <div id="inputs"></div>
-      <div id="dropHint">Drop video, audio, image or .html files here — or click <b>Add Input</b></div>
+    <div class="ab-group">
+      <button class="abtn" id="btnTheme" title="Theme & accent colour">🎨</button>
+      <button class="abtn" id="btnAppSettings" title="Settings">⚙</button>
     </div>
-    <aside id="mixer">
-      <div class="mixer-head"><span>AUDIO MIXER</span><button class="tbtn small" id="mixerHp" title="Headphone monitoring">🎧</button></div>
-      <div id="mixerStrips"></div>
-    </aside>
-  </section>
+  </header>
+
+  <!-- ================= DOCK WORKSPACE ================= -->
+  <main id="workspace"></main>
 
   <!-- ================= STATUS BAR ================= -->
   <footer id="statusbar">
@@ -76,9 +42,9 @@
     <button class="sbtn" id="btnStream"><i class="dot"></i>Stream<span class="sub" id="streamTime"></span></button>
     <button class="sbtn caret" id="btnStreamCfg" title="Stream settings">⚙</button>
     <button class="sbtn" id="btnMultiCorder"><i class="dot"></i>MultiCorder</button>
-    <button class="sbtn" id="btnMultiview">Multiview</button>
     <button class="sbtn" id="btnReplay"><i class="dot"></i>Replay</button>
     <button class="sbtn" id="btnPlaylist"><i class="dot"></i>Playlist</button>
+    <button class="sbtn" id="btnMultiview">Multiview</button>
     <button class="sbtn" id="btnScripts">Scripts</button>
     <div class="spacer"></div>
     <div class="stats" id="stats">
@@ -89,8 +55,72 @@
       <span id="stOut"></span>
     </div>
     <span class="clock" id="clock">00:00:00</span>
-    <button class="sbtn caret" id="btnSettings" title="Settings">☰</button>
+    <button class="sbtn caret" id="btnSettings" title="Menu">☰</button>
   </footer>
+</div>
+
+<!-- ================= MODULES (re-parented into the workspace by the layout engine) ================= -->
+<div id="moduleStash" hidden>
+      <div class="monitor" id="previewPanel">
+    <div class="mon-head"><span class="mon-tag preview">PREVIEW</span><span class="mon-name" id="pvName">—</span><span class="mon-res" id="pvInfo"></span></div>
+    <div class="mon-body"><canvas id="previewCanvas"></canvas><div class="safe" id="pvSafe"></div></div>
+    <div class="mon-foot" id="pvTransport">
+      <button class="tbtn" data-act="pv-restart" title="Restart">⏮</button>
+      <button class="tbtn" data-act="pv-play" title="Play / Pause" id="pvPlayBtn">▶</button>
+      <button class="tbtn" data-act="pv-loop" title="Loop" id="pvLoopBtn">⟳</button>
+      <input type="range" id="pvSeek" min="0" max="1000" value="0" step="1">
+      <span class="time" id="pvTime">00:00:00 / 00:00:00</span>
+      <button class="tbtn" data-act="pv-prev" title="Previous item">⏪</button>
+      <button class="tbtn" data-act="pv-next" title="Next item">⏩</button>
+      <button class="tbtn" data-act="pv-settings" title="Input settings">⚙</button>
+    </div>
+  </div>
+
+  <div id="transPanel">
+    <button class="trans-main" id="btnQuickPlay" data-fn="QuickPlay">Quick Play</button>
+    <button class="trans-main cut" id="btnCut" data-fn="Cut">Cut</button>
+    <div id="transButtons"></div>
+    <div id="tbarWrap" title="T-Bar — drag to transition manually">
+      <div id="tbarTrack"><div id="tbarFill"></div><div id="tbarHandle"></div></div>
+    </div>
+    <button class="trans-main ftb" id="btnFTB" data-fn="FadeToBlack">FTB</button>
+  </div>
+
+  <div class="monitor" id="programPanel">
+    <div class="mon-head"><span class="mon-tag program">OUTPUT</span><span class="mon-name" id="pgName">—</span><span class="mon-res" id="pgInfo"></span></div>
+    <div class="mon-body"><canvas id="programCanvas"></canvas><div class="safe" id="pgSafe"></div><div class="ftb-badge" id="ftbBadge">FADE TO BLACK</div></div>
+    <div class="mon-foot" id="pgFoot">
+      <div class="ovl-group" id="overlayStatus"></div>
+      <div class="spacer"></div>
+      <button class="tbtn" data-act="safe" title="Title-safe guides">▣</button>
+      <button class="tbtn" data-act="snapshot" title="Snapshot (PNG)">📷</button>
+      <button class="tbtn" data-act="fullscreen" title="Fullscreen output">⛶</button>
+    </div>
+  </div>
+    </div>
+  <div class="module-fill" id="inputsArea">
+    <div class="mod-toolbar">
+      <button class="tbtn" id="inpAdd" title="Add input">＋ Add</button>
+      <input type="search" id="inpFilter" placeholder="Filter inputs…" title="Filter by name or type">
+      <div class="spacer"></div>
+      <span class="hint">Size</span><input type="range" id="inpSize" min="150" max="360" step="2" value="228" title="Card size">
+    </div>
+    <div class="inputs-scroll">
+      <div id="inputs"></div>
+      <div id="dropHint">Drop video, audio, image or .html files here — or click <b>Add Input</b></div>
+    </div>
+  </div>
+
+  <div class="module-fill" id="mixer">
+    <div class="mod-toolbar"><span class="hint">Master · Bus A · Bus B · inputs</span><div class="spacer"></div><button class="tbtn small" id="mixerHp" title="Headphone monitoring">🎧</button></div>
+    <div id="mixerStrips"></div>
+  </div>
+
+  <div class="module-fill" id="multiview"><canvas id="multiviewCanvas"></canvas></div>
+  <div class="module-fill" id="replayModule"></div>
+  <div class="module-fill" id="playlistModule"></div>
+  <div class="module-fill" id="scriptsModule"></div>
+  <div class="module-fill" id="statsModule"></div>
 </div>
 
 <div id="modalRoot"></div>
@@ -119,7 +149,10 @@
 <script src="js/ui/input-settings.js"></script>
 <script src="js/ui/title-designer.js"></script>
 <script src="js/ui/settings-ui.js"></script>
+<script src="js/ui/layout.js"></script>
 <script src="js/ui/operator-ui.js"></script>
+<script src="js/ui/replay-ui.js"></script>
+<script src="js/ui/workspace-ui.js"></script>
 <script src="js/ui/main-ui.js"></script>
 <script src="js/app.js"></script>
 </body>

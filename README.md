@@ -4,7 +4,10 @@ Free, open-source live production software for students and creators — switch 
 
 Website & downloads: https://studio.btspl.tech · User guide: https://studio.btspl.tech/docs/
 
-## Features (v1.1)
+## Features (v1.2)
+
+New in 1.2: a dockable, customisable workspace (drag modules anywhere, six built-in layouts, save your own, themes & accent colours) and a rebuilt multi-angle Instant Replay. See CHANGELOG.md.
+
 
 New in 1.1: Instant Replay with slow motion, IP camera / SRT / RTMP / RTSP inputs, improved capture-card support (Blackmagic, AVerMedia, Elgato, Magewell), Scripts, input Triggers, Playlist, MIDI controllers, 9 more title templates, adaptive performance governor and automatic crash recovery. See CHANGELOG.md.
 

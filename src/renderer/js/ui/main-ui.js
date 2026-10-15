@@ -14,7 +14,6 @@
       this._tbar();
       this._monitors();
       this._statusbar();
-      this._splitter();
       this._dnd();
       this._keys();
       this.loadShortcuts();
@@ -226,7 +225,7 @@
       U.$('#btnRecord').classList.toggle('on', out.isRecording());
       U.$('#btnMultiCorder').classList.toggle('on', out.isMultiCorder());
       U.$('#btnExternal').classList.toggle('on', !!(this.externalWin && !this.externalWin.closed));
-      U.$('#btnMultiview').classList.toggle('on', !!this.studio.multiviewVisible);
+      U.$('#btnMultiview').classList.toggle('on', !!(BTS.layout && BTS.layout.isVisible('multiview')));
       const parts = states.filter(s => s.kbps).map(s => `${s.id.replace('stream-', 'S').replace('record', 'REC').replace(/^iso-.*/, 'ISO')} ${Math.round(s.kbps)}k`);
       U.$('#stOut').textContent = parts.slice(0, 4).join(' • ');
     }
@@ -247,22 +246,10 @@
     }
 
     /* ---------- layout ---------- */
-    _splitter() {
-      const sp = U.$('#splitter');
-      const saved = localStorage.getItem('bts.topH'); if (saved) document.documentElement.style.setProperty('--top-h', saved);
-      sp.addEventListener('pointerdown', (e) => {
-        sp.setPointerCapture(e.pointerId);
-        const move = (ev) => { const pct = U.clamp(ev.clientY / innerHeight * 100, 25, 80); const v = pct.toFixed(1) + '%'; document.documentElement.style.setProperty('--top-h', v); localStorage.setItem('bts.topH', v); this._fitSafe(); };
-        const up = () => { sp.removeEventListener('pointermove', move); sp.removeEventListener('pointerup', up); };
-        sp.addEventListener('pointermove', move); sp.addEventListener('pointerup', up);
-      });
-    }
-    toggleMixer() { U.$('#bottom').classList.toggle('no-mixer'); }
+    toggleMixer() { BTS.layout.toggle('mixer'); }
     toggleMultiview() {
-      const st = this.studio;
-      st.multiviewVisible = !st.multiviewVisible;
-      U.$('#multiview').classList.toggle('hidden', !st.multiviewVisible);
-      U.$('#monitors').style.visibility = st.multiviewVisible ? 'hidden' : '';
+      const L = BTS.layout;
+      if (L.isVisible('multiview')) L.hide('multiview'); else L.activate('multiview');
       this.updateButtons();
     }
 
@@ -295,7 +282,7 @@
 
     /* ---------- drag & drop files ---------- */
     _dnd() {
-      const area = U.$('#inputsArea');
+      const area = U.$('#inputsArea .inputs-scroll');
       const isFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
       area.addEventListener('dragover', (e) => { if (isFiles(e)) { e.preventDefault(); area.classList.add('drag'); } });
       area.addEventListener('dragleave', () => area.classList.remove('drag'));

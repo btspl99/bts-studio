@@ -24,7 +24,19 @@
         ids.forEach((id, n) => { if (n % every === slot) this.drawThumb(id, this.cards.get(id)); });
       });
       setInterval(() => this.updateTimes(), 250);
+      const size = U.$('#inpSize'), filt = U.$('#inpFilter');
+      const saved = +localStorage.getItem('bts.cardW') || 228;
+      document.documentElement.style.setProperty('--card-w', saved + 'px'); size.value = saved;
+      size.oninput = () => { document.documentElement.style.setProperty('--card-w', size.value + 'px'); localStorage.setItem('bts.cardW', size.value); };
+      filt.oninput = () => this.applyFilter();
+      filt.onkeydown = (e) => e.stopPropagation();
+      U.$('#inpAdd').onclick = () => BTS.AddInput.open();
       this._setupDnD();
+    }
+
+    applyFilter() {
+      const q = (U.$('#inpFilter').value || '').toLowerCase().trim();
+      for (const [id, c] of this.cards) { const i = this.studio.byId(id); c.el.classList.toggle('filtered', !!q && i && !(`${i.number} ${i.title} ${i.info.label}`.toLowerCase().includes(q))); }
     }
 
     render() {
@@ -42,6 +54,7 @@
         if (this.root.children[idx] !== c.el) this.root.insertBefore(c.el, this.root.children[idx] || null);
       });
       this.tally();
+      this.applyFilter();
     }
 
     create(inp) {

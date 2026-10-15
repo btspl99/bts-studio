@@ -133,7 +133,13 @@
   def('ReplayPlayEvent', 'Replay', ['Value'], async (p) => R().load(R().events[num(p.Value, 1) - 1], { toOutput: true }), 'Value = event number (1 = newest)');
   def('ReplayInstant', 'Replay', ['Value?'], (p) => R().instant(num(p.Value, R().cfg.lastSeconds)), 'Clip last N seconds and play it to Output in slow motion');
   def('ReplaySetSpeed', 'Replay', ['Value'], (p) => R().setSpeed(U.clamp(num(p.Value, 50) / 100, 0.05, 2)), 'Value percent (25, 50, 75, 100)');
-  def('ReplaySelectCamera', 'Replay', ['Value'], (p) => { const keys = [...R().active.keys()]; const k = keys[num(p.Value, 1) - 1]; if (!k) throw new Error('No such replay camera'); R().cfg.current = k; R().emit('change'); return true; });
+  def('ReplaySelectCamera', 'Replay', ['Value'], (p) => { const keys = R().loaded ? Object.keys(R().loaded.event.files) : R().cameras; const k = keys[num(p.Value, 1) - 1]; if (!k) throw new Error('No such replay camera'); return R().angle(k); }, 'Switch angle 1-8 (keeps playhead)');
+  for (let n = 1; n <= 8; n++) def(`ReplayCamera${n}`, 'Replay', [], () => BTS.Functions.call('ReplaySelectCamera', { Value: String(n) }).then(r => r.ok || r));
+  def('ReplayReturnToLive', 'Replay', [], () => R().returnToLive(), 'Back to the input that was live before the replay');
+  def('ReplayPlay', 'Replay', [], () => R().goLive(), 'Send the loaded replay to Output');
+  def('ReplayPause', 'Replay', [], () => { const i = R().replayInput(); if (!i) throw new Error('No replay loaded'); i.togglePlay(); return true; });
+  def('ReplayPlayHighlights', 'Replay', [], () => R().playHighlights(), 'Play starred events back-to-back');
+  def('ReplayJog', 'Replay', ['Value'], (p) => { const i = R().replayInput(); if (!i) throw new Error('No replay loaded'); i.pause(); i.seek(i.currentTime + num(p.Value, 0.04)); return true; }, 'Seconds (negative = back)');
 
   // ---- scripting (macros)
   def('ScriptStart', 'Scripting', ['Value'], (p) => S().macros.run(p.Value), 'Value = macro name');
