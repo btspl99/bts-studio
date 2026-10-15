@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' file: data: blob: mediastream:; img-src * data: blob: file:; media-src * data: blob: file: mediastream:; style-src 'self' 'unsafe-inline' file:; script-src 'self' file: blob:; worker-src blob: 'self' file:; connect-src *; font-src 'self' data: file:">
+<title>BTS Studio</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app">
+  <!-- ================= TOP: PREVIEW | TRANSITIONS | OUTPUT ================= -->
+  <section id="top">
+    <div id="monitors">
+      <div class="monitor" id="previewPanel">
+        <div class="mon-head"><span class="mon-tag preview">PREVIEW</span><span class="mon-name" id="pvName">—</span><span class="mon-res" id="pvInfo"></span></div>
+        <div class="mon-body"><canvas id="previewCanvas"></canvas><div class="safe" id="pvSafe"></div></div>
+        <div class="mon-foot" id="pvTransport">
+          <button class="tbtn" data-act="pv-restart" title="Restart">⏮</button>
+          <button class="tbtn" data-act="pv-play" title="Play / Pause" id="pvPlayBtn">▶</button>
+          <button class="tbtn" data-act="pv-loop" title="Loop" id="pvLoopBtn">⟳</button>
+          <input type="range" id="pvSeek" min="0" max="1000" value="0" step="1">
+          <span class="time" id="pvTime">00:00:00 / 00:00:00</span>
+          <button class="tbtn" data-act="pv-prev" title="Previous item">⏪</button>
+          <button class="tbtn" data-act="pv-next" title="Next item">⏩</button>
+          <button class="tbtn" data-act="pv-settings" title="Input settings">⚙</button>
+        </div>
+      </div>
+
+      <div id="transPanel">
+        <button class="trans-main" id="btnQuickPlay" data-fn="QuickPlay">Quick Play</button>
+        <button class="trans-main cut" id="btnCut" data-fn="Cut">Cut</button>
+        <div id="transButtons"></div>
+        <div id="tbarWrap" title="T-Bar — drag to transition manually">
+          <div id="tbarTrack"><div id="tbarFill"></div><div id="tbarHandle"></div></div>
+        </div>
+        <button class="trans-main ftb" id="btnFTB" data-fn="FadeToBlack">FTB</button>
+      </div>
+
+      <div class="monitor" id="programPanel">
+        <div class="mon-head"><span class="mon-tag program">OUTPUT</span><span class="mon-name" id="pgName">—</span><span class="mon-res" id="pgInfo"></span></div>
+        <div class="mon-body"><canvas id="programCanvas"></canvas><div class="safe" id="pgSafe"></div><div class="ftb-badge" id="ftbBadge">FADE TO BLACK</div></div>
+        <div class="mon-foot" id="pgFoot">
+          <div class="ovl-group" id="overlayStatus"></div>
+          <div class="spacer"></div>
+          <button class="tbtn" data-act="safe" title="Title-safe guides">▣</button>
+          <button class="tbtn" data-act="snapshot" title="Snapshot (PNG)">📷</button>
+          <button class="tbtn" data-act="fullscreen" title="Fullscreen output">⛶</button>
+        </div>
+      </div>
+    </div>
+    <div id="multiview" class="hidden">
+      <canvas id="multiviewCanvas"></canvas>
+    </div>
+  </section>
+
+  <div id="splitter" title="Drag to resize"></div>
+
+  <!-- ================= BOTTOM: INPUTS | AUDIO MIXER ================= -->
+  <section id="bottom">
+    <div id="inputsArea">
+      <div id="inputs"></div>
+      <div id="dropHint">Drop video, audio, image or .html files here — or click <b>Add Input</b></div>
+    </div>
+    <aside id="mixer">
+      <div class="mixer-head"><span>AUDIO MIXER</span><button class="tbtn small" id="mixerHp" title="Headphone monitoring">🎧</button></div>
+      <div id="mixerStrips"></div>
+    </aside>
+  </section>
+
+  <!-- ================= STATUS BAR ================= -->
+  <footer id="statusbar">
+    <button class="sbtn add" id="btnAddInput">＋ Add Input</button>
+    <button class="sbtn" id="btnRecord"><i class="dot"></i>Record<span class="sub" id="recTime"></span></button>
+    <button class="sbtn caret" id="btnRecordCfg" title="Record settings">⚙</button>
+    <button class="sbtn" id="btnExternal"><i class="dot"></i>External</button>
+    <button class="sbtn" id="btnStream"><i class="dot"></i>Stream<span class="sub" id="streamTime"></span></button>
+    <button class="sbtn caret" id="btnStreamCfg" title="Stream settings">⚙</button>
+    <button class="sbtn" id="btnMultiCorder"><i class="dot"></i>MultiCorder</button>
+    <button class="sbtn" id="btnMultiview">Multiview</button>
+    <div class="spacer"></div>
+    <div class="stats" id="stats">
+      <span id="stRes">1080p30</span>
+      <span>FPS <b id="stFps">0</b></span>
+      <span>Render <b id="stRender">0</b> ms</span>
+      <span>Dropped <b id="stDrop">0</b></span>
+      <span id="stOut"></span>
+    </div>
+    <span class="clock" id="clock">00:00:00</span>
+    <button class="sbtn caret" id="btnSettings" title="Settings">☰</button>
+  </footer>
+</div>
+
+<div id="modalRoot"></div>
+<div id="ctxMenu" class="ctx hidden"></div>
+<div id="toasts"></div>
+
+<script src="js/core/util.js"></script>
+<script src="js/core/events.js"></script>
+<script src="js/engine/gl-effects.js"></script>
+<script src="js/engine/transitions.js"></script>
+<script src="js/engine/audio.js"></script>
+<script src="js/engine/titles.js"></script>
+<script src="js/engine/inputs.js"></script>
+<script src="js/engine/compositor.js"></script>
+<script src="js/engine/outputs.js"></script>
+<script src="js/engine/datasources.js"></script>
+<script src="js/engine/functions.js"></script>
+<script src="js/ui/dialog.js"></script>
+<script src="js/ui/inputs-ui.js"></script>
+<script src="js/ui/mixer-ui.js"></script>
+<script src="js/ui/add-input.js"></script>
+<script src="js/ui/input-settings.js"></script>
+<script src="js/ui/title-designer.js"></script>
+<script src="js/ui/settings-ui.js"></script>
+<script src="js/ui/main-ui.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

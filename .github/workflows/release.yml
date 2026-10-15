@@ -1,0 +1,62 @@
+name: Build & Release
+
+# Push a tag like v1.0.1 (or run manually) to build the Windows installer + Microsoft Store package
+# and publish them as a GitHub Release. studio.btspl.tech/updates/ redirects to the latest release,
+# so installed copies auto-update from there.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Fetch FFmpeg (Windows x64)
+        run: node scripts/fetch-ffmpeg.js
+
+      - name: Build installer (NSIS)
+        run: npx electron-builder --win nsis --x64 --publish never
+
+      - name: Build Microsoft Store package (MSIX/APPX)
+        if: ${{ vars.STORE_PUBLISHER != '' }}
+        shell: bash
+        run: >
+          npx electron-builder --win appx --x64 --publish never
+          -c.appx.identityName="${{ vars.STORE_IDENTITY_NAME }}"
+          -c.appx.publisher="${{ vars.STORE_PUBLISHER }}"
+          -c.appx.publisherDisplayName="${{ vars.STORE_PUBLISHER_DISPLAY_NAME }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bts-studio-windows
+          path: |
+            dist/*.exe
+            dist/*.blockmap
+            dist/latest.yml
+            dist/*.appx
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: BTS Studio ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            dist/*.exe
+            dist/*.blockmap
+            dist/latest.yml
+            dist/*.appx

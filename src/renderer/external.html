@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' blob: mediastream:; style-src 'unsafe-inline'; media-src * blob: mediastream:">
+<title>BTS Studio — External Output</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; cursor: none; }
+  video { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
+</style>
+</head>
+<body>
+<video autoplay muted playsinline></video>
+<script>
+  addEventListener('keydown', (e) => { if (e.key === 'Escape') window.close(); });
+  addEventListener('dblclick', () => { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); });
+</script>
+</body>
+</html>

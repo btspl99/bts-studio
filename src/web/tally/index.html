@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BTS Studio — Tally</title>
+<style>
+html,body{margin:0;height:100%;font-family:"Segoe UI",system-ui,sans-serif;color:#fff;background:#222;transition:background .15s}
+body.pgm{background:#e2453c}body.pvw{background:#2fbf62}body.off{background:#1a1a1a}
+#w{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+#n{font-size:28vmin;font-weight:800;line-height:1}#t{font-size:6vmin;margin-top:2vmin;opacity:.9}#s{font-size:4vmin;margin-top:3vmin;letter-spacing:.2em;font-weight:700}
+select{position:fixed;top:10px;left:10px;font-size:16px;padding:6px;background:rgba(0,0,0,.4);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:4px}
+</style>
+</head>
+<body class="off">
+<select id="sel"></select>
+<div id="w"><div id="n">–</div><div id="t">Choose an input</div><div id="s"></div></div>
+<script>
+const q=new URLSearchParams(location.search);let want=q.get('input')||'1';const sel=document.getElementById('sel');
+sel.onchange=()=>{want=sel.value;history.replaceState(null,'','?input='+encodeURIComponent(want))};
+async function poll(){try{const s=await (await fetch('/api')).json();
+ if(sel.options.length!==s.inputs.length){sel.innerHTML=s.inputs.map(i=>`<option value="${i.number}">${i.number}. ${i.title.replace(/</g,'&lt;')}</option>`).join('');sel.value=want}
+ const i=s.inputs.find(x=>String(x.number)===want||x.title===want||x.id===want);
+ const live=i&&(i.id===s.programId||i.live), pv=i&&i.id===s.previewId;
+ document.body.className=live?'pgm':pv?'pvw':'off';
+ document.getElementById('n').textContent=i?i.number:'–';document.getElementById('t').textContent=i?i.title:'Input not found';
+ document.getElementById('s').textContent=live?'ON AIR':pv?'PREVIEW':'';
+}catch{document.getElementById('s').textContent='NO CONNECTION';document.body.className='off'}setTimeout(poll,250)}
+poll();
+</script>
+</body>
+</html>

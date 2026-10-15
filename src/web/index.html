@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#141518">
+<title>BTS Studio — Web Controller</title>
+<style>
+:root{--bg:#141518;--p:#232429;--p2:#2c2e34;--l:#3b3d45;--fg:#dfe1e6;--fg2:#a9adb7;--a:#f0a53a;--pgm:#e2453c;--pvw:#2fbf62;--ovl:#f28b1f}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px "Segoe UI",system-ui,sans-serif;-webkit-tap-highlight-color:transparent}
+header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:8px;padding:8px 12px;background:#1b1c20;border-bottom:1px solid var(--l)}
+header b{font-size:16px}header b span{color:var(--a)}.dot{width:10px;height:10px;border-radius:50%;background:#555}.dot.ok{background:var(--pvw)}
+.sp{flex:1}button{font:inherit;color:inherit;border:1px solid var(--l);background:linear-gradient(#41444d,#33353d);border-radius:6px;padding:10px 12px;cursor:pointer;font-weight:600;touch-action:manipulation}
+button:active{transform:translateY(1px);filter:brightness(1.2)}button.on{background:var(--pgm);border-color:#ff7b73}button.amber{background:var(--a);color:#1a1205;border-color:#ffbe5c}
+main{padding:12px;display:grid;gap:12px}
+.bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px}
+.mon{display:grid;grid-template-columns:1fr 1fr;gap:8px}.mon div{background:#000;border-radius:6px;overflow:hidden;position:relative;aspect-ratio:16/9;border:2px solid var(--pvw)}.mon div.pg{border-color:var(--pgm)}
+.mon img{width:100%;height:100%;object-fit:contain;display:block}.mon span{position:absolute;left:6px;top:6px;font-size:11px;font-weight:700;background:rgba(0,0,0,.7);padding:2px 6px;border-radius:3px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.card{background:var(--p);border:2px solid var(--l);border-radius:8px;overflow:hidden}.card.pvw{border-color:var(--pvw)}.card.pgm{border-color:var(--pgm)}.card.ovl{border-color:var(--ovl)}
+.card .t{display:flex;gap:6px;align-items:center;padding:6px 8px;font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden}.card .t i{font-style:normal;color:var(--a);font-weight:800}
+.card img{width:100%;aspect-ratio:16/9;object-fit:contain;background:#000;display:block}
+.card .b{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:6px}.card .b button{padding:8px 4px;font-size:12px}
+.card .o{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:0 6px 6px}.card .o button{padding:6px 0;font-size:12px}.card .o button.on{background:var(--ovl);color:#1d0e00}
+section{background:var(--p);border:1px solid var(--l);border-radius:8px;padding:10px}section h3{margin:0 0 8px;font-size:12px;letter-spacing:.08em;color:var(--a)}
+.row{display:flex;gap:8px;align-items:center;margin:6px 0}.row label{min-width:90px;color:var(--fg2);font-size:12px}
+input,select{font:inherit;color:var(--fg);background:#1b1c20;border:1px solid var(--l);border-radius:5px;padding:8px;flex:1;min-width:0}
+input[type=range]{accent-color:var(--a);padding:0}
+#toast{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:var(--p2);border:1px solid var(--l);padding:8px 14px;border-radius:6px;display:none}
+</style>
+</head>
+<body>
+<header><b><span>BTS</span> Studio</b><span class="dot" id="conn"></span><span class="sp"></span><span id="clock"></span></header>
+<main>
+  <div class="mon"><div><span>PREVIEW</span><img id="pv" alt="Preview"></div><div class="pg"><span>OUTPUT</span><img id="pg" alt="Output"></div></div>
+  <div class="bar">
+    <button class="amber" data-f="QuickPlay">Quick Play</button><button data-f="Cut">Cut</button>
+    <button data-f="Transition1" id="t1">Trans 1</button><button data-f="Transition2" id="t2">Trans 2</button>
+    <button data-f="Transition3" id="t3">Trans 3</button><button data-f="Transition4" id="t4">Trans 4</button>
+    <button data-f="FadeToBlack" id="ftb">FTB</button><button data-f="OverlayInputAllOff">Overlays Off</button>
+  </div>
+  <div class="bar">
+    <button data-f="StartStopStreaming" id="stream">● Stream</button><button data-f="StartStopRecording" id="rec">● Record</button>
+    <button data-f="Snapshot">📷 Snapshot</button>
+  </div>
+  <div class="grid" id="inputs"></div>
+  <section><h3>T-BAR</h3><input type="range" id="tbar" min="0" max="255" value="0"></section>
+  <section id="titles"><h3>TITLES</h3><div id="titleBody"><div style="color:var(--fg2)">No title inputs</div></div></section>
+  <section><h3>AUDIO</h3><div id="audio"></div></section>
+</main>
+<div id="toast"></div>
+<script>
+const $=s=>document.querySelector(s);let S=null,lastSig='';
+const call=async(fn,p={})=>{const q=new URLSearchParams({Function:fn,...p});try{const r=await fetch('/api/?'+q);const j=await r.json();if(!j.ok)toast(j.error||'Error');return j}catch(e){toast('Connection lost')}};
+const toast=m=>{const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(t._t);t._t=setTimeout(()=>t.style.display='none',2500)};
+document.addEventListener('click',e=>{const b=e.target.closest('[data-f]');if(b)call(b.dataset.f,b.dataset.i?{Input:b.dataset.i}:{})});
+$('#tbar').addEventListener('input',e=>call('SetFader',{Value:e.target.value}));
+$('#tbar').addEventListener('change',e=>{e.target.value=0});
+function render(){
+  const sig=JSON.stringify(S.inputs.map(i=>[i.id,i.title,i.type]));
+  if(sig!==lastSig){lastSig=sig;$('#inputs').innerHTML=S.inputs.map(i=>`<div class="card" data-id="${i.id}"><div class="t"><i>${i.number}</i>${esc(i.title)}</div><img data-thumb="${i.id}" alt=""><div class="b"><button data-f="PreviewInput" data-i="${i.id}">Preview</button><button data-f="QuickPlay" data-i="${i.id}">Quick Play</button><button data-f="Cut" data-i="${i.id}">Cut</button><button data-f="PlayPause" data-i="${i.id}">▶❚❚</button></div><div class="o">${[1,2,3,4].map(n=>`<button data-f="OverlayInput${n}" data-i="${i.id}" data-o="${n}">${n}</button>`).join('')}</div></div>`).join('');renderTitles();renderAudio()}
+  for(const c of document.querySelectorAll('.card')){const i=S.inputs.find(x=>x.id===c.dataset.id);if(!i)continue;c.className='card'+(i.id===S.programId?' pgm':S.overlays.includes(i.number)?' ovl':i.id===S.previewId?' pvw':'');
+    c.querySelectorAll('[data-o]').forEach(b=>b.classList.toggle('on',S.overlays[b.dataset.o-1]===i.number))}
+  $('#stream').classList.toggle('on',S.streaming);$('#rec').classList.toggle('on',S.recording);$('#ftb').classList.toggle('on',S.ftb);
+  S.transitions.forEach((t,n)=>{$('#t'+(n+1)).textContent=t.type});
+  document.querySelectorAll('[data-vol]').forEach(r=>{const i=S.inputs.find(x=>x.id===r.dataset.vol);if(i&&document.activeElement!==r)r.value=i.volume});
+}
+function renderTitles(){const t=S.inputs.filter(i=>i.fields&&i.fields.length);if(!t.length)return;$('#titleBody').innerHTML=t.map(i=>`<div style="margin-bottom:10px"><b>${i.number}. ${esc(i.title)}</b>${i.fields.filter(f=>f.type==='text'||f.type==='ticker').map(f=>`<div class="row"><label>${esc(f.name)}</label><input value="${esc(f.value||'')}" data-title="${i.id}" data-field="${esc(f.name)}"><button data-set>Set</button></div>`).join('')}<div class="row"><button data-f="OverlayInput1" data-i="${i.id}">Overlay 1</button><button data-f="OverlayInput2" data-i="${i.id}">Overlay 2</button></div></div>`).join('')}
+document.addEventListener('click',e=>{if(e.target.matches('[data-set]')){const inp=e.target.previousElementSibling;call('SetText',{Input:inp.dataset.title,SelectedName:inp.dataset.field,Value:inp.value})}});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset.field)call('SetText',{Input:e.target.dataset.title,SelectedName:e.target.dataset.field,Value:e.target.value})});
+function renderAudio(){$('#audio').innerHTML=`<div class="row"><label>Master</label><input type="range" min="0" max="100" value="${S.master.volume}" oninput="call('SetMasterVolume',{Value:this.value})"><button onclick="call('MasterAudio')">Mute</button></div>`+S.inputs.filter(i=>i.volume!=null).map(i=>`<div class="row"><label>${i.number}. ${esc(i.title)}</label><input type="range" min="0" max="100" data-vol="${i.id}" value="${i.volume}" oninput="call('SetVolume',{Input:'${i.id}',Value:this.value})"><button onclick="call('Audio',{Input:'${i.id}'})">${i.muted?'🔇':'🔊'}</button></div>`).join('')}
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function poll(){try{const r=await fetch('/api');S=await r.json();$('#conn').className='dot ok';render()}catch{$('#conn').className='dot'}setTimeout(poll,500)}
+let thumbIdx=0;function thumbs(){const t=Date.now();$('#pv').src='/api/thumb?Input=preview&t='+t;$('#pg').src='/api/thumb?Input=program&t='+t;const imgs=[...document.querySelectorAll('[data-thumb]')];if(imgs.length){const im=imgs[thumbIdx++%imgs.length];im.src='/api/thumb?Input='+im.dataset.thumb+'&t='+t}}
+setInterval(thumbs,700);setInterval(()=>$('#clock').textContent=new Date().toLocaleTimeString(),1000);poll();
+</script>
+</body>
+</html>

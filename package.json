@@ -1,0 +1,108 @@
+{
+  "name": "bts-studio",
+  "productName": "BTS Studio",
+  "version": "1.0.0",
+  "description": "BTS Studio \u2014 free, open-source live production, switching and streaming software for students",
+  "main": "src/main/main.js",
+  "author": {
+    "name": "Bhoomiputra Tech Solutions Pvt Ltd",
+    "email": "btspl99@gmail.com",
+    "url": "https://studio.btspl.tech"
+  },
+  "homepage": "https://studio.btspl.tech",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "dist:win": "electron-builder --win nsis --x64",
+    "dist:win:publish": "electron-builder --win nsis --x64 --publish always",
+    "dist:linux": "electron-builder --linux AppImage",
+    "fetch-ffmpeg": "node scripts/fetch-ffmpeg.js",
+    "dist:store": "electron-builder --win appx --x64"
+  },
+  "dependencies": {
+    "electron-log": "^5.4.3",
+    "electron-updater": "^6.8.9"
+  },
+  "devDependencies": {
+    "electron": "^44.7.2",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "tech.btspl.studio",
+    "productName": "BTS Studio",
+    "copyright": "Copyright \u00a9 2026 Bhoomiputra Tech Solutions Pvt Ltd",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "build/icon.png",
+      "build/icon.ico",
+      "package.json",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "BTS-Studio-Setup-${version}.${ext}",
+      "extraResources": [
+        {
+          "from": "vendor/ffmpeg/win32-x64/ffmpeg.exe",
+          "to": "ffmpeg/ffmpeg.exe"
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "AudioVideo",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "BTS Studio",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "license": "LICENSE",
+      "deleteAppDataOnUninstall": false
+    },
+    "fileAssociations": [
+      {
+        "ext": "btsproj",
+        "name": "BTS Studio Project",
+        "description": "BTS Studio production preset",
+        "icon": "build/icon.ico"
+      }
+    ],
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://studio.btspl.tech/updates/",
+        "channel": "latest"
+      }
+    ],
+    "appx": {
+      "identityName": "BTSPL.BTSStudio",
+      "publisher": "CN=REPLACE_WITH_PARTNER_CENTER_PUBLISHER_ID",
+      "publisherDisplayName": "Bhoomiputra Tech Solutions Pvt Ltd",
+      "applicationId": "BTSStudio",
+      "displayName": "BTS Studio",
+      "backgroundColor": "#1b1c20",
+      "languages": [
+        "en-US"
+      ],
+      "artifactName": "BTS-Studio-${version}.${ext}"
+    }
+  }
+}

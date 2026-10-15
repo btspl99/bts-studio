@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BTS Studio User Guide</title>
+<meta name="description" content="User Guide for BTS Studio: inputs, transitions, overlays, titles, data sources, audio mixer, streaming, recording, keyboard shortcuts, web controller and HTTP API.">
+<meta name="theme-color" content="#141518">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23232429'/%3E%3Ccircle cx='11' cy='16' r='5' fill='%23e2453c'/%3E%3Ccircle cx='22' cy='16' r='5' fill='%232fbf62'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#141518;--panel:#232429;--panel-2:#1b1c20;--line:#33353c;
+  --text:#ecedf0;--muted:#a9adb8;--accent:#f0a53a;--accent-ink:#1a1206;
+  --pgm:#e2453c;--pvw:#2fbf62;--radius:12px;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:76px;-webkit-text-size-adjust:100%}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.65 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--accent)}
+a:hover{color:#ffc06a}
+:focus-visible{outline:3px solid var(--accent);outline-offset:3px;border-radius:4px}
+.skip{position:absolute;left:-999px;top:8px;background:var(--accent);color:var(--accent-ink);padding:8px 14px;border-radius:8px;z-index:10;font-weight:600}
+.skip:focus{left:8px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+header.top{position:sticky;top:0;z-index:5;background:rgba(20,21,24,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.nav{max-width:1240px;margin:0 auto;padding:0 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;height:60px}
+.brand{display:flex;align-items:center;gap:10px;color:var(--text);text-decoration:none;font-weight:800}
+.brand .dots{display:inline-flex;gap:4px}
+.brand .dots i{width:10px;height:10px;border-radius:50%;display:block}
+.brand .dots i:first-child{background:var(--pgm)}
+.brand .dots i:last-child{background:var(--pvw)}
+.brand small{font-weight:500;color:var(--muted);font-size:14px}
+.nav-links{display:flex;gap:18px;align-items:center}
+.nav-links a{color:var(--muted);text-decoration:none;font-weight:500;font-size:15px}
+.nav-links a:hover{color:var(--text)}
+.nav-links a.dl{background:var(--accent);color:var(--accent-ink);padding:8px 14px;border-radius:8px;font-weight:700}
+
+.layout{max-width:1240px;margin:0 auto;padding:0 20px;display:grid;grid-template-columns:250px minmax(0,1fr);gap:48px}
+aside.toc{position:sticky;top:60px;align-self:start;max-height:calc(100vh - 60px);overflow-y:auto;padding:28px 0 28px}
+.toc h2{font:600 12px/1 var(--mono);text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);margin:0 0 12px}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:t}
+.toc li{counter-increment:t}
+.toc a{display:block;padding:6px 10px;border-left:2px solid var(--line);color:var(--muted);text-decoration:none;font-size:14.5px}
+.toc a::before{content:counter(t) ". ";color:#6f7480}
+.toc a:hover{color:var(--text);border-left-color:var(--muted)}
+.toc a.active{color:var(--text);border-left-color:var(--accent);background:linear-gradient(90deg,rgba(240,165,58,.1),transparent)}
+
+main{padding:36px 0 80px;min-width:0}
+.intro h1{font-size:clamp(30px,4.5vw,44px);line-height:1.1;margin:0 0 12px;letter-spacing:-.6px}
+.intro p{color:var(--muted);font-size:18px;margin:0 0 8px;max-width:720px}
+section.doc{padding:40px 0 8px;border-top:1px solid var(--line);margin-top:40px}
+section.doc:first-of-type{margin-top:32px}
+h2{font-size:clamp(24px,3.2vw,30px);margin:0 0 14px;letter-spacing:-.3px;line-height:1.2}
+h3{font-size:19px;margin:28px 0 8px}
+p,li{max-width:760px}
+p{margin:0 0 14px}
+ul,ol{padding-left:22px;margin:0 0 16px}
+li{margin:4px 0}
+strong{color:#fff}
+code,kbd{font-family:var(--mono);font-size:.86em}
+code{background:var(--panel-2);border:1px solid var(--line);padding:1px 6px;border-radius:5px;color:#ffd193;word-break:break-word}
+kbd{display:inline-block;background:var(--panel);border:1px solid #4a4d56;border-bottom-width:3px;border-radius:6px;padding:1px 7px;color:var(--text);white-space:nowrap}
+pre{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:0 0 16px;max-width:100%}
+pre code{background:none;border:0;padding:0;color:#e7d3b0;font-size:13.5px;word-break:normal;white-space:pre}
+.note{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;padding:12px 16px;margin:0 0 16px;max-width:760px}
+.note.tip{border-left-color:var(--pvw)}
+.note.warn{border-left-color:var(--pgm)}
+.note p:last-child{margin:0}
+.tbl-wrap{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow-x:auto;margin:0 0 18px;max-width:860px}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.6px}
+tr:last-child td{border-bottom:0}
+.pill{display:inline-block;font:600 11px/1 var(--mono);padding:4px 7px;border-radius:5px;letter-spacing:.8px;vertical-align:2px}
+.pill.pvw{background:var(--pvw);color:#06210f}
+.pill.pgm{background:var(--pgm);color:#fff}
+
+/* mobile TOC */
+.toc-mobile{display:none;margin:20px 0 0;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:0 16px}
+.toc-mobile summary{cursor:pointer;padding:12px 0;font-weight:600}
+.toc-mobile ol{margin:0 0 12px;padding-left:22px}
+.toc-mobile a{color:var(--muted);text-decoration:none}
+.toc-mobile a:hover{color:var(--text)}
+.top-link{position:fixed;right:16px;bottom:16px;background:var(--panel);border:1px solid var(--line);color:var(--text);width:44px;height:44px;border-radius:50%;display:none;place-items:center;text-decoration:none;font-size:20px}
+
+footer{border-top:1px solid var(--line);padding:28px 20px 40px;color:var(--muted);font-size:14px;text-align:center}
+footer p{margin:4px auto}
+
+@media (max-width:900px){
+  .layout{grid-template-columns:1fr;gap:0}
+  aside.toc{display:none}
+  .toc-mobile{display:block}
+  .top-link{display:grid}
+}
+@media (max-width:600px){
+  .nav,.layout{padding:0 16px}
+  .nav-links a:not(.dl){display:none}
+  .brand small{display:none}
+  th,td{padding:9px 10px}
+  .intro p{font-size:16px}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+
+<header class="top">
+  <div class="nav">
+    <a class="brand" href="../" aria-label="BTS Studio home">
+      <span class="dots" aria-hidden="true"><i></i><i></i></span>BTS Studio <small>User Guide</small>
+    </a>
+    <nav class="nav-links" aria-label="Main">
+      <a href="../#features">Features</a>
+      <a href="../#faq">FAQ</a>
+      <a class="dl" href="../#main">Download</a>
+    </nav>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="toc" aria-label="Table of contents">
+    <h2>Contents</h2>
+    <ol id="toc-list">
+      <li><a href="#getting-started">Getting started</a></li>
+      <li><a href="#inputs">Inputs</a></li>
+      <li><a href="#transitions">Transitions &amp; Stingers</a></li>
+      <li><a href="#overlays">Overlays</a></li>
+      <li><a href="#titles">Titles &amp; Title Designer</a></li>
+      <li><a href="#data-sources">Data Sources</a></li>
+      <li><a href="#audio">Audio mixer</a></li>
+      <li><a href="#streaming">Streaming</a></li>
+      <li><a href="#recording">Recording &amp; MultiCorder</a></li>
+      <li><a href="#outputs">External output &amp; Multiview</a></li>
+      <li><a href="#shortcuts">Keyboard shortcuts</a></li>
+      <li><a href="#api">Web Controller &amp; API</a></li>
+      <li><a href="#updates">Updates</a></li>
+      <li><a href="#troubleshooting">Troubleshooting</a></li>
+    </ol>
+  </aside>
+
+  <main id="content">
+    <div class="intro">
+      <h1>BTS Studio User Guide</h1>
+      <p>Everything you need to set up, run and stream a live show with BTS Studio for Windows.</p>
+    </div>
+
+    <details class="toc-mobile">
+      <summary>Contents</summary>
+      <ol>
+        <li><a href="#getting-started">Getting started</a></li>
+        <li><a href="#inputs">Inputs</a></li>
+        <li><a href="#transitions">Transitions &amp; Stingers</a></li>
+        <li><a href="#overlays">Overlays</a></li>
+        <li><a href="#titles">Titles &amp; Title Designer</a></li>
+        <li><a href="#data-sources">Data Sources</a></li>
+        <li><a href="#audio">Audio mixer</a></li>
+        <li><a href="#streaming">Streaming</a></li>
+        <li><a href="#recording">Recording &amp; MultiCorder</a></li>
+        <li><a href="#outputs">External output &amp; Multiview</a></li>
+        <li><a href="#shortcuts">Keyboard shortcuts</a></li>
+        <li><a href="#api">Web Controller &amp; API</a></li>
+        <li><a href="#updates">Updates</a></li>
+        <li><a href="#troubleshooting">Troubleshooting</a></li>
+      </ol>
+    </details>
+
+    <!-- 1 -->
+    <section class="doc" id="getting-started" aria-labelledby="h-gs">
+      <h2 id="h-gs">1. Getting started</h2>
+
+      <h3>Install</h3>
+      <ol>
+        <li>Download the installer (<code>BTS-Studio-Setup-&lt;version&gt;.exe</code>) from <a href="../">studio.btspl.tech</a>.</li>
+        <li>Run it. If Windows SmartScreen shows a warning, choose <strong>More info → Run anyway</strong> (only for installers downloaded from this site).</li>
+        <li>Follow the steps in the installer. A Start menu and desktop shortcut are created.</li>
+      </ol>
+
+      <h3>First launch</h3>
+      <p>BTS Studio opens with an empty project. The top half shows two monitors: <span class="pill pvw">PREVIEW</span> on the left and <span class="pill pgm">OUTPUT</span> on the right. Below them are the transition controls, then your inputs, then the audio mixer.</p>
+      <div class="note tip"><p>Update your graphics drivers before your first show. Most video problems come from old drivers.</p></div>
+
+      <h3>Add an input</h3>
+      <p>Click <strong>Add Input</strong> (or press <kbd>Ctrl</kbd>+<kbd>I</kbd>), choose a type — for example <em>Camera</em> or <em>Video</em> — pick the device or file, and click <strong>OK</strong>. Each input appears as a numbered tile.</p>
+
+      <h3>Preview vs Output</h3>
+      <ul>
+        <li><strong>Preview</strong> is what you are preparing. Viewers cannot see it.</li>
+        <li><strong>Output</strong> (also called Program) is what is live — streamed, recorded and sent to the External output.</li>
+      </ul>
+      <p>Click an input tile to load it into Preview. Number keys <kbd>1</kbd>–<kbd>9</kbd> do the same.</p>
+
+      <h3>Quick Play, Cut and the T-Bar</h3>
+      <ul>
+        <li><strong>Quick Play</strong> (<kbd>Space</kbd>) — transitions Preview to Output using the selected transition and duration.</li>
+        <li><strong>Cut</strong> (<kbd>Enter</kbd>) — swaps Preview and Output instantly.</li>
+        <li><strong>T-Bar</strong> — drag to perform the transition by hand at your own speed. Let go part way to hold a mix.</li>
+        <li><strong>Transition buttons 1–4</strong> — four programmable buttons, each with its own effect and duration (<kbd>T</kbd> <kbd>Y</kbd> <kbd>U</kbd> <kbd>I</kbd>).</li>
+        <li><strong>Fade to Black</strong> (<kbd>B</kbd>) — fades the whole Output to black, and back.</li>
+      </ul>
+      <p>Save your setup with <kbd>Ctrl</kbd>+<kbd>S</kbd> as a <code>.btsproj</code> preset. BTS Studio also autosaves and offers to recover your project after a crash.</p>
+    </section>
+
+    <!-- 2 -->
+    <section class="doc" id="inputs" aria-labelledby="h-in">
+      <h2 id="h-in">2. Inputs</h2>
+      <div class="tbl-wrap">
+        <table>
+          <caption class="sr-only">Input types</caption>
+          <thead><tr><th scope="col">Type</th><th scope="col">Use it for</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Camera</strong></td><td>Webcams, USB/HDMI capture cards and other video capture devices.</td></tr>
+            <tr><td><strong>Screen / Window capture</strong></td><td>A whole display or a single application window. On Windows, system audio can be captured too.</td></tr>
+            <tr><td><strong>Video</strong></td><td>Video files such as MP4, MOV, MKV and WebM. Supports loop and play/pause/restart.</td></tr>
+            <tr><td><strong>Audio file</strong></td><td>Music beds, stings and sound effects.</td></tr>
+            <tr><td><strong>Image / GIF</strong></td><td>Logos, slides, posters and animated GIFs. PNG transparency is kept.</td></tr>
+            <tr><td><strong>List</strong></td><td>A playlist of video, audio and image files. Press <kbd>N</kbd> to go to the next item.</td></tr>
+            <tr><td><strong>Web Browser</strong></td><td>Any web page or HTML overlay. Transparent page backgrounds stay transparent.</td></tr>
+            <tr><td><strong>Title</strong></td><td>Lower thirds, scoreboards, clocks and more (see <a href="#titles">Titles</a>).</td></tr>
+            <tr><td><strong>Colour / Bars</strong></td><td>A solid colour background or colour bars for line-up.</td></tr>
+            <tr><td><strong>Scene</strong></td><td>Combine up to 10 layers — picture-in-picture, side-by-side, quad split.</td></tr>
+            <tr><td><strong>Audio device</strong></td><td>Microphones, mixers and audio interfaces.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Input settings</h3>
+      <p>Double-click an input's thumbnail (or right-click the tile and choose its settings) to open the input settings. The tabs are:</p>
+      <ul>
+        <li><strong>General</strong> — name, device or file, loop and other type-specific options.</li>
+        <li><strong>Position / Crop</strong> — position, zoom, crop, rotate, border and rounded corners.</li>
+        <li><strong>Colour Correction</strong> — brightness, contrast, saturation and other adjustments.</li>
+        <li><strong>Keying</strong> — GPU chroma key (green or blue screen) and luma key (remove black or white).</li>
+        <li><strong>Audio</strong> — the input's audio options; full controls are in the <a href="#audio">audio mixer</a>.</li>
+        <li><strong>Layers</strong> — place up to 10 other inputs on top of this one, each with its own position.</li>
+      </ul>
+      <div class="note"><p>A camera can only be opened by one application at a time. Close other video apps before adding it.</p></div>
+    </section>
+
+    <!-- 3 -->
+    <section class="doc" id="transitions" aria-labelledby="h-tr">
+      <h2 id="h-tr">3. Transitions &amp; Stingers</h2>
+      <p>BTS Studio includes more than 20 transitions: Fade, Merge, Zoom, Cross Zoom, Wipes, Iris, Slide, Push, Fly, Cube, Flip, Dip to Black, Dip to White and Blur. Set the effect and duration for Quick Play and for each of the four transition buttons.</p>
+
+      <h3>Stingers</h3>
+      <p>A stinger is a short video with an alpha channel (transparency) that plays over the switch — for example a logo that sweeps across the screen.</p>
+      <ul>
+        <li><strong>Format:</strong> WebM with VP9 and alpha is recommended. Any video format with alpha that FFmpeg can decode will work.</li>
+        <li><strong>Cut point:</strong> the moment, in milliseconds from the start, when the switch happens underneath. Set it to the frame where the stinger fully covers the screen.</li>
+        <li>Keep stingers short (about 1 second) and the same resolution as your output.</li>
+      </ul>
+    </section>
+
+    <!-- 4 -->
+    <section class="doc" id="overlays" aria-labelledby="h-ov">
+      <h2 id="h-ov">4. Overlays</h2>
+      <p>Overlays sit on top of Output (and Preview) without changing what is underneath. There are <strong>4 overlay channels</strong>, so you can show a logo, a scoreboard and a lower third at the same time.</p>
+      <ul>
+        <li>Toggle overlay 1–4 on the selected input with <kbd>Shift</kbd>+<kbd>1</kbd>–<kbd>4</kbd>, or with the overlay buttons on each tile.</li>
+        <li>Turn all overlays off with <kbd>Shift</kbd>+<kbd>0</kbd>.</li>
+        <li>Title inputs <strong>animate in</strong> when shown and <strong>animate out</strong> when hidden, using the title's own animation.</li>
+      </ul>
+    </section>
+
+    <!-- 5 -->
+    <section class="doc" id="titles" aria-labelledby="h-ti">
+      <h2 id="h-ti">5. Titles &amp; Title Designer</h2>
+      <p>Add a <strong>Title</strong> input and choose a template:</p>
+      <ul>
+        <li>Lower third</li>
+        <li>Breaking news with ticker</li>
+        <li>Cricket score bar</li>
+        <li>Sports score</li>
+        <li>Clock and Countdown</li>
+        <li>Full-screen title</li>
+        <li>Social handle</li>
+        <li>Up next</li>
+      </ul>
+      <p>Edit the text fields in the title's settings — changes appear live. Each field has a name (for example <code>Score</code>) which you use with <a href="#data-sources">Data Sources</a> and the <a href="#api">API</a>.</p>
+      <h3>Title Designer</h3>
+      <p>Open the visual Title Designer to build your own titles: add text, rectangles, images, clocks, countdowns and tickers, set fonts and colours, position elements, and name the text fields you want to change during the show. Save it and use it like any built-in template.</p>
+    </section>
+
+    <!-- 6 -->
+    <section class="doc" id="data-sources" aria-labelledby="h-ds">
+      <h2 id="h-ds">6. Data Sources</h2>
+      <p>Data Sources fill title fields from a table of data, so you don't have to retype names and scores.</p>
+      <h3>Supported sources</h3>
+      <ul>
+        <li><strong>CSV</strong> — a local <code>.csv</code> file. The first row is the column headers.</li>
+        <li><strong>JSON</strong> — a local file or URL containing an array of objects.</li>
+        <li><strong>Google Sheets</strong> — paste the sheet's share link. Set sharing to <em>Anyone with the link → Viewer</em>.</li>
+      </ul>
+      <h3>Bindings</h3>
+      <p>In the Data Sources window, bind a column to a title field (for example column <code>Runs</code> to the <code>Score</code> field of the Score title). Set an <strong>auto refresh</strong> interval so the title updates when the source changes.</p>
+      <h3>Row selection</h3>
+      <p>Choose which row is shown. Use Next/Previous to step through rows — useful for player names or results. From the API: <code>/api/?Function=DataSourceNextRow&amp;Value=Players</code>.</p>
+    </section>
+
+    <!-- 7 -->
+    <section class="doc" id="audio" aria-labelledby="h-au">
+      <h2 id="h-au">7. Audio mixer</h2>
+      <p>Every input with sound has a channel strip with a fader, mute, and peak meter.</p>
+      <h3>Buses</h3>
+      <ul>
+        <li><strong>M (Master)</strong> — goes to stream, recording and External output.</li>
+        <li><strong>A</strong> and <strong>B</strong> — two extra buses, for example a separate mix for headphones or a commentary feed.</li>
+      </ul>
+      <p>Click <strong>M</strong>, <strong>A</strong> or <strong>B</strong> on a strip to route that input to the bus.</p>
+      <h3>Per-input processing</h3>
+      <ul>
+        <li><strong>Trim</strong> — input gain before the fader.</li>
+        <li><strong>Delay</strong> — delays audio in milliseconds for lip-sync when video is behind.</li>
+        <li><strong>EQ</strong> — 3-band (low, mid, high).</li>
+        <li><strong>Compressor</strong> — evens out loud and quiet speech.</li>
+        <li><strong>Noise gate</strong> — mutes background hiss between words.</li>
+        <li><strong>Solo</strong> — listen to just this input in headphones.</li>
+        <li><strong>AFV (Audio Follows Video)</strong> — the input's audio is only heard when it is on Output.</li>
+      </ul>
+      <h3>Master</h3>
+      <p>The master limiter stops the output clipping. Pick a <strong>headphone monitoring</strong> device to listen to the mix. Open the mixer in its own window with <kbd>F9</kbd>.</p>
+      <div class="note"><p>Volume 75 on the fader = 0 dB (unity gain).</p></div>
+    </section>
+
+    <!-- 8 -->
+    <section class="doc" id="streaming" aria-labelledby="h-st">
+      <h2 id="h-st">8. Streaming</h2>
+      <h3>Destinations</h3>
+      <p>Open stream settings and add up to <strong>3 destinations</strong>. They stream at the same time. Supported: YouTube, Facebook, Twitch, custom RTMP/RTMPS, SRT and UDP. If the connection drops, BTS Studio reconnects automatically.</p>
+      <h3>Stream keys</h3>
+      <p>Copy the stream key from your platform's live dashboard (YouTube Studio → Go live, Facebook Live Producer, Twitch Creator Dashboard) and paste it into the destination. Treat it like a password — anyone with it can stream to your channel.</p>
+      <h3>Encoder</h3>
+      <ul>
+        <li><strong>NVENC</strong> (NVIDIA), <strong>Quick Sync</strong> (Intel), <strong>AMF</strong> (AMD) — hardware encoders, recommended.</li>
+        <li><strong>x264</strong> — software (CPU). Works anywhere but uses a lot of CPU.</li>
+      </ul>
+      <h3>Recommended settings</h3>
+      <div class="tbl-wrap">
+        <table>
+          <caption class="sr-only">Recommended streaming settings</caption>
+          <thead><tr><th scope="col">Resolution</th><th scope="col">Video bitrate</th><th scope="col">Keyframe interval</th></tr></thead>
+          <tbody>
+            <tr><td>1080p 30 fps</td><td>4500–6000 kbps</td><td>2 seconds</td></tr>
+            <tr><td>720p 30 fps</td><td>2500–4000 kbps</td><td>2 seconds</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Your upload speed should be at least 1.5× the total bitrate of all destinations. Start streaming with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd>.</p>
+    </section>
+
+    <!-- 9 -->
+    <section class="doc" id="recording" aria-labelledby="h-re">
+      <h2 id="h-re">9. Recording &amp; MultiCorder</h2>
+      <p>Record Output to <strong>MP4</strong>, <strong>MKV</strong>, <strong>MOV</strong> or <strong>WebM</strong>. Start or stop with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>.</p>
+      <div class="note tip"><p><strong>MKV is crash-safe.</strong> If the PC or app crashes, an MKV file can still be played. An unfinished MP4 usually cannot. Record to MKV and convert later if you need MP4.</p></div>
+      <h3>MultiCorder (ISO recording)</h3>
+      <p>MultiCorder records selected inputs — usually your cameras — to separate clean files, without titles or transitions, so you can re-edit the show later.</p>
+      <ul>
+        <li><strong>Pass-through</strong> — saves the source as it arrives without re-encoding. Uses very little CPU, but only works when the source format can be stored directly.</li>
+        <li><strong>Re-encode</strong> — encodes each input with the chosen encoder. Works with any source, uses more CPU/GPU.</li>
+      </ul>
+      <h3>Snapshots</h3>
+      <p>Press <kbd>Ctrl</kbd>+<kbd>P</kbd> to save a still image of Output.</p>
+    </section>
+
+    <!-- 10 -->
+    <section class="doc" id="outputs" aria-labelledby="h-ou">
+      <h2 id="h-ou">10. External output &amp; Multiview</h2>
+      <h3>External output</h3>
+      <p>Send Output fullscreen to any connected display — a projector, TV or LED screen. Choose the display in the External output settings. Extend your desktop in Windows display settings first (do not mirror).</p>
+      <h3>Multiview</h3>
+      <p>Press <kbd>F8</kbd> to open Multiview: Preview, Output and all inputs in one window, ideal on a second monitor. Press <kbd>F9</kbd> to open the audio mixer window.</p>
+    </section>
+
+    <!-- 11 -->
+    <section class="doc" id="shortcuts" aria-labelledby="h-ks">
+      <h2 id="h-ks">11. Keyboard shortcuts</h2>
+      <div class="tbl-wrap">
+        <table>
+          <caption class="sr-only">Keyboard shortcuts</caption>
+          <thead><tr><th scope="col">Keys</th><th scope="col">Action</th></tr></thead>
+          <tbody>
+            <tr><td><kbd>Space</kbd></td><td>Quick Play (transition Preview to Output)</td></tr>
+            <tr><td><kbd>Enter</kbd></td><td>Cut</td></tr>
+            <tr><td><kbd>B</kbd></td><td>Fade to Black</td></tr>
+            <tr><td><kbd>1</kbd> – <kbd>9</kbd></td><td>Load input 1–9 into Preview</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>1</kbd> – <kbd>9</kbd></td><td>Cut input 1–9 straight to Output</td></tr>
+            <tr><td><kbd>Shift</kbd>+<kbd>1</kbd> – <kbd>4</kbd></td><td>Toggle overlay 1–4</td></tr>
+            <tr><td><kbd>Shift</kbd>+<kbd>0</kbd></td><td>All overlays off</td></tr>
+            <tr><td><kbd>T</kbd> <kbd>Y</kbd> <kbd>U</kbd> <kbd>I</kbd></td><td>Transition buttons 1–4</td></tr>
+            <tr><td><kbd>P</kbd></td><td>Play / pause</td></tr>
+            <tr><td><kbd>R</kbd></td><td>Restart</td></tr>
+            <tr><td><kbd>N</kbd></td><td>Next item (List input)</td></tr>
+            <tr><td><kbd>←</kbd> / <kbd>→</kbd></td><td>Previous / next input in Preview</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>P</kbd></td><td>Snapshot</td></tr>
+            <tr><td><kbd>F8</kbd></td><td>Multiview</td></tr>
+            <tr><td><kbd>F9</kbd></td><td>Audio mixer window</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save preset</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>Open preset</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>I</kbd></td><td>Add input</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd></td><td>Start / stop streaming</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd></td><td>Start / stop recording</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 12 -->
+    <section class="doc" id="api" aria-labelledby="h-api">
+      <h2 id="h-api">12. Web Controller &amp; API</h2>
+      <p>BTS Studio runs a small web server (default port <strong>8088</strong>) so other devices on your network can control it.</p>
+      <h3>Web Controller</h3>
+      <p>On a phone or tablet on the same Wi-Fi, open <code>http://PC-IP:8088/</code> — replace <code>PC-IP</code> with your PC's local IP address (run <code>ipconfig</code> to find it, e.g. <code>192.168.1.20</code>).</p>
+      <h3>Tally lights</h3>
+      <p>Open <code>http://PC-IP:8088/tally/?input=1</code> on a phone mounted near camera 1. The screen turns <span class="pill pgm">RED</span> when that input is on Output and <span class="pill pvw">GREEN</span> when it is in Preview.</p>
+      <h3>HTTP API</h3>
+      <ul>
+        <li><code>GET /api</code> — current state as JSON.</li>
+        <li><code>GET /api?format=xml</code> — current state as XML.</li>
+        <li><code>GET /api/functions</code> — list of all available functions.</li>
+      </ul>
+      <p>Call a function with <code>/api/?Function=Name</code> plus parameters. <code>Input</code> can be the input number, its title, or its id.</p>
+      <pre><code>/api/?Function=Cut&amp;Input=2
+/api/?Function=QuickPlay&amp;Input=Camera
+/api/?Function=SetText&amp;Input=Score&amp;SelectedName=Score&amp;Value=120/3
+/api/?Function=OverlayInput1&amp;Input=3
+/api/?Function=StartStreaming
+/api/?Function=SetVolume&amp;Input=2&amp;Value=75
+/api/?Function=DataSourceNextRow&amp;Value=Players</code></pre>
+      <p><code>SetVolume</code> value <code>75</code> = 0 dB.</p>
+      <h3>POST with JSON</h3>
+      <p>You can also POST a JSON body with the same parameters:</p>
+      <pre><code>curl -X POST http://192.168.1.20:8088/api/ \
+  -H "Content-Type: application/json" \
+  -d '{"Function":"SetText","Input":"Score","SelectedName":"Score","Value":"120/3"}'</code></pre>
+      <div class="note warn"><p>The API has no password. Use it only on a trusted local network, and do not forward port 8088 on your router.</p></div>
+    </section>
+
+    <!-- 13 -->
+    <section class="doc" id="updates" aria-labelledby="h-up">
+      <h2 id="h-up">13. Updates</h2>
+      <p>BTS Studio checks for updates automatically <strong>at startup and every 6 hours</strong>. When a new version is available you are notified and can download it. Install by restarting the app when convenient; otherwise it installs the next time you quit.</p>
+      <p>To check yourself, use <strong>Help → Check for Updates</strong>. Your presets and settings are kept.</p>
+    </section>
+
+    <!-- 14 -->
+    <section class="doc" id="troubleshooting" aria-labelledby="h-ts">
+      <h2 id="h-ts">14. Troubleshooting</h2>
+      <h3>Camera is busy or shows black</h3>
+      <p>Another app (Zoom, Teams, browser, camera app) is using the camera. Close it, then remove and re-add the input. Check Windows <em>Settings → Privacy → Camera</em> allows desktop apps.</p>
+      <h3>FFmpeg errors</h3>
+      <p>Usually caused by an unsupported file, a missing file, or an encoder your GPU doesn't support. Try another file, re-encode it, or switch the encoder to x264 to test. The exact message is in the log file.</p>
+      <h3>Stream won't connect</h3>
+      <p>Check the stream key (paste it again — no extra spaces), the server URL, and that the event is set to live on the platform. Keys can change when you create a new live event.</p>
+      <h3>Windows Firewall prompt</h3>
+      <p>The first time the API/web controller starts, Windows asks whether to allow BTS Studio on networks. Allow it on <strong>Private networks</strong> so phones and tablets can connect.</p>
+      <h3>Choppy video or high CPU</h3>
+      <p>Update your GPU drivers from NVIDIA, AMD or Intel. Use a hardware encoder, lower the output resolution or frame rate, and close other heavy apps.</p>
+      <h3>Log file</h3>
+      <p>Open <strong>Tools → Show Log File</strong>. Include it when reporting a problem.</p>
+    </section>
+  </main>
+</div>
+
+<a class="top-link" href="#content" aria-label="Back to top">↑</a>
+
+<footer>
+  <p>© 2026 Bhoomiputra Tech Solutions Pvt Ltd (BTSPL). BTS Studio is open source under the MIT licence.</p>
+  <p>Uses <a href="https://ffmpeg.org/" rel="noopener">FFmpeg</a>. <a href="../">Back to home</a></p>
+</footer>
+
+<script>
+(function () {
+  if (!('IntersectionObserver' in window)) return;
+  var links = {};
+  document.querySelectorAll('#toc-list a').forEach(function (a) { links[a.getAttribute('href').slice(1)] = a; });
+  var observer = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting && links[e.target.id]) {
+        Object.keys(links).forEach(function (k) { links[k].classList.remove('active'); links[k].removeAttribute('aria-current'); });
+        links[e.target.id].classList.add('active');
+        links[e.target.id].setAttribute('aria-current', 'true');
+      }
+    });
+  }, { rootMargin: '-70px 0px -70% 0px' });
+  document.querySelectorAll('section.doc').forEach(function (s) { observer.observe(s); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BTS Studio — Free live production software</title>
+<meta name="description" content="BTS Studio is free, open-source live production, switching, titling and streaming software for Windows. Built for students and creators by Bhoomiputra Tech Solutions Pvt Ltd.">
+<meta name="theme-color" content="#141518">
+<meta property="og:title" content="BTS Studio — Free live production software">
+<meta property="og:description" content="Switch cameras, add titles and scoreboards, mix audio, record and stream to up to 3 destinations. Free and open source for Windows.">
+<meta property="og:url" content="https://studio.btspl.tech/">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23232429'/%3E%3Ccircle cx='11' cy='16' r='5' fill='%23e2453c'/%3E%3Ccircle cx='22' cy='16' r='5' fill='%232fbf62'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#141518;--panel:#232429;--panel-2:#1b1c20;--line:#33353c;
+  --text:#ecedf0;--muted:#a9adb8;--accent:#f0a53a;--accent-ink:#1a1206;
+  --pgm:#e2453c;--pvw:#2fbf62;--radius:12px;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--accent)}
+a:hover{color:#ffc06a}
+:focus-visible{outline:3px solid var(--accent);outline-offset:3px;border-radius:4px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+.skip{position:absolute;left:-999px;top:8px;background:var(--accent);color:var(--accent-ink);padding:8px 14px;border-radius:8px;z-index:10;font-weight:600}
+.skip:focus{left:8px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+/* header */
+header.top{position:sticky;top:0;z-index:5;background:rgba(20,21,24,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.nav{display:flex;align-items:center;justify-content:space-between;gap:16px;height:60px}
+.brand{display:flex;align-items:center;gap:10px;color:var(--text);text-decoration:none;font-weight:800;letter-spacing:.2px}
+.brand .dots{display:inline-flex;gap:4px}
+.brand .dots i{width:10px;height:10px;border-radius:50%;display:block}
+.brand .dots i:first-child{background:var(--pgm)}
+.brand .dots i:last-child{background:var(--pvw)}
+.nav ul{list-style:none;display:flex;gap:22px;margin:0;padding:0}
+.nav ul a{color:var(--muted);text-decoration:none;font-weight:500;font-size:15px}
+.nav ul a:hover{color:var(--text)}
+@media (max-width:720px){.nav ul li:not(.keep){display:none}}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:10px;padding:14px 22px;border-radius:10px;font-weight:700;text-decoration:none;border:1px solid transparent;font-size:16px;line-height:1.2}
+.btn-primary{background:var(--accent);color:var(--accent-ink)}
+.btn-primary:hover{background:#ffb853;color:var(--accent-ink)}
+.btn-ghost{border-color:var(--line);color:var(--text);background:var(--panel)}
+.btn-ghost:hover{border-color:var(--muted);color:var(--text)}
+.btn-lg{padding:18px 28px;font-size:18px}
+.btn svg{flex:none}
+
+/* hero */
+.hero{padding:72px 0 56px;border-bottom:1px solid var(--line);background:
+  radial-gradient(800px 380px at 85% -10%,rgba(240,165,58,.13),transparent 70%),
+  radial-gradient(600px 300px at 0% 110%,rgba(47,191,98,.08),transparent 70%)}
+.hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font:500 13px/1 var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:1.2px;margin:0 0 18px}
+.live{width:8px;height:8px;border-radius:50%;background:var(--pgm);box-shadow:0 0 0 0 rgba(226,69,60,.6);animation:pulse 2s infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 8px rgba(226,69,60,0)}100%{box-shadow:0 0 0 0 rgba(226,69,60,0)}}
+@media (prefers-reduced-motion:reduce){.live{animation:none}html{scroll-behavior:auto}}
+h1{font-size:clamp(32px,5.4vw,54px);line-height:1.08;margin:0 0 18px;letter-spacing:-.8px;font-weight:800}
+h1 .sub{display:block;color:var(--muted);font-weight:600;font-size:.52em;letter-spacing:-.2px;margin-top:12px;line-height:1.3}
+.lead{color:var(--muted);font-size:18px;margin:0 0 28px;max-width:560px}
+.cta{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.dl-meta{margin:14px 0 0;color:var(--muted);font-size:14px}
+.dl-meta strong{color:var(--text);font-family:var(--mono);font-weight:500}
+
+/* switcher mock */
+.mock{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:0 30px 60px -30px rgba(0,0,0,.7)}
+.mock-mons{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mon{border-radius:8px;overflow:hidden;background:#0d0e10}
+.mon .scr{aspect-ratio:16/9;position:relative;display:flex;align-items:flex-end}
+.mon.pvw{outline:2px solid var(--pvw)}
+.mon.pgm{outline:2px solid var(--pgm)}
+.mon .tag{font:600 11px/1 var(--mono);padding:6px 8px;letter-spacing:1px}
+.mon.pvw .tag{background:var(--pvw);color:#06210f}
+.mon.pgm .tag{background:var(--pgm);color:#fff}
+.scr-a{background:linear-gradient(160deg,#2a4a63,#152430 70%)}
+.scr-b{background:linear-gradient(160deg,#2c5a34,#132417 70%)}
+.lt{position:absolute;left:8%;bottom:14%;right:30%;display:flex;flex-direction:column;gap:3px}
+.lt b{background:var(--accent);height:9px;width:70%;border-radius:2px}
+.lt i{background:rgba(255,255,255,.85);height:6px;width:45%;border-radius:2px}
+.score{position:absolute;left:6%;top:9%;display:flex;gap:3px}
+.score span{height:10px;border-radius:2px;background:rgba(0,0,0,.6)}
+.score span:first-child{width:28px;background:var(--pgm)}
+.score span:last-child{width:46px}
+.mock-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}
+.tile{aspect-ratio:16/10;border-radius:6px;background:var(--panel-2);border:1px solid var(--line);position:relative}
+.tile.on-pgm{border-color:var(--pgm)}
+.tile.on-pvw{border-color:var(--pvw)}
+.tile::after{content:"";position:absolute;left:6px;right:40%;bottom:6px;height:4px;border-radius:2px;background:#3a3c44}
+.mock-ctl{display:flex;gap:8px;margin-top:12px;align-items:center}
+.mock-ctl span{flex:1;height:26px;border-radius:6px;background:var(--panel-2);border:1px solid var(--line)}
+.mock-ctl span.q{background:rgba(240,165,58,.18);border-color:var(--accent)}
+.tbar{width:24px;height:46px;border-radius:6px;background:var(--panel-2);border:1px solid var(--line);position:relative;flex:none!important}
+.tbar::after{content:"";position:absolute;left:3px;right:3px;top:12px;height:8px;border-radius:3px;background:var(--accent)}
+
+/* sections */
+section{padding:72px 0;border-bottom:1px solid var(--line)}
+h2{font-size:clamp(26px,3.6vw,36px);margin:0 0 10px;letter-spacing:-.4px;line-height:1.2}
+.section-lead{color:var(--muted);margin:0 0 36px;max-width:680px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px}
+.card h3{margin:0 0 8px;font-size:18px;display:flex;align-items:center;gap:10px}
+.card p{margin:0;color:var(--muted);font-size:15px}
+.ico{width:34px;height:34px;border-radius:8px;display:inline-grid;place-items:center;background:rgba(240,165,58,.12);color:var(--accent);flex:none}
+.ico.r{background:rgba(226,69,60,.14);color:#ff7a72}
+.ico.g{background:rgba(47,191,98,.14);color:#5fd98a}
+.card ul{margin:10px 0 0;padding-left:18px;color:var(--muted);font-size:15px}
+.card ul li{margin:3px 0}
+
+/* requirements */
+.req{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.6px}
+td:first-child{font-weight:600;white-space:nowrap}
+.tbl-wrap{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow-x:auto}
+tr:last-child td{border-bottom:0}
+
+/* steps */
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,1fr);gap:16px;counter-reset:s}
+.steps li{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px;counter-increment:s;position:relative}
+.steps li::before{content:counter(s);display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-weight:800;margin-bottom:12px}
+.steps h3{margin:0 0 6px;font-size:17px}
+.steps p{margin:0;color:var(--muted);font-size:15px}
+code{font-family:var(--mono);font-size:.88em;background:var(--panel-2);border:1px solid var(--line);padding:1px 6px;border-radius:5px;color:#ffd193;word-break:break-word}
+
+/* faq */
+.faq{display:grid;gap:10px;max-width:860px}
+details{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:0 20px}
+summary{cursor:pointer;padding:18px 0;font-weight:600;list-style:none;display:flex;justify-content:space-between;gap:16px}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+";color:var(--accent);font-size:22px;line-height:1}
+details[open] summary::after{content:"–"}
+details p{margin:0 0 18px;color:var(--muted)}
+
+/* download band */
+.band{background:linear-gradient(135deg,#2a2218,#232429 60%);border:1px solid #4a3a22;border-radius:16px;padding:36px;display:flex;justify-content:space-between;align-items:center;gap:24px;flex-wrap:wrap}
+.band h2{margin:0 0 6px}
+.band p{margin:0;color:var(--muted)}
+
+footer{padding:40px 0 48px;color:var(--muted);font-size:14px}
+.foot{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap}
+.foot p{margin:4px 0}
+.foot nav a{color:var(--muted);margin-right:16px}
+.foot nav a:hover{color:var(--text)}
+
+@media (max-width:960px){
+  .hero-grid{grid-template-columns:1fr}
+  .grid{grid-template-columns:repeat(2,1fr)}
+  .steps{grid-template-columns:repeat(2,1fr)}
+  .req{grid-template-columns:1fr}
+}
+@media (max-width:600px){
+  .wrap{padding:0 16px}
+  .hero{padding:48px 0 40px}
+  section{padding:52px 0}
+  .grid,.steps{grid-template-columns:1fr}
+  .btn-lg{width:100%;justify-content:center}
+  .cta .btn{width:100%;justify-content:center}
+  .band{padding:24px}
+  .band .btn{width:100%;justify-content:center}
+  td:first-child{white-space:normal}
+  th,td{padding:10px 12px}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap nav">
+    <a class="brand" href="./" aria-label="BTS Studio home">
+      <span class="dots" aria-hidden="true"><i></i><i></i></span>BTS Studio
+    </a>
+    <nav aria-label="Main">
+      <ul>
+        <li><a href="#features">Features</a></li>
+        <li><a href="#requirements">Requirements</a></li>
+        <li><a href="#updates">Updates</a></li>
+        <li><a href="#faq">FAQ</a></li>
+        <li class="keep"><a href="docs/">User Guide</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+<section class="hero" aria-labelledby="hero-title">
+  <div class="wrap hero-grid">
+    <div>
+      <p class="eyebrow"><span class="live" aria-hidden="true"></span>Free &amp; open source · Windows</p>
+      <h1 id="hero-title">BTS Studio
+        <span class="sub">Free live production software for students &amp; creators</span></h1>
+      <p class="lead">Switch cameras, add titles and scoreboards, mix audio, record, and stream to up to three platforms at once — from one Windows PC, at no cost.</p>
+      <div class="cta">
+        <a id="download-btn" class="btn btn-primary btn-lg" href="updates/" aria-describedby="dl-version">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m6 11 6 6 6-6"/><path d="M4 21h16"/></svg>
+          Download for Windows
+        </a>
+        <a class="btn btn-ghost" href="docs/">Read the User Guide</a>
+      </div>
+      <p class="dl-meta" id="dl-version">Windows 10/11 64-bit · <span id="dl-ver-text">Latest version</span></p>
+    </div>
+
+    <div class="mock" role="img" aria-label="Illustration of the BTS Studio switcher: a green Preview monitor and a red Output monitor showing a lower-third title and score bar, with input thumbnails, transition buttons and a T-Bar below.">
+      <div class="mock-mons">
+        <div class="mon pvw"><div class="scr scr-b"><span class="tag">PREVIEW</span></div></div>
+        <div class="mon pgm"><div class="scr scr-a">
+          <div class="score"><span></span><span></span></div>
+          <div class="lt"><b></b><i></i></div>
+          <span class="tag" style="position:absolute;left:0;bottom:0">OUTPUT</span></div></div>
+      </div>
+      <div class="mock-row">
+        <div class="tile on-pgm"></div><div class="tile on-pvw"></div><div class="tile"></div><div class="tile"></div>
+      </div>
+      <div class="mock-ctl">
+        <span class="q"></span><span></span><span></span><span></span><span></span><span class="tbar"></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="features" aria-labelledby="features-title">
+  <div class="wrap">
+    <h2 id="features-title">Everything you need for a live show</h2>
+    <p class="section-lead">A full production switcher, graphics system, audio mixer and encoder in one app. Built on Electron and FFmpeg.</p>
+    <div class="grid">
+      <article class="card">
+        <h3><span class="ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="9" height="7" rx="1"/><rect x="13" y="5" width="9" height="7" rx="1"/><path d="M12 15v6"/></svg></span>Switcher</h3>
+        <p>Preview / Output workflow with a T-Bar, Quick Play, Cut and four programmable transition buttons. Fade to Black in one key.</p>
+      </article>
+      <article class="card">
+        <h3><span class="ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18"/><path d="m15 6 6 6-6 6"/></svg></span>20+ transitions</h3>
+        <p>Fade, Merge, Zoom, Cross Zoom, Wipes, Iris, Slide, Push, Fly, Cube, Flip, Dip to Black/White, Blur — plus Stingers with alpha.</p>
+      </article>
+      <article class="card">
+        <h3><span class="ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="12" y="12" width="7" height="7" rx="1"/></svg></span>Overlays &amp; scenes</h3>
+        <p>Four overlay channels for titles and logos. Scenes with up to 10 layers for picture-in-picture, side-by-side and quad layouts.</p>
+      </article>
+      <article class="card">
+        <h3><span class="ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7 16 12l7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></span>Inputs</h3>
+        <ul>
+          <li>Cameras and capture cards</li>
+          <li>Screen &amp; window capture (with system audio)</li>
+          <li>Video, audio, images &amp; GIFs, playlists</li>
+          <li>Web browser / HTML overlays with transparency</li>
+          <li>Titles, colour, bars, audio devices</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h3><span class="ico g" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg></span>Keying &amp; picture</h3>
+        <p>GPU chroma key, luma key and colour correction. Position, zoom, crop, rotate, border and rounded corners for every input.</p>
+      </article>
+      <article class="card">
+        <h3><span class="ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg></span>Titles</h3>
+        <p>Built-in templates: lower thirds, breaking news with ticker, cricket score bar, sports score, clock, countdown, full-screen title, social handle and up next. Make your own in the visual Title Designer.</p>
+      </article>
+      <article class="card">
+        <h3><span class="ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></span>Data sources</h3>
+        <p>Bind title fields to CSV, JSON or Google Sheets data with automatic refresh — ideal for live scores, results and name lists.</p>
+      </article>
+      <article class="card">
+        <h3><span class="ico g" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></span>Audio mixer</h3>
+        <p>Master, Bus A and Bus B. Per-input trim, delay for lip-sync, 3-band EQ, compressor, noise gate, solo and audio-follow-video. Master limiter, peak meters and headphone monitoring.</p>
+      </article>
+      <article class="card">
+        <h3><span class="ico r" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19.1 4.9a10 10 0 0 1 0 14.2M4.9 19.1a10 10 0 0 1 0-14.2"/></svg></span>Streaming</h3>
+        <p>Stream to up to 3 destinations at once — YouTube, Facebook, Twitch, custom RTMP/RTMPS, SRT or UDP — with auto-reconnect.</p>
+      </article>
+      <article class="card">
+        <h3><span class="ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></svg></span>Hardware encoding</h3>
+        <p>NVIDIA NVENC, Intel Quick Sync and AMD AMF, or x264 on the CPU.</p>
+      </article>
+      <article class="card">
+        <h3><span class="ico r" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg></span>Recording</h3>
+        <p>Record MP4, MKV, MOV or WebM. MultiCorder records clean ISO files of each camera. Take snapshots at any time.</p>
+      </article>
+      <article class="card">
+        <h3><span class="ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>Outputs</h3>
+        <p>Multiview, and a fullscreen External output on any connected display or projector.</p>
+      </article>
+      <article class="card">
+        <h3><span class="ico g" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg></span>Remote control</h3>
+        <p>HTTP API, a web controller for phones and tablets, and browser-based tally lights for camera operators.</p>
+      </article>
+      <article class="card">
+        <h3><span class="ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></svg></span>Workflow</h3>
+        <p>Keyboard shortcuts for every key action. Save presets as <code>.btsproj</code> files, with autosave and crash recovery.</p>
+      </article>
+      <article class="card">
+        <h3><span class="ico g" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></span>Automatic updates</h3>
+        <p>BTS Studio checks for new versions and lets you download and install them in a click.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="requirements" aria-labelledby="req-title">
+  <div class="wrap">
+    <h2 id="req-title">System requirements</h2>
+    <p class="section-lead">Live video is demanding. For streaming at 1080p, a GPU with a hardware encoder makes the biggest difference.</p>
+    <div class="tbl-wrap">
+      <table>
+        <caption class="sr-only">BTS Studio minimum and recommended system requirements</caption>
+        <thead><tr><th scope="col">Component</th><th scope="col">Minimum</th><th scope="col">Recommended</th></tr></thead>
+        <tbody>
+          <tr><td>Operating system</td><td>Windows 10 64-bit</td><td>Windows 11 64-bit</td></tr>
+          <tr><td>Processor</td><td>4-core CPU</td><td>8-core CPU</td></tr>
+          <tr><td>Memory</td><td>8 GB RAM</td><td>16 GB RAM</td></tr>
+          <tr><td>Graphics</td><td>NVIDIA, AMD or Intel GPU with up-to-date drivers</td><td>GPU with NVENC, Quick Sync (QSV) or AMF for streaming</td></tr>
+          <tr><td>Disk space</td><td>1 GB for the app</td><td>Fast SSD for recordings</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="updates" aria-labelledby="updates-title">
+  <div class="wrap">
+    <h2 id="updates-title">How updates work</h2>
+    <p class="section-lead">You install BTS Studio once. After that, new versions arrive automatically from this website.</p>
+    <ol class="steps">
+      <li><h3>Check</h3><p>At startup and every 6 hours, BTS Studio reads <code>updates/latest.yml</code> on this site.</p></li>
+      <li><h3>Download</h3><p>If a newer version exists, BTS Studio tells you. Click Download and it fetches the update in the background.</p></li>
+      <li><h3>Install</h3><p>Restart when it suits you — never in the middle of a show. If you don't, it installs when you next quit.</p></li>
+      <li><h3>Manual check</h3><p>Any time, use <strong>Help → Check for Updates</strong> in the app.</p></li>
+    </ol>
+  </div>
+</section>
+
+<section id="faq" aria-labelledby="faq-title">
+  <div class="wrap">
+    <h2 id="faq-title">Frequently asked questions</h2>
+    <p class="section-lead">Short answers. The <a href="docs/">User Guide</a> has the details.</p>
+    <div class="faq">
+      <details><summary>Is BTS Studio really free?</summary>
+        <p>Yes. It is free to download and use, with no watermark and no subscription. The source code is released under the MIT licence.</p></details>
+      <details><summary>Does it run on macOS or Linux?</summary>
+        <p>Not at the moment. BTS Studio currently supports Windows 10 and Windows 11 (64-bit) only.</p></details>
+      <details><summary>Windows shows a SmartScreen warning when I run the installer. Is that safe?</summary>
+        <p>SmartScreen can warn about new or unsigned installers. Make sure you downloaded it from <strong>studio.btspl.tech</strong>, then choose <em>More info → Run anyway</em>.</p></details>
+      <details><summary>Can I stream to YouTube and Facebook at the same time?</summary>
+        <p>Yes. You can send one output to up to three destinations at once — any mix of YouTube, Facebook, Twitch, custom RTMP/RTMPS, SRT or UDP. Each destination uses upload bandwidth, so check your connection speed.</p></details>
+      <details><summary>Can I use it for cricket and other sports?</summary>
+        <p>Yes. There is a built-in cricket score bar and a sports score template. Bind them to a Google Sheet, CSV or JSON file, or update them from a phone using the web controller or HTTP API.</p></details>
+      <details><summary>Which encoder should I choose?</summary>
+        <p>Use your GPU's hardware encoder if you have one — NVENC (NVIDIA), Quick Sync (Intel) or AMF (AMD). It keeps the CPU free for mixing. x264 works on any PC but uses more CPU.</p></details>
+      <details><summary>Do I need to uninstall before updating?</summary>
+        <p>No. Updates install over the existing version and keep your settings and presets.</p></details>
+      <details><summary>Where do I report a problem?</summary>
+        <p>Open <strong>Tools → Show Log File</strong> in the app and include the log with a description of what happened when you contact us.</p></details>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="band-title" style="border-bottom:0">
+  <div class="wrap">
+    <div class="band">
+      <div>
+        <h2 id="band-title">Ready to go live?</h2>
+        <p>Download BTS Studio for Windows and set up your first show in minutes.</p>
+      </div>
+      <a id="download-btn-2" class="btn btn-primary btn-lg" href="updates/">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m6 11 6 6 6-6"/><path d="M4 21h16"/></svg>
+        Download for Windows
+      </a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <div>
+      <p>© 2026 Bhoomiputra Tech Solutions Pvt Ltd (BTSPL).</p>
+      <p>BTS Studio is free, open-source software released under the MIT licence.</p>
+      <p>Uses <a href="https://ffmpeg.org/" rel="noopener">FFmpeg</a>, licensed under the LGPL/GPL. All trademarks belong to their owners.</p>
+    </div>
+    <nav aria-label="Footer">
+      <a href="docs/">User Guide</a>
+      <a href="privacy.html">Privacy Policy</a>
+      <a href="https://github.com/btspl99/bts-studio" rel="noopener">Source code</a>
+      <a href="mailto:support@btspl.tech">support@btspl.tech</a>
+      <a href="tel:+919209013489">+91 92090 13489</a>
+      <a href="#requirements">Requirements</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var btns = [document.getElementById('download-btn'), document.getElementById('download-btn-2')];
+  var verText = document.getElementById('dl-ver-text');
+  function field(yml, key) {
+    var m = yml.match(new RegExp('^' + key + ':\\s*[\'"]?([^\'"\\r\\n]+?)[\'"]?\\s*$', 'm'));
+    return m ? m[1].trim() : null;
+  }
+  var REL = 'https://github.com/btspl99/bts-studio/releases/latest';
+  btns.forEach(function (b) { if (b) b.href = REL; });
+  fetch('https://api.github.com/repos/btspl99/bts-studio/releases/latest', { headers: { Accept: 'application/vnd.github+json' } })
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (rel) {
+      var exe = (rel.assets || []).filter(function (a) { return /Setup.*\.exe$/i.test(a.name); })[0];
+      if (exe) btns.forEach(function (b) { if (b) b.href = exe.browser_download_url; });
+      if (rel.tag_name && verText) verText.textContent = 'Version ' + rel.tag_name.replace(/^v/, '');
+    })
+    .catch(function () { /* keep link to the releases page */ });
+})();
+</script>
+</body>
+</html>

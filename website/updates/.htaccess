@@ -1,0 +1,66 @@
+# BTS Studio update feed - Apache rules (Hostinger / LiteSpeed compatible)
+
+# No directory listing
+Options -Indexes
+
+# Correct MIME types
+<IfModule mod_mime.c>
+  AddType application/x-yaml .yml .yaml
+  AddType application/octet-stream .exe
+  AddType application/octet-stream .blockmap
+</IfModule>
+
+<IfModule mod_headers.c>
+  # Allow cross-origin GET (website script, external checks)
+  Header set Access-Control-Allow-Origin "*"
+  Header set Access-Control-Allow-Methods "GET, HEAD, OPTIONS"
+
+  # latest.yml must never be cached, so new versions are seen immediately
+  <FilesMatch "\.(yml|yaml)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+    Header unset ETag
+  </FilesMatch>
+
+  # Installers and blockmaps have the version in their name - cache for a long time
+  <FilesMatch "\.(exe|blockmap)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+    Header set X-Content-Type-Options "nosniff"
+  </FilesMatch>
+
+  <FilesMatch "\.exe$">
+    Header set Content-Disposition "attachment"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType application/x-yaml "access plus 0 seconds"
+  ExpiresByType application/octet-stream "access plus 1 year"
+</IfModule>
+
+# Do not gzip binaries (breaks range/differential downloads on some setups)
+<IfModule mod_deflate.c>
+  SetEnvIfNoCase Request_URI "\.(exe|blockmap)$" no-gzip dont-vary
+</IfModule>
+
+# Only allow read methods
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{REQUEST_METHOD} !^(GET|HEAD|OPTIONS)$
+  RewriteRule .* - [F]
+</IfModule>
+
+# Hide this file and other dotfiles
+<FilesMatch "^\.">
+  Require all denied
+</FilesMatch>
+
+# Update files are hosted on GitHub Releases (installer > upload limits).
+# electron-updater requests /updates/latest.yml and /updates/<installer>; send them to the latest release.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteRule ^(latest\.yml|.+\.exe|.+\.blockmap)$ https://github.com/btspl99/bts-studio/releases/latest/download/$1 [R=302,L,NE]
+</IfModule>
