@@ -13,6 +13,7 @@
     if (inp.type === 'slides') tabs.push({ id: 'slides', label: 'Slides', el: slidesTab(inp) });
     if (inp.type === 'guest') tabs.push({ id: 'guest', label: 'Remote Guest', el: guestTab(inp) });
     if (inp.type === 'browser') tabs.push({ id: 'interact', label: 'Interact', el: browserTab(inp) });
+    if (inp.type === 'vset') tabs.push({ id: 'vset', label: 'Virtual Set', el: vsetTab(inp, st) });
     if (inp.hasVideo) {
       tabs.push({ id: 'position', label: 'Position / Crop', el: position(inp) });
       tabs.push({ id: 'color', label: 'Colour Correction', el: colour(inp) });
@@ -648,6 +649,44 @@
       cv,
       U.el('p', { class: 'hint', text: 'Click, scroll and type directly on the page above — e.g. log in to a social-media comments dashboard, start a web scoreboard, or click through a web presentation. What you see here is what goes to air.' })
     );
+    return box;
+  }
+
+  /* ---------- Virtual set ---------- */
+  function vsetTab(inp, st) {
+    const box = U.el('div');
+    const draw = () => {
+      box.innerHTML = '';
+      const c = inp.cfg;
+      const cams = st.inputs.filter(i => i.hasVideo && i !== inp && !['vset', 'title', 'telestrator', 'audio-file'].includes(i.type));
+      const opts = [['', '— none —'], ...cams.map(i => [i.id, `${i.number}. ${i.title}`])];
+      const shots = U.el('div', { class: 'vs-shots' }, c.shots.map((s, n) => U.el('button', { class: 'btn' + (c.shot === n ? ' primary' : ''), text: s.name, onclick: () => { inp.shot(n); draw(); } })));
+      box.append(U.el('h4', { text: 'Camera shots' }), shots,
+        BTS.Dialog.form([
+          { label: 'Move time (ms)', key: 'moveMs', type: 'number', min: 0, max: 5000, step: 100 },
+          { section: 'Set' },
+          { label: 'Set', key: 'set', type: 'select', options: Object.entries(BTS.VirtualSets.SETS).map(([k, v]) => [k, v.name]), onChange: (v) => { const d = BTS.VirtualSets.SETS[v]; c.accent = d.accent; c.shots = U.deepClone(d.shots); c.shot = 0; c.talent = d.talent.map((t, i) => ({ ...t, inputId: (c.talent[i] || {}).inputId || '' })); inp.cam = { ...c.shots[0] }; inp.init().then(draw); } },
+          { label: 'Accent colour', key: 'accent', type: 'color', onChange: () => inp.init() },
+          { label: 'Show desk / table', key: 'desk', type: 'checkbox', onChange: () => inp.init() },
+          { label: 'Background image', key: 'bg', type: 'file', filters: [{ name: 'Images', extensions: U.IMAGE_EXT }], onChange: () => inp.init(), hint: 'Custom set: your own 16:9 background. Leave empty for the built-in set.' },
+          { label: 'Foreground image (PNG)', key: 'fg', type: 'file', filters: [{ name: 'Images', extensions: ['png', 'webp'] }], onChange: () => inp.init(), hint: 'A transparent PNG drawn in front of the presenters, e.g. a desk.' },
+          { label: 'Video wall shows', key: 'screenInputId', type: 'select', options: opts }
+        ], c));
+      const tbl = U.el('table', { class: 'tbl' });
+      tbl.append(U.el('tr', {}, ['Presenter', 'Input', 'X (centre)', 'Top', 'Height', ''].map(h => U.el('th', { text: h }))));
+      c.talent.forEach((t, n) => {
+        const sel = U.el('select'); for (const [v, l] of opts) sel.append(U.el('option', { value: v, text: l, selected: v === t.inputId }));
+        sel.onchange = () => { t.inputId = sel.value; st._updateLive && st._updateLive(); };
+        const num = (k) => { const e = U.el('input', { type: 'number', step: 0.01, min: 0, max: 2, value: t[k], style: { width: '70px' } }); e.oninput = () => { t[k] = +e.value; }; return e; };
+        tbl.append(U.el('tr', {}, [U.el('td', { text: String(n + 1) }), U.el('td', {}, [sel]), U.el('td', {}, [num('x')]), U.el('td', {}, [num('y')]), U.el('td', {}, [num('h')]),
+          U.el('td', {}, [U.el('button', { class: 'tbtn small', text: '✕', onclick: () => { c.talent.splice(n, 1); draw(); } })])]));
+      });
+      box.append(U.el('h4', { text: 'Presenters' }), tbl, U.el('div', { class: 'rp-row' }, [
+        U.el('button', { class: 'btn', text: '＋ Presenter', onclick: () => { c.talent.push({ x: 0.5, y: 0.15, h: 0.8, inputId: '' }); draw(); } }),
+        U.el('button', { class: 'btn', text: '＋ Save current view as shot', onclick: async () => { const name = await BTS.Dialog.prompt('Shot name', 'Shot ' + (c.shots.length + 1)); if (name) { c.shots.push({ name, ...inp.cam }); draw(); } } })
+      ]), U.el('p', { class: 'hint', text: 'Enable Chroma Key in each presenter\'s Keying tab. X/Top/Height are fractions of the frame (0–1).' }));
+    };
+    draw();
     return box;
   }
 

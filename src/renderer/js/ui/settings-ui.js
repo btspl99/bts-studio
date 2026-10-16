@@ -104,11 +104,15 @@
     api.append(F([
       { label: 'Enable Web Controller & API', key: 'enabled', type: 'checkbox' },
       { label: 'Port', key: 'port', type: 'number', min: 1024, max: 65535 },
-      { label: 'Allow other devices (LAN)', key: 'allowRemote', type: 'checkbox' }
+      { label: 'Allow other devices (LAN)', key: 'allowRemote', type: 'checkbox' },
+      { label: 'TCP API (vMix-compatible)', key: 'tcpEnabled', type: 'checkbox' },
+      { label: 'TCP port', key: 'tcpPort', type: 'number', min: 1024, max: 65535 }
     ], s.api), U.el('div', { style: { marginTop: '12px', lineHeight: '1.8' } }, [
       U.el('div', { html: `<b>Web Controller</b> (phone/tablet): ${['127.0.0.1', ...addrs].map(a => `<span class="kbd">http://${a}:${s.api.port}/</span>`).join(' ')}` }),
       U.el('div', { html: `<b>Tally</b>: <span class="kbd">http://IP:${s.api.port}/tally/?input=1</span>` }),
-      U.el('div', { html: `<b>API</b>: <span class="kbd">http://127.0.0.1:${s.api.port}/api/?Function=Cut&amp;Input=2</span> • state: <span class="kbd">/api</span> (JSON) or <span class="kbd">/api?format=xml</span> • list: <span class="kbd">/api/functions</span>` })
+      U.el('div', { html: `<b>API</b>: <span class="kbd">http://127.0.0.1:${s.api.port}/api/?Function=Cut&amp;Input=2</span> • state: <span class="kbd">/api</span> (JSON) or <span class="kbd">/api?format=xml</span> • list: <span class="kbd">/api/functions</span>` }),
+      U.el('div', { html: `<b>Live preview</b> (MJPEG): <span class="kbd">http://IP:${s.api.port}/api/mjpeg?Input=program&amp;fps=10&amp;width=640</span>` }),
+      U.el('div', { html: `<b>TCP API</b>: port <span class="kbd">${s.api.tcpPort || 8099}</span> — <span class="kbd">FUNCTION Cut Input=2</span> · <span class="kbd">TALLY</span> · <span class="kbd">SUBSCRIBE TALLY</span> · <span class="kbd">XML</span> (Companion / Stream Deck / tally boxes)` })
     ]));
 
     s.guests = s.guests || {}; s.media = s.media || {};

@@ -18,6 +18,7 @@ const replay = require('./replay');
 const media = require('./media');
 const guests = require('./guests');
 const dataFiles = require('./dataFiles');
+const ptz = require('./ptz');
 
 log.initialize();
 log.transports.file.level = 'info';
@@ -76,7 +77,7 @@ const DEFAULT_SETTINGS = {
     filenamePattern: 'BTS-Studio-{date}-{time}'
   },
   record2: { enabled: false, format: 'mkv', mode: 'encode', encoder: 'libx264', quality: 'medium', videoBitrate: 12000, suffix: '-2' },
-  api: { enabled: true, port: 8088, allowRemote: true },
+  api: { enabled: true, port: 8088, allowRemote: true, tcpEnabled: true, tcpPort: 8099 },
   guests: { port: 8089, stun: 'stun:stun.l.google.com:19302', turn: '', turnUser: '', turnPass: '' },
   media: { autoConvert: true, convertQuality: 'fast' },
   updates: { autoCheck: true, url: '' },
@@ -221,7 +222,7 @@ function restartApi() {
   api.stop();
   if (settings.api.enabled) {
     api.start({
-      port: settings.api.port, allowRemote: settings.api.allowRemote, getWin: () => mainWin,
+      port: settings.api.port, allowRemote: settings.api.allowRemote, tcpPort: settings.api.tcpEnabled === false ? 0 : (settings.api.tcpPort || 8099), getWin: () => mainWin,
       webRoot: path.join(ROOT, 'web')
     }).catch(err => log.error('API start failed', err));
   }
@@ -399,6 +400,7 @@ function registerIpc() {
   media.registerIpc(ipcMain);
   guests.registerIpc(ipcMain);
   dataFiles.registerIpc(ipcMain);
+  ptz.registerIpc(ipcMain);
   api.registerIpc(ipcMain);
   updater.registerIpc(ipcMain);
 }
@@ -438,5 +440,5 @@ if (!gotLock) {
   });
 
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-  app.on('before-quit', () => { outputs.stopAll(); browserSources.destroyAll(); streamInputs.stopAll(); replay.stopAll(); guests.stop(); api.stop(); });
+  app.on('before-quit', () => { outputs.stopAll(); browserSources.destroyAll(); streamInputs.stopAll(); replay.stopAll(); guests.stop(); ptz.closeAll(); api.stop(); });
 }

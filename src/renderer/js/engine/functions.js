@@ -112,6 +112,20 @@
   def('TelestratorOpen', 'Telestrator', [], () => { BTS.TelestratorUI.open(); return true; });
   def('TelestratorClear', 'Telestrator', [], async () => { (await tele()).clear(); return true; });
   def('TelestratorUndo', 'Telestrator', [], async () => { (await tele()).undo(); return true; });
+  // PTZ (VISCA over IP) — Input = camera input with PTZ configured (defaults to the one selected in the PTZ module)
+  const ptzOf = (p) => { const i = p.Input != null && p.Input !== '' ? S().resolve(p.Input) : BTS.ptzUI && BTS.ptzUI.cam; const c = i && (i.type === 'virtual' ? i.ptz : i.cfg.ptz); if (!c || !c.host) throw new Error('No PTZ camera configured'); return c; };
+  const ptzRes = (r) => (r && r.ok === false ? { ok: false, error: r.error } : true);
+  const sp = (p) => U.clamp(num(p.Value, 50) / 100, 0.05, 1);
+  for (const [n, x, y] of [['Up', 0, -1], ['Down', 0, 1], ['Left', -1, 0], ['Right', 1, 0], ['UpLeft', -1, -1], ['UpRight', 1, -1], ['DownLeft', -1, 1], ['DownRight', 1, 1]]) def(`PTZMove${n}`, 'PTZ', ['Input?', 'Value?'], async (p) => ptzRes(await window.bts.ptz.move(ptzOf(p), x * sp(p), y * sp(p))), `Value = speed 1-100`);
+  def('PTZMoveStop', 'PTZ', ['Input?'], async (p) => ptzRes(await window.bts.ptz.stop(ptzOf(p))));
+  def('PTZZoomIn', 'PTZ', ['Input?', 'Value?'], async (p) => ptzRes(await window.bts.ptz.zoom(ptzOf(p), sp(p))));
+  def('PTZZoomOut', 'PTZ', ['Input?', 'Value?'], async (p) => ptzRes(await window.bts.ptz.zoom(ptzOf(p), -sp(p))));
+  def('PTZZoomStop', 'PTZ', ['Input?'], async (p) => ptzRes(await window.bts.ptz.zoom(ptzOf(p), 0)));
+  def('PTZHome', 'PTZ', ['Input?'], async (p) => ptzRes(await window.bts.ptz.home(ptzOf(p))));
+  def('PTZFocusAuto', 'PTZ', ['Input?'], async (p) => ptzRes(await window.bts.ptz.focus(ptzOf(p), 'auto')));
+  def('PTZRecallPreset', 'PTZ', ['Input?', 'Value'], async (p) => ptzRes(await window.bts.ptz.recall(ptzOf(p), num(p.Value, 1) - 1)), 'Value = preset 1-128');
+  def('PTZStorePreset', 'PTZ', ['Input?', 'Value'], async (p) => ptzRes(await window.bts.ptz.store(ptzOf(p), num(p.Value, 1) - 1)));
+  def('VirtualSetShot', 'Virtual Set', ['Input', 'Value'], (p) => { const i = need(inp(p)); if (i.type !== 'vset') throw new Error('Not a Virtual Set input'); const v = String(p.Value ?? '1'); const n = isNaN(+v) ? i.cfg.shots.findIndex(s => s.name.toLowerCase() === v.toLowerCase()) : +v - 1; if (!i.shot(n)) throw new Error('No such shot'); return true; }, 'Value = shot number (1 = Wide) or name');
   def('SlideNext', 'Slides', ['Input?'], (p) => { need(inp(p)).next(); return true; });
   def('SlidePrevious', 'Slides', ['Input?'], (p) => { need(inp(p)).prev(); return true; });
   def('SlideSelect', 'Slides', ['Input', 'Value'], (p) => { const i = need(inp(p)); i.load(num(p.Value, 1) - 1); return true; });

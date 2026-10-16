@@ -172,6 +172,10 @@
       const st = this.studio, M = st.macros;
       let cur = M.list[0]?.id;
       return floatPanel('scripts', '⚡ Scripts', (p) => {
+        const newBtns = () => U.el('div', { style: { display: 'grid', gap: '4px', marginTop: '6px' } }, [
+          U.el('button', { class: 'btn', text: '＋ Step script', onclick: () => { cur = M.add('Script ' + (M.list.length + 1)).id; draw(); } }),
+          U.el('button', { class: 'btn', text: '＋ JavaScript', onclick: () => { cur = M.add('JS Script ' + (M.list.length + 1), 'js').id; draw(); } })
+        ]);
         const draw = () => {
           p.body.innerHTML = '';
           const left = U.el('div', { class: 'list', style: { maxHeight: '320px' } });
@@ -186,7 +190,21 @@
           const right = U.el('div');
           if (m) {
             const loop = U.el('input', { type: 'checkbox' }); loop.checked = m.loop; loop.onchange = () => { m.loop = loop.checked; };
-            right.append(U.el('div', { class: 'rp-row' }, [txt(m.name, 'Name', (v) => { m.name = v || m.name; M.emit('change'); })]), U.el('label', { class: 'rp-row' }, [loop, ' Loop until stopped']));
+            right.append(U.el('div', { class: 'rp-row' }, [txt(m.name, 'Name', (v) => { m.name = v || m.name; M.emit('change'); }), U.el('span', { class: 'hint', text: m.kind === 'js' ? 'JavaScript' : 'Steps' })]), U.el('label', { class: 'rp-row' }, [loop, ' Loop until stopped']));
+            if (m.kind === 'js') {
+              const ed = U.el('textarea', { class: 'script-code', spellcheck: false, rows: 18 });
+              ed.value = m.code || '';
+              ed.oninput = () => { m.code = ed.value; };
+              ed.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Tab') { e.preventDefault(); const a = ed.selectionStart; ed.setRangeText('  ', a, ed.selectionEnd, 'end'); m.code = ed.value; } if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); M.run(m.id); } };
+              right.append(ed, U.el('div', { class: 'rp-row' }, [
+                U.el('button', { class: 'btn primary', text: '▶ Run (Ctrl+Enter)', onclick: () => M.run(m.id) }), U.el('button', { class: 'btn', text: '■ Stop', onclick: () => M.stop(m.id) }),
+                U.el('button', { class: 'btn', text: 'API help', onclick: () => { if (!/API\.Cut/.test(m.code)) { m.code = BTS.Macros.SCRIPT_HELP + '\n' + (m.code || ''); draw(); } } }),
+                U.el('button', { class: 'btn danger', text: 'Delete', onclick: () => { M.remove(m.id); cur = M.list[0]?.id; draw(); } })
+              ]), U.el('div', { class: 'hint', text: `Scripts run with full access to BTS Studio — only run code you trust. Start from a shortcut, MIDI, trigger or the API: ScriptStart Value=${m.name}` }));
+              p.body.append(U.el('div', { style: { display: 'grid', gridTemplateColumns: '170px 1fr', gap: '10px' } }, [
+                U.el('div', {}, [left, newBtns()]), right]));
+              return;
+            }
             const tbl = U.el('table', { class: 'tbl' });
             tbl.append(U.el('tr', {}, ['Wait ms', 'Function', 'Input', 'Value', ''].map(h => U.el('th', { text: h }))));
             m.steps.forEach((s, i) => tbl.append(U.el('tr', {}, [
@@ -203,7 +221,7 @@
             ]), U.el('div', { class: 'hint', text: `Run from a shortcut, MIDI, a trigger or the API: ScriptStart Value=${m.name}` }));
           }
           p.body.append(U.el('div', { style: { display: 'grid', gridTemplateColumns: '170px 1fr', gap: '10px' } }, [
-            U.el('div', {}, [left, U.el('button', { class: 'btn', style: { marginTop: '6px', width: '100%' }, text: '＋ New script', onclick: () => { cur = M.add('Script ' + (M.list.length + 1)).id; draw(); } })]), right]));
+            U.el('div', {}, [left, newBtns()]), right]));
         };
         draw();
         const off = M.on('change', draw);

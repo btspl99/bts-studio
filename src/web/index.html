@@ -33,6 +33,7 @@ input[type=range]{accent-color:var(--a);padding:0}
 <header><b><span>BTS</span> Studio</b><span class="dot" id="conn"></span><span class="sp"></span><span id="clock"></span></header>
 <main>
   <div class="mon"><div><span>PREVIEW</span><img id="pv" alt="Preview"></div><div class="pg"><span>OUTPUT</span><img id="pg" alt="Output"></div></div>
+  <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--fg2)"><input type="checkbox" id="liveMon" style="flex:0 0 auto"> Live video monitors (uses more Wi-Fi bandwidth)</label>
   <div class="bar">
     <button class="amber" data-f="QuickPlay">Quick Play</button><button data-f="Cut">Cut</button>
     <button data-f="Transition1" id="t1">Trans 1</button><button data-f="Transition2" id="t2">Trans 2</button>
@@ -71,7 +72,10 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset.fie
 function renderAudio(){$('#audio').innerHTML=`<div class="row"><label>Master</label><input type="range" min="0" max="100" value="${S.master.volume}" oninput="call('SetMasterVolume',{Value:this.value})"><button onclick="call('MasterAudio')">Mute</button></div>`+S.inputs.filter(i=>i.volume!=null).map(i=>`<div class="row"><label>${i.number}. ${esc(i.title)}</label><input type="range" min="0" max="100" data-vol="${i.id}" value="${i.volume}" oninput="call('SetVolume',{Input:'${i.id}',Value:this.value})"><button onclick="call('Audio',{Input:'${i.id}'})">${i.muted?'🔇':'🔊'}</button></div>`).join('')}
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function poll(){try{const r=await fetch('/api');S=await r.json();$('#conn').className='dot ok';render()}catch{$('#conn').className='dot'}setTimeout(poll,500)}
-let thumbIdx=0;function thumbs(){const t=Date.now();$('#pv').src='/api/thumb?Input=preview&t='+t;$('#pg').src='/api/thumb?Input=program&t='+t;const imgs=[...document.querySelectorAll('[data-thumb]')];if(imgs.length){const im=imgs[thumbIdx++%imgs.length];im.src='/api/thumb?Input='+im.dataset.thumb+'&t='+t}}
+let thumbIdx=0;let live=false;try{live=localStorage.getItem('bts-live')==='1'}catch(e){}
+function setLive(on){live=on;try{localStorage.setItem('bts-live',on?'1':'0')}catch(e){}$('#liveMon').checked=on;if(on){$('#pv').src='/api/mjpeg?Input=preview&fps=10&width=640';$('#pg').src='/api/mjpeg?Input=program&fps=15&width=640'}else{$('#pv').removeAttribute('src');$('#pg').removeAttribute('src')}}
+$('#liveMon').onchange=e=>setLive(e.target.checked);setLive(live);
+function thumbs(){const t=Date.now();if(!live){$('#pv').src='/api/thumb?Input=preview&t='+t;$('#pg').src='/api/thumb?Input=program&t='+t}const imgs=[...document.querySelectorAll('[data-thumb]')];if(imgs.length){const im=imgs[thumbIdx++%imgs.length];im.src='/api/thumb?Input='+im.dataset.thumb+'&t='+t}}
 setInterval(thumbs,700);setInterval(()=>$('#clock').textContent=new Date().toLocaleTimeString(),1000);poll();
 </script>
 </body>

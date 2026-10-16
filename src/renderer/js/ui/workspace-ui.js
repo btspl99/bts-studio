@@ -32,10 +32,12 @@
         playlist: m('Playlist', '☰', '#playlistModule'),
         scripts: m('Scripts', 'ϟ', '#scriptsModule'),
         scopes: m('Scopes', '◫', '#scopesModule', { onShow: () => BTS.scopesUI && BTS.scopesUI.setVisible(true), onHide: () => BTS.scopesUI && BTS.scopesUI.setVisible(false) }),
+        ptz: m('PTZ Control', '✥', '#ptzModule'),
         stats: m('Statistics', '▤', '#statsModule', { onShow: () => { this.statsOn = true; this.renderStats(); }, onHide: () => { this.statsOn = false; } })
       };
       BTS.replayUI = new BTS.ReplayUI(studio, U.$('#replayModule'));
       BTS.scopesUI = new BTS.ScopesUI(studio, U.$('#scopesModule'));
+      BTS.ptzUI = new BTS.PtzUI(studio, U.$('#ptzModule'));
       this.layout = BTS.layout = new BTS.Layout(U.$('#workspace'), U.$('#moduleStash'), this.modules);
       this.layout.on('change', () => this.syncBar());
       this.layout.on('resize', () => BTS.ui && BTS.ui._fitSafe && BTS.ui._fitSafe());

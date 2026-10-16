@@ -274,6 +274,7 @@
       for (const o of this.overlays) if (o.inputId && o.state !== 'off') this._collect(this.byId(o.inputId), set);
       for (const inp of this.inputs) inp.setLive(set.has(inp));
       this.liveSet = set;
+      this.emit('live-changed');
     }
 
     /* ---------------- render loop ---------------- */
@@ -436,13 +437,15 @@
     }
 
     snapshot() { return this.programCanvas.toDataURL('image/png'); }
-    thumbOf(ref) {
-      const c = document.createElement('canvas'); c.width = 480; c.height = 270;
-      const ctx = c.getContext('2d'); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 480, 270);
-      if (ref === 'program') ctx.drawImage(this.programCanvas, 0, 0, 480, 270);
-      else if (ref === 'preview') ctx.drawImage(this.previewCanvas, 0, 0, 480, 270);
-      else { const i = this.resolve(ref); if (i) { if (i.type === 'title' && !i.live) i.drawStatic(ctx, 0, 0, 480, 270); else i.draw(ctx, 0, 0, 480, 270); } }
-      return c.toDataURL('image/jpeg', 0.7);
+    thumbOf(ref, width = 480, quality = 0.7) {
+      const W = U.clamp(Math.round(+width || 480), 64, 1920), H = Math.round(W * 9 / 16);
+      const c = this._thumbC || (this._thumbC = document.createElement('canvas')); c.width = W; c.height = H;
+      const ctx = c.getContext('2d'); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+      if (ref === 'program') ctx.drawImage(this.programCanvas, 0, 0, W, H);
+      else if (ref === 'preview') ctx.drawImage(this.previewCanvas, 0, 0, W, H);
+      else if (ref === 'multiview') ctx.drawImage(this.multiviewCanvas, 0, 0, W, H);
+      else { const i = this.resolve(ref); if (i) { if (i.type === 'title' && !i.live) i.drawStatic(ctx, 0, 0, W, H); else i.draw(ctx, 0, 0, W, H); } }
+      return c.toDataURL('image/jpeg', quality);
     }
 
     /* ---------------- project ---------------- */

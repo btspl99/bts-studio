@@ -19,6 +19,7 @@
     ['mix', '🔀', 'Mix', 'A second, independent switcher'],
     ['delay', '⏱️', 'Video Delay', 'Delay any input by up to 10 s'],
     ['telestrator', '✍️', 'Telestrator', 'Draw arrows & circles on air'],
+    ['vset', '🏙️', 'Virtual Set', 'Green-screen presenters in a studio'],
     ['audio', '🎙️', 'Audio Input', 'Microphone / line-in'],
     ['audio-file', '🎵', 'Audio File', 'MP3, WAV, AAC, FLAC']
   ];
@@ -426,6 +427,28 @@
         if (!o.sourceId) { U.toast('Choose a source', 'error'); return null; }
         const src = st.byId(o.sourceId);
         return [{ type: 'delay', title: o.title || `${src.title} (+${(o.delayMs / 1000).toFixed(1)}s)`, cfg: { sourceId: o.sourceId, delayMs: o.delayMs, height: o.height } }];
+      };
+    },
+
+    async vset(el, st) {
+      const cams = st.inputs.filter(i => i.hasVideo && !['vset', 'title', 'telestrator', 'audio-file'].includes(i.type));
+      const o = { set: 'news', talent1: cams[0]?.id || '', talent2: '', screen: '', keyGreen: true, title: '' };
+      const opts = [['', '— none —'], ...cams.map(i => [i.id, `${i.number}. ${i.title}`])];
+      el.innerHTML = '';
+      el.append(BTS.Dialog.form([
+        { label: 'Set', key: 'set', type: 'select', options: Object.entries(BTS.VirtualSets.SETS).map(([k, v]) => [k, v.name]) },
+        { label: 'Presenter 1', key: 'talent1', type: 'select', options: opts },
+        { label: 'Presenter 2', key: 'talent2', type: 'select', options: opts },
+        { label: 'Video wall shows', key: 'screen', type: 'select', options: opts },
+        { label: 'Turn on green-screen keying for presenters', key: 'keyGreen', type: 'checkbox' },
+        { label: 'Title', key: 'title', placeholder: 'Optional' }
+      ], o));
+      el.append(U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'Presenters stand in front of a green (or blue) screen; their camera is keyed and placed into the set. Switch between Wide and Close-up shots with smooth virtual camera moves (Input Settings → Virtual Set, or the VirtualSetShot function). Use "Custom" with your own background / desk images.' }));
+      return () => {
+        const def = BTS.VirtualSets.SETS[o.set];
+        const talent = def.talent.map((t, i) => ({ ...t, inputId: [o.talent1, o.talent2][i] || '' }));
+        if (o.keyGreen) for (const id of [o.talent1, o.talent2]) { const i = st.byId(id); if (i && i.props.effects && i.props.effects.chroma) i.props.effects.chroma.enabled = true; }
+        return [{ type: 'vset', title: o.title || def.name, cfg: { set: o.set, talent, screenInputId: o.screen } }];
       };
     },
 

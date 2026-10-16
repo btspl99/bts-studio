@@ -31,13 +31,17 @@
     window.bts.onMenu((m) => BTS.ui.handleMenu(m));
     window.bts.api.onCall(async ({ reqId, fn, params }) => {
       let r;
-      if (fn === '__thumb') { try { r = { ok: true, data: st.thumbOf(params.Input) }; } catch (e) { r = { ok: false, error: e.message }; } }
+      if (fn === '__thumb') { try { r = { ok: true, data: st.thumbOf(params.Input, params.Width, params.Quality ? +params.Quality : undefined) }; } catch (e) { r = { ok: false, error: e.message }; } }
       else r = await BTS.Functions.call(fn, params || {});
       window.bts.api.result(reqId, r);
     });
     window.bts.api.functions(BTS.Functions.all());
     setTimeout(() => window.bts.output.encoders(), 3000); // warm encoder probe cache
-    setInterval(() => { try { window.bts.api.state(st.apiState()); } catch (e) { /* noop */ } }, 400);
+    const pushState = () => { try { window.bts.api.state(st.apiState()); } catch (e) { /* noop */ } };
+    setInterval(pushState, 400);
+    // push immediately on switching so tally (HTTP / TCP) follows within a frame
+    let pushT = 0; const pushSoon = () => { if (!pushT) pushT = setTimeout(() => { pushT = 0; pushState(); }, 15); };
+    st.on('live-changed', pushSoon); st.on('overlays', pushSoon); st.on('transition', pushSoon); st.on('bus', pushSoon);
 
     window.bts.browser.onFrame((id, w, h, buf) => { const i = st.byId(id); if (i && i.onFrame) i.onFrame(w, h, buf); });
     window.bts.browser.onStatus((id, s) => {

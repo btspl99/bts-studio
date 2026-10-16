@@ -5,9 +5,18 @@
  *   GET /api/?Function=Cut&Input=2   -> run a function
  *   POST /api  {"Function":"SetText","Input":"Score","SelectedName":"Runs","Value":"120"}
  *   GET /api/functions               -> list of available functions
+ *   GET /api/mjpeg?Input=program&fps=10&width=640 -> live MJPEG preview (program, preview, multiview or any input)
  *   GET /                            -> web controller, /tally/ -> tally light page
+ *
+ * TCP API (vMix-compatible text protocol, default port 8099), one command per line:
+ *   FUNCTION Cut Input=2&Duration=500   -> FUNCTION OK Completed
+ *   XML                                  -> XML <bytes>\r\n<xml>
+ *   TALLY                                -> TALLY OK 0120   (0 off, 1 program, 2 preview per input)
+ *   SUBSCRIBE TALLY | SUBSCRIBE ACTS     -> pushes TALLY / ACTS lines on change;  UNSUBSCRIBE TALLY|ACTS
+ *   VERSION, QUIT
  */
 const http = require('http');
+const net = require('net');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -15,6 +24,9 @@ const crypto = require('crypto');
 const log = require('electron-log/main');
 
 let server = null;
+let tcpServer = null;
+const tcpClients = new Set();
+const mjpeg = new Map(); // key -> { clients:Set<res>, timer, busy }
 let state = { inputs: [], preview: null, active: null, overlays: [], streaming: false, recording: false };
 let functions = [];
 const pending = new Map();
@@ -76,8 +88,34 @@ async function handle(req, res) {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify(functions));
   }
+  if (p === '/api/mjpeg') {
+    const input = url.searchParams.get('Input') || 'program';
+    const fps = Math.max(1, Math.min(25, +url.searchParams.get('fps') || 10));
+    const width = Math.max(160, Math.min(1280, +url.searchParams.get('width') || 640));
+    const key = `${input}|${fps}|${width}`;
+    res.writeHead(200, { 'Content-Type': 'multipart/x-mixed-replace; boundary=btsframe', 'Cache-Control': 'no-store, no-cache', Pragma: 'no-cache', Connection: 'close' });
+    let m = mjpeg.get(key);
+    if (!m) {
+      m = { clients: new Set(), busy: false };
+      m.timer = setInterval(async () => {
+        if (m.busy) return; m.busy = true;
+        try {
+          const r = await callRenderer('__thumb', { Input: input, Width: width, Quality: 0.72 });
+          if (r.ok && r.data) {
+            const buf = Buffer.from(r.data.split(',')[1], 'base64');
+            const head = `--btsframe\r\nContent-Type: image/jpeg\r\nContent-Length: ${buf.length}\r\n\r\n`;
+            for (const c of m.clients) { try { c.write(head); c.write(buf); c.write('\r\n'); } catch { /* client gone */ } }
+          }
+        } finally { m.busy = false; }
+      }, 1000 / fps);
+      mjpeg.set(key, m);
+    }
+    m.clients.add(res);
+    req.on('close', () => { m.clients.delete(res); if (!m.clients.size) { clearInterval(m.timer); mjpeg.delete(key); } });
+    return;
+  }
   if (p === '/api/thumb') {
-    const r = await callRenderer('__thumb', { Input: url.searchParams.get('Input') || 'program' });
+    const r = await callRenderer('__thumb', { Input: url.searchParams.get('Input') || 'program', Width: url.searchParams.get('width') || 480 });
     if (!r.ok || !r.data) { res.writeHead(404); return res.end(); }
     res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store' });
     return res.end(Buffer.from(r.data.split(',')[1], 'base64'));
@@ -101,10 +139,100 @@ function start(o) {
     server = http.createServer((req, res) => handle(req, res).catch(err => { log.error('API error', err); try { res.writeHead(500); res.end(String(err.message)); } catch { /* noop */ } }));
     server.on('error', (err) => { log.error('API server error', err.message); reject(err); });
     server.listen(o.port, o.allowRemote ? '0.0.0.0' : '127.0.0.1', () => { log.info(`API listening on ${o.port}`); resolve(); });
+    if (o.tcpPort) startTcp(o.tcpPort, o.allowRemote ? '0.0.0.0' : '127.0.0.1');
   });
 }
 
-function stop() { if (server) { try { server.close(); } catch { /* noop */ } server = null; } }
+function stop() {
+  for (const m of mjpeg.values()) { clearInterval(m.timer); for (const c of m.clients) { try { c.end(); } catch { /* noop */ } } }
+  mjpeg.clear();
+  if (server) { try { server.close(); } catch { /* noop */ } server = null; }
+  stopTcp();
+}
+
+/* ---------------- TCP API ---------------- */
+function tallyString(s) {
+  const ovl = new Set((s.overlays || []).filter(Boolean));
+  return (s.inputs || []).map(i => (i.number === s.active || ovl.has(i.number) || (i.live && i.type !== 'audio')) ? '1' : i.number === s.preview ? '2' : '0').join('');
+}
+function actsLines(prev, s) {
+  const out = [];
+  const add = (name, val, n) => out.push(`ACTS OK ${name} ${n != null ? n + ' ' : ''}${val}`);
+  if (!prev || prev.active !== s.active) add('Input', 1, s.active);
+  if (!prev || prev.preview !== s.preview) add('InputPreview', 1, s.preview);
+  (s.overlays || []).forEach((v, k) => { if (!prev || (prev.overlays || [])[k] !== v) add(`Overlay${k + 1}`, v ? 1 : 0, v || 0); });
+  if (!prev || prev.recording !== s.recording) add('Recording', s.recording ? 1 : 0);
+  if (!prev || prev.streaming !== s.streaming) add('Streaming', s.streaming ? 1 : 0);
+  if (!prev || prev.ftb !== s.ftb) add('FadeToBlack', s.ftb ? 1 : 0);
+  return out;
+}
+function startTcp(port, host) {
+  stopTcp();
+  tcpServer = net.createServer((sock) => {
+    const c = { sock, tally: false, acts: false, buf: '' };
+    tcpClients.add(c);
+    sock.setNoDelay(true);
+    const send = (line) => { try { sock.write(line + '\r\n'); } catch { /* noop */ } };
+    sock.on('data', async (d) => {
+      c.buf += d.toString('utf8');
+      if (c.buf.length > 1e6) { sock.destroy(); return; }
+      let i;
+      while ((i = c.buf.indexOf('\n')) >= 0) {
+        const line = c.buf.slice(0, i).replace(/\r$/, '').trim(); c.buf = c.buf.slice(i + 1);
+        if (!line) continue;
+        const sp = line.indexOf(' ');
+        const cmd = (sp < 0 ? line : line.slice(0, sp)).toUpperCase();
+        const arg = sp < 0 ? '' : line.slice(sp + 1).trim();
+        try {
+          if (cmd === 'FUNCTION') {
+            const fsp = arg.indexOf(' ');
+            const fn = fsp < 0 ? arg : arg.slice(0, fsp);
+            const params = Object.fromEntries(new URLSearchParams(fsp < 0 ? '' : arg.slice(fsp + 1)).entries());
+            if (!fn) { send('FUNCTION ER Missing function name'); continue; }
+            const r = await callRenderer(fn, params);
+            send(r.ok ? `FUNCTION OK ${r.data !== undefined && typeof r.data !== 'object' ? r.data : 'Completed'}` : `FUNCTION ER ${String(r.error || 'Error').replace(/[\r\n]+/g, ' ')}`);
+          } else if (cmd === 'XML') {
+            const x = Buffer.from(toXml(state), 'utf8');
+            send(`XML ${x.length}`); sock.write(x);
+          } else if (cmd === 'XMLTEXT') {
+            send(`XMLTEXT ER XPath queries are not supported; use XML`);
+          } else if (cmd === 'TALLY') send(`TALLY OK ${tallyString(state)}`);
+          else if (cmd === 'SUBSCRIBE') {
+            const what = arg.toUpperCase();
+            if (what === 'TALLY') { c.tally = true; send('SUBSCRIBE OK TALLY'); send(`TALLY OK ${tallyString(state)}`); }
+            else if (what === 'ACTS') { c.acts = true; send('SUBSCRIBE OK ACTS'); for (const l of actsLines(null, state)) send(l); }
+            else send('SUBSCRIBE ER Unknown subscription');
+          } else if (cmd === 'UNSUBSCRIBE') {
+            const what = arg.toUpperCase(); if (what === 'TALLY') c.tally = false; if (what === 'ACTS') c.acts = false; send(`UNSUBSCRIBE OK ${what}`);
+          } else if (cmd === 'VERSION') send(`VERSION OK ${state.version || ''}`);
+          else if (cmd === 'QUIT') { send('QUIT OK Bye'); sock.end(); }
+          else send(`${cmd} ER Unknown command`);
+        } catch (e) { send(`${cmd} ER ${e.message}`); }
+      }
+    });
+    sock.on('close', () => tcpClients.delete(c));
+    sock.on('error', () => tcpClients.delete(c));
+    send('VERSION OK ' + (state.version || ''));
+  });
+  tcpServer.on('error', (err) => log.error('TCP API error', err.message));
+  tcpServer.listen(port, host, () => log.info(`TCP API listening on ${port}`));
+}
+function stopTcp() {
+  for (const c of tcpClients) { try { c.sock.destroy(); } catch { /* noop */ } }
+  tcpClients.clear();
+  if (tcpServer) { try { tcpServer.close(); } catch { /* noop */ } tcpServer = null; }
+}
+let lastPushed = null;
+function pushSubscriptions(s) {
+  if (!tcpClients.size) { lastPushed = s; return; }
+  const t = tallyString(s), tPrev = lastPushed ? tallyString(lastPushed) : null;
+  const acts = actsLines(lastPushed, s);
+  for (const c of tcpClients) {
+    if (c.tally && t !== tPrev) { try { c.sock.write(`TALLY OK ${t}\r\n`); } catch { /* noop */ } }
+    if (c.acts && acts.length) { try { c.sock.write(acts.join('\r\n') + '\r\n'); } catch { /* noop */ } }
+  }
+  lastPushed = s;
+}
 
 function lanAddresses() {
   return Object.values(os.networkInterfaces()).flat().filter(i => i && i.family === 'IPv4' && !i.internal).map(i => i.address);
@@ -112,7 +240,7 @@ function lanAddresses() {
 
 function registerIpc(ipcMain) {
   ipcMain.on('api:result', (e, { reqId, result }) => { const cb = pending.get(reqId); if (cb) { pending.delete(reqId); cb(result); } });
-  ipcMain.on('state:update', (e, s) => { state = s; });
+  ipcMain.on('state:update', (e, s) => { state = s; pushSubscriptions(s); });
   ipcMain.on('api:functions', (e, list) => { functions = list; });
   ipcMain.handle('api:addresses', () => lanAddresses());
 }

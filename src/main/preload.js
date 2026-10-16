@@ -100,6 +100,17 @@ contextBridge.exposeInMainWorld('bts', {
     mtime: (f) => ipcRenderer.invoke('data:mtime', f),
     writeAsset: (rel, d) => ipcRenderer.invoke('assets:write', rel, d)
   },
+  ptz: {
+    move: (c, x, y) => ipcRenderer.invoke('ptz:move', c, x, y),
+    stop: (c) => ipcRenderer.invoke('ptz:stop', c),
+    zoom: (c, v) => ipcRenderer.invoke('ptz:zoom', c, v),
+    focus: (c, m) => ipcRenderer.invoke('ptz:focus', c, m),
+    home: (c) => ipcRenderer.invoke('ptz:home', c),
+    recall: (c, n) => ipcRenderer.invoke('ptz:recall', c, n),
+    store: (c, n) => ipcRenderer.invoke('ptz:store', c, n),
+    power: (c, on) => ipcRenderer.invoke('ptz:power', c, on),
+    presetSpeed: (c, s) => ipcRenderer.invoke('ptz:preset-speed', c, s)
+  },
   guests: {
     start: () => ipcRenderer.invoke('guests:start'),
     stop: () => ipcRenderer.invoke('guests:stop'),
