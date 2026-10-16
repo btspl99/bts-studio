@@ -1,5 +1,48 @@
 # Changelog
 
+## 1.3.0 — 2026-10-17
+
+The vMix feature-parity release.
+
+### Switcher & outputs
+- **8 overlay channels** (was 4) and **8 stingers** (was 2).
+- **Mix inputs** — independent second switchers with their own preview, Cut and transitions (MixCut / MixFade / MixPreviewInput functions).
+- **Video Delay input** — delay any input by up to 10 s (picture and sound).
+- **6 external outputs** — each shows Output, Preview, Multiview or any single input, on any screen or in a window.
+- **5 stream destinations** (was 3); each can carry the Master or any bus as its audio.
+- **Recorder 2** — a second recording that starts with Record (e.g. MP4 + MKV safety copy).
+
+### Video
+- **Colour wheels** — Lift / Gamma / Gain with master sliders, looks (Warm, Cool, Cinematic, Vivid, B&W, Faded, Stage-light fix), save / load `.btscolor`, copy to all cameras.
+- **Sharpen** filter.
+- **Scopes module** — luma waveform, RGB waveform, RGB parade, vectorscope with targets and skin-tone line, histogram with clip / crush warnings.
+- **Layer Designer** — drag and resize scene layers directly on the picture, snapping, arrange presets (PiP, side by side, 2×2, interview…).
+
+### Inputs
+- **Automatic conversion** of AVI, WMV, MXF, MPEG-2, VOB, FLV, ProRes and other formats Chromium cannot play (FFmpeg H.264 proxy, cached).
+- **Slides input** — PDF, PowerPoint (.pptx / .ppt via PowerPoint or LibreOffice), Keynote/ODP, or a folder of exported images; fade/push transitions, auto-advance, thumbnails; SlideNext / SlidePrevious / SlideSelect.
+- **Interactive web browser** — click, scroll and type on a browser input from the new Interact tab; back / forward / reload.
+- **Remote Guests** — invite callers with a private browser link (no install). Guests get the program return feed, mix-minus audio, an ON AIR tally and chat; STUN/TURN settings for guests outside your network.
+- **Telestrator** — draw pens, highlighter, arrows, circles, boxes and a spotlight over the live picture, with auto-fade.
+- **Virtual Sets** — put keyed presenters into News Desk, Talk Show or Tech Grid sets (or your own images), with a video wall and animated virtual camera shots.
+
+### Titles & data
+- **40 title templates** (20 new: interview names, location tag, subscribe, sponsor bug, comment card, football and basketball score bugs, election results, quiz, poll, starting soon, be right back, end screen, agenda, weather, RSS ticker, chapter title, caption box…) with categories and search.
+- **Photoshop PSD import** — layers become images, text layers stay editable fields.
+- **Data sources**: Excel `.xlsx` / OpenDocument `.ods` (sheet choice, live re-read on save), XML, RSS / Atom; bindings to a row offset or to all rows (perfect for tickers and leaderboards).
+
+### Audio & replay
+- **Audio buses A–G** (was A–B): send to Master, listen in headphones, or play out to any audio device (in-ear / IFB / PA feeds).
+- **Replay A/B** — Replay B can follow A in sync with a different camera angle.
+- **Highlight music** — a music bed fades in under Play Highlights and out at the end, with the replay sound ducked.
+
+### Control
+- **PTZ control** — VISCA over IP (Sony / BirdDog / PTZOptics…): joystick, zoom, focus, 16 presets with thumbnails, PTZ virtual inputs that move the camera when selected, PTZ functions.
+- **TCP API** (vMix-compatible) on port 8099: FUNCTION, TALLY, SUBSCRIBE TALLY / ACTS, XML.
+- **Live preview** — MJPEG video at `/api/mjpeg`; the Web Controller can show live Preview / Output monitors.
+- **JavaScript scripts** — sandboxed, with `API`, `sleep`, `log`, `running` (alongside step scripts).
+- Tally over HTTP/TCP now updates the moment you switch.
+
 ## 1.2.0 — 2026-10-15
 
 ### New interface

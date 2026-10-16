@@ -4,28 +4,25 @@ Free, open-source live production software for students and creators — switch 
 
 Website & downloads: https://studio.btspl.tech · User guide: https://studio.btspl.tech/docs/
 
-## Features (v1.2)
+## Features (v1.3)
 
-New in 1.2: a dockable, customisable workspace (drag modules anywhere, six built-in layouts, save your own, themes & accent colours) and a rebuilt multi-angle Instant Replay. See CHANGELOG.md.
+New in 1.3 (vMix feature parity): 8 overlay channels, 8 stingers, Mix inputs, Video Delay, 6 external outputs, 5 stream destinations, Recorder 2, colour wheels & scopes, Layer Designer, auto-convert of AVI/WMV/MXF/MPEG-2, Slides (PowerPoint/PDF), interactive web browser, Remote Guests (browser call-in), Excel/XML/RSS data, Photoshop title import, 40 title templates, Telestrator, audio buses A–G, Replay A/B with highlight music, PTZ control, TCP API, live web preview, JavaScript scripting and virtual sets. See CHANGELOG.md.
 
-
-New in 1.1: Instant Replay with slow motion, IP camera / SRT / RTMP / RTSP inputs, improved capture-card support (Blackmagic, AVerMedia, Elgato, Magewell), Scripts, input Triggers, Playlist, MIDI controllers, 9 more title templates, adaptive performance governor and automatic crash recovery. See CHANGELOG.md.
-
-
-- **Switcher** — Preview / Output monitors, Quick Play, Cut, 4 programmable transition buttons, manual T-Bar, Fade to Black
-- **Transitions** — Fade, Merge, Zoom, Cross Zoom, Wipes (4 directions + diagonal), Iris, Barn Door, Slide, Push, Fly, Cube, Flip, Dip to Black/White, Blur, 2 Stingers (video with alpha + cut point)
-- **4 overlay channels** with their own in/out transitions (titles animate themselves)
-- **Inputs** — cameras & capture cards, screen/window capture (+ system audio on Windows), video & audio files or URLs, images & animated GIFs, playlists (List), web browser / HTML overlays with transparency, titles, colour/gradient/bars, scenes with up to 10 layers (PiP, side-by-side, quad), audio devices
-- **Per-input** position, zoom, pan, rotate, crop, border, rounded corners, shadow, opacity; GPU colour correction, chroma key, luma key; auto-play/pause/restart, mark in/out, on-completion actions
-- **Titles** — 11 built-in templates (lower thirds, breaking news + ticker, cricket score bar, sports score, clock, countdown, full-screen title, social handle, up next) + visual **Title Designer**; save/load `.btstitle`
-- **Data sources** — CSV, JSON, Google Sheets, text; auto-refresh; bind columns to title fields; row selection from UI/API
-- **Audio mixer** — Master, Bus A, Bus B; per-input trim, fader, balance, lip-sync delay, 3-band EQ, compressor, noise gate, solo, audio-follow-video, bus routing; master limiter; peak meters with hold; headphone monitoring
-- **Streaming** to up to 3 destinations at once (YouTube, Facebook, Twitch, custom RTMP/RTMPS, SRT, UDP) with auto-reconnect; x264 or hardware NVENC / Quick Sync / AMF (auto-detected)
-- **Recording** MP4 / MKV / MOV / WebM (pass-through or re-encode) and **MultiCorder** ISO recording of individual inputs
-- **Multiview** (F8), fullscreen **External output** to any display, snapshots
-- **HTTP API + Web Controller + Tally** on port 8088 — control from phones, tablets, Stream Deck (via HTTP), or your own HTML overlays
-- Keyboard shortcuts (customisable), presets (`.btsproj`), autosave & crash recovery
+- **Switcher** — Preview / Output, Quick Play, Cut, 4 transition buttons, T-Bar, Fade to Black; **Mix inputs** (independent second switchers, e.g. for a big screen)
+- **Transitions** — Fade, Merge, Zoom, Wipes, Iris, Slide, Push, Cube, Flip, Dip, Blur and **8 Stingers** (video with alpha + cut point)
+- **8 overlay channels** with their own in/out transitions
+- **Inputs** — cameras & capture cards (Blackmagic, AVerMedia, Elgato, Magewell…), IP cameras (RTSP / SRT / RTMP / HLS / UDP), screen capture, video & audio files (AVI, WMV, MXF, MPEG-2, ProRes… converted automatically), images, lists, **Slides** (PDF, PowerPoint, Keynote, image folders), **interactive web browser**, titles, colours, scenes, **Remote Guests** (WebRTC call-in from any browser, mix-minus + return feed), **Video Delay**, **Telestrator**, **Virtual Sets**, PTZ positions
+- **Video** — GPU colour correction with **Lift / Gamma / Gain colour wheels**, looks & presets, sharpen, chroma & luma key; **Scopes** (waveform, RGB parade, vectorscope, histogram); **Layer Designer** — drag & resize layers on the picture
+- **Titles** — **40 templates** (news, sports, lower thirds, full screen, engagement) with categories & search, **Photoshop PSD import** (text layers stay editable), Title Designer, `.btstitle`
+- **Data sources** — **Excel (.xlsx / .ods)**, CSV, Google Sheets, JSON, **XML, RSS/Atom**; auto-refresh; bind to the selected row, a row offset, or all rows (tickers)
+- **Audio mixer** — Master + **buses A–G** (send to master, headphones, any output device, per-stream audio); per-input EQ, compressor, gate, delay, solo, audio-follow-video; limiter
+- **Instant Replay** — 8 angles, multi-angle events, slow motion, highlights with **music bed**, **Replay A/B** (B follows A with another angle)
+- **Outputs** — stream to **5 destinations** at once, **2 recorders**, MultiCorder ISO, **6 external outputs** (output, preview, multiview or any input)
+- **Control** — HTTP API, Web Controller with **live video monitors (MJPEG)**, tally pages, **vMix-compatible TCP API** (Companion / Stream Deck / tally boxes), MIDI, shortcuts, step scripts and **JavaScript scripts**, triggers, playlist, **PTZ cameras (VISCA over IP)** with presets
+- Dockable workspace with layouts & themes, presets (`.btsproj`), autosave & crash recovery
 - **Automatic updates** from `https://studio.btspl.tech/updates/`
+
+Not yet included (need native Windows modules): NDI, virtual webcam output, ASIO, VST3 plug-ins and SDI output.
 
 ## Develop
 
@@ -47,9 +44,10 @@ See `website/DEPLOY.md` and `website/updates/README.txt`.
 ## Project layout
 
 ```
-src/main/        Electron main process — windows, menus, FFmpeg outputs, browser sources, HTTP API, updater
+src/main/        Electron main process — windows, menus, FFmpeg outputs, browser sources, HTTP/TCP API, PTZ,
+                 media conversion, data files, remote-guest signalling, updater
 src/renderer/    UI + engine (compositor, transitions, inputs, audio, titles, outputs, data sources)
-src/web/         Web Controller and Tally pages served by the API
+src/web/         Web Controller, Tally and Remote Guest pages
 website/         studio.btspl.tech site, docs and update-server config
 build/           app icons
 ```
@@ -67,6 +65,11 @@ GET  /api/?Function=StartStreaming
 POST /api   {"Function":"SetVolume","Input":"2","Value":"75"}
 ```
 `Input` accepts the input number, its title, or its id.
+
+```
+GET  /api/mjpeg?Input=program&fps=10&width=640    live MJPEG video (program, preview, multiview or an input)
+TCP  8099:  FUNCTION Cut Input=2   ·   TALLY   ·   SUBSCRIBE TALLY   ·   SUBSCRIBE ACTS   ·   XML   ·   QUIT
+```
 
 ## Licence
 

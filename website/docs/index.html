@@ -139,6 +139,7 @@ footer p{margin:4px auto}
       <li><a href="#outputs">External output &amp; Multiview</a></li>
       <li><a href="#shortcuts">Keyboard shortcuts</a></li>
       <li><a href="#api">Web Controller &amp; API</a></li>
+      <li><a href="#new-13">New in 1.3</a></li>
       <li><a href="#updates">Updates</a></li>
       <li><a href="#troubleshooting">Troubleshooting</a></li>
     </ol>
@@ -165,7 +166,8 @@ footer p{margin:4px auto}
         <li><a href="#outputs">External output &amp; Multiview</a></li>
         <li><a href="#shortcuts">Keyboard shortcuts</a></li>
         <li><a href="#api">Web Controller &amp; API</a></li>
-        <li><a href="#updates">Updates</a></li>
+        <li><a href="#new-13">New in 1.3</a></li>
+      <li><a href="#updates">Updates</a></li>
         <li><a href="#troubleshooting">Troubleshooting</a></li>
       </ol>
     </details>
@@ -259,7 +261,7 @@ footer p{margin:4px auto}
     <!-- 4 -->
     <section class="doc" id="overlays" aria-labelledby="h-ov">
       <h2 id="h-ov">4. Overlays</h2>
-      <p>Overlays sit on top of Output (and Preview) without changing what is underneath. There are <strong>4 overlay channels</strong>, so you can show a logo, a scoreboard and a lower third at the same time.</p>
+      <p>Overlays sit on top of Output (and Preview) without changing what is underneath. There are <strong>8 overlay channels</strong>, so you can show a logo, a scoreboard and a lower third at the same time.</p>
       <ul>
         <li>Toggle overlay 1–4 on the selected input with <kbd>Shift</kbd>+<kbd>1</kbd>–<kbd>4</kbd>, or with the overlay buttons on each tile.</li>
         <li>Turn all overlays off with <kbd>Shift</kbd>+<kbd>0</kbd>.</li>
@@ -442,6 +444,28 @@ footer p{margin:4px auto}
     </section>
 
     <!-- 13 -->
+    <section class="doc" id="new-13" aria-labelledby="h-new">
+      <h2 id="h-new">New in 1.3</h2>
+      <h3>Remote guests</h3>
+      <p>Add Input → <strong>Remote Guest</strong>. Open the input's settings and copy the link for your network (for example <code>https://192.168.1.20:8089/guest/?k=ABC123</code>) to the guest. They open it in a browser, allow camera and microphone and press <strong>Join</strong>. The page uses a self-signed certificate, so the guest taps <em>Advanced → Continue</em> once. Guests hear the show without their own voice and see the Output. For guests outside your network, forward TCP port 8089 on your router and, if needed, add a TURN server in Settings → Media &amp; Guests.</p>
+      <h3>Slides, PowerPoint and PDF</h3>
+      <p>Add Input → <strong>Slides / PowerPoint</strong>, or drag a <code>.pdf</code> / <code>.pptx</code> onto the inputs. PowerPoint files are converted with Microsoft PowerPoint (or LibreOffice) the first time. Change slides with Next / Previous, the <code>SlideNext</code> shortcut, a presentation clicker mapped to it, or the Web Controller.</p>
+      <h3>Any video format</h3>
+      <p>AVI, WMV, MXF, MPEG-2, VOB, FLV and ProRes files are converted once in the background to a playable copy (Settings → Media &amp; Guests to change quality or clear the cache).</p>
+      <h3>Colour wheels and scopes</h3>
+      <p>Input Settings → <strong>Colour Correction</strong> has Lift, Gamma and Gain wheels, looks and save/load. Open <strong>Modules → Scopes</strong> for waveform, parade, vectorscope and histogram of the Output, Preview or any input.</p>
+      <h3>Titles and data</h3>
+      <p>The Add Input → Title gallery has 40 templates with categories and search, and <strong>Import Photoshop PSD</strong> — text layers become fields you can edit and bind to data. In Data Sources you can now use Excel workbooks (they update when you save the file), XML and RSS feeds. Choose <em>All rows</em> on a binding to fill a ticker with every headline.</p>
+      <h3>Telestrator and virtual sets</h3>
+      <p>Click <strong>Telestrator</strong> in the bottom bar to draw arrows, circles and highlights on the live picture; press <em>Put on air</em> to show the drawings on an overlay channel. Add Input → <strong>Virtual Set</strong> places green-screen presenters into a News Desk, Talk Show or Tech set; switch between Wide and Close-up shots in the input's settings or with <code>VirtualSetShot</code>.</p>
+      <h3>Audio buses A–G and replay</h3>
+      <p>Right-click a bus in the mixer to send it to Master, to headphones, or to any audio output (in-ear monitors, a PA or an IFB feed). Each stream destination can use a bus as its audio. In Instant Replay, tick <em>B follows A</em> to play the same moment from another angle on Replay B, and set a music file in replay settings to play under Highlights.</p>
+      <h3>PTZ cameras</h3>
+      <p>Open <strong>Modules → PTZ Control</strong>, pick a camera input and click <strong>Setup</strong> to enter its IP address (VISCA over IP). Drag the joystick to move, use the rocker to zoom, click a preset to recall it and Shift+click to store. Right-click a preset → <em>Make input</em> to get an input that moves the camera when you select it.</p>
+      <h3>TCP API, live preview and scripts</h3>
+      <p>Bitfocus Companion, Stream Deck plug-ins and tally boxes can connect to the vMix-compatible TCP API on port 8099 (<code>FUNCTION Cut Input=2</code>, <code>SUBSCRIBE TALLY</code>). <code>http://PC-IP:8088/api/mjpeg?Input=program</code> gives live video for any browser or OBS. The Scripts panel now offers JavaScript scripts with <code>await API.Cut({ Input: 2 })</code>, <code>sleep()</code> and loops.</p>
+    </section>
+
     <section class="doc" id="updates" aria-labelledby="h-up">
       <h2 id="h-up">13. Updates</h2>
       <p>BTS Studio checks for updates automatically <strong>at startup and every 6 hours</strong>. When a new version is available you are notified and can download it. Install by restarting the app when convenient; otherwise it installs the next time you quit.</p>
