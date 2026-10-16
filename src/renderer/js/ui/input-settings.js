@@ -201,18 +201,87 @@
     return box;
   }
 
+  const LOOKS = {
+    Neutral: {},
+    Warm: { temperature: 0.35, saturation: 1.08, gain: { x: 0.12, y: 0.03, m: 0 } },
+    Cool: { temperature: -0.35, gain: { x: -0.1, y: -0.08, m: 0 } },
+    Cinematic: { contrast: 1.12, saturation: 0.9, lift: { x: -0.25, y: -0.35, m: 0.01 }, gain: { x: 0.18, y: 0.1, m: 0.02 } },
+    Vivid: { contrast: 1.08, saturation: 1.35 },
+    'Black & White': { saturation: 0, contrast: 1.1 },
+    Faded: { contrast: 0.85, lift: { x: 0, y: 0, m: 0.06 }, saturation: 0.8 },
+    'Stage lights fix': { temperature: -0.2, gain: { x: -0.05, y: 0, m: -0.08 }, gammaW: { x: 0, y: 0, m: -0.05 } }
+  };
+  const CC_KEYS = ['brightness', 'contrast', 'saturation', 'hue', 'gamma', 'temperature', 'tint', 'lift', 'gammaW', 'gain'];
+  const CC_DEF = { brightness: 0, contrast: 1, saturation: 1, hue: 0, gamma: 1, temperature: 0, tint: 0, lift: { x: 0, y: 0, m: 0 }, gammaW: { x: 0, y: 0, m: 0 }, gain: { x: 0, y: 0, m: 0 } };
+
+  /** A colour wheel control: drag the puck to tint, slider underneath for the master (luma) level. */
+  function wheel(label, obj, key, range) {
+    obj[key] = obj[key] || { x: 0, y: 0, m: 0 };
+    const S = 120, R = 54;
+    const c = U.el('canvas', { width: S, height: S, class: 'cw-canvas', title: 'Drag to tint · double-click to reset' });
+    const ctx = c.getContext('2d');
+    const draw = () => {
+      ctx.clearRect(0, 0, S, S);
+      const img = ctx.createImageData(S, S);
+      for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+        const dx = (x - S / 2) / R, dy = (S / 2 - y) / R, r = Math.hypot(dx, dy);
+        if (r > 1) continue;
+        const rgb = BTS.GLProcessor.wheelRGB({ x: dx, y: dy }).map(v => Math.round((0.45 + v * 0.45) * 255));
+        const i = (y * S + x) * 4; img.data[i] = rgb[0]; img.data[i + 1] = rgb[1]; img.data[i + 2] = rgb[2]; img.data[i + 3] = 255;
+      }
+      ctx.putImageData(img, 0, 0);
+      ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.beginPath(); ctx.arc(S / 2, S / 2, R, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(S / 2 - 6, S / 2); ctx.lineTo(S / 2 + 6, S / 2); ctx.moveTo(S / 2, S / 2 - 6); ctx.lineTo(S / 2, S / 2 + 6); ctx.stroke();
+      const v = obj[key]; const px = S / 2 + v.x * R, py = S / 2 - v.y * R;
+      ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.lineWidth = 1;
+    };
+    const set = (e) => { const r = c.getBoundingClientRect(); let x = ((e.clientX - r.left) * S / r.width - S / 2) / R, y = (S / 2 - (e.clientY - r.top) * S / r.height) / R; const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; } obj[key].x = +x.toFixed(3); obj[key].y = +y.toFixed(3); draw(); };
+    c.addEventListener('pointerdown', (e) => { try { c.setPointerCapture(e.pointerId); } catch { /* noop */ } set(e); const mv = (ev) => set(ev); const up = () => { c.removeEventListener('pointermove', mv); c.removeEventListener('pointerup', up); }; c.addEventListener('pointermove', mv); c.addEventListener('pointerup', up); });
+    c.addEventListener('dblclick', () => { obj[key] = { x: 0, y: 0, m: 0 }; m.value = 0; draw(); });
+    const m = U.el('input', { type: 'range', min: -range, max: range, step: range / 100, value: obj[key].m, title: 'Master level (double-click resets)' });
+    m.oninput = () => { obj[key].m = +m.value; };
+    m.ondblclick = () => { m.value = 0; obj[key].m = 0; };
+    draw();
+    const el = U.el('div', { class: 'cw' }, [U.el('div', { class: 'cw-label', text: label }), c, m]);
+    el._redraw = () => { m.value = obj[key].m || 0; draw(); };
+    return el;
+  }
+
   function colour(inp) {
-    const c = inp.props.effects.color;
-    return U.el('div', {}, [F([
-      { label: 'Enable', key: 'enabled', type: 'checkbox' },
-      { label: 'Brightness', key: 'brightness', type: 'range', min: -0.5, max: 0.5, step: 0.005, default: 0 },
-      { label: 'Contrast', key: 'contrast', type: 'range', min: 0, max: 2, step: 0.01, default: 1 },
-      { label: 'Saturation', key: 'saturation', type: 'range', min: 0, max: 2, step: 0.01, default: 1 },
-      { label: 'Hue', key: 'hue', type: 'range', min: -180, max: 180, step: 1, default: 0, unit: '°' },
-      { label: 'Gamma', key: 'gamma', type: 'range', min: 0.3, max: 2.5, step: 0.01, default: 1 },
-      { label: 'Temperature', key: 'temperature', type: 'range', min: -1, max: 1, step: 0.01, default: 0 },
-      { label: 'Tint', key: 'tint', type: 'range', min: -1, max: 1, step: 0.01, default: 0 }
-    ], c), U.el('p', { class: 'hint', text: 'GPU-accelerated. Double-click a slider to reset.' })]);
+    const fx = inp.props.effects;
+    const c = fx.color;
+    for (const k of ['lift', 'gammaW', 'gain']) c[k] = c[k] || { x: 0, y: 0, m: 0 };
+    const box = U.el('div');
+    let wheels = [], formEl;
+    const rebuild = () => {
+      box.innerHTML = '';
+      const en = U.el('label', { class: 'rp-row' }, [(() => { const cb = U.el('input', { type: 'checkbox' }); cb.checked = !!c.enabled; cb.onchange = () => { c.enabled = cb.checked; }; return cb; })(), ' Enable colour correction']);
+      const looks = U.el('select'); looks.append(U.el('option', { value: '', text: 'Apply a look…' }));
+      for (const k of Object.keys(LOOKS)) looks.append(U.el('option', { value: k, text: k }));
+      looks.onchange = () => { if (!looks.value) return; Object.assign(c, U.deepClone(CC_DEF), U.deepClone(LOOKS[looks.value]), { enabled: true }); rebuild(); };
+      const bar = U.el('div', { class: 'rp-row' }, [en, U.el('span', { class: 'spacer' }), looks,
+        U.el('button', { class: 'btn', text: 'Save preset…', onclick: async () => { const f = await window.bts.dialog.save({ defaultPath: inp.title + '.btscolor', filters: [{ name: 'BTS colour preset', extensions: ['btscolor'] }] }); if (!f) return; const data = { app: 'BTS Studio colour', color: Object.fromEntries(CC_KEYS.map(k => [k, c[k]])), sharpen: fx.sharpen || 0 }; await window.bts.project.write(f, data); U.toast('Colour preset saved', 'ok'); } }),
+        U.el('button', { class: 'btn', text: 'Load preset…', onclick: async () => { const f = await window.bts.dialog.open({ filters: [{ name: 'BTS colour preset', extensions: ['btscolor', 'json'] }] }); if (!f) return; try { const d = JSON.parse(await window.bts.file.readText(f[0])); Object.assign(c, U.deepClone(CC_DEF), d.color || {}, { enabled: true }); fx.sharpen = d.sharpen || 0; rebuild(); U.toast('Colour preset loaded', 'ok'); } catch (e) { U.toast('Not a colour preset: ' + e.message, 'error'); } } }),
+        U.el('button', { class: 'btn', text: 'Copy to all cameras', title: 'Apply this grade to every camera / capture input (matching)', onclick: () => { let n = 0; for (const i of BTS.studio.inputs) if (i !== inp && ['camera', 'stream'].includes(i.type)) { i.props.effects.color = U.deepClone(c); i.props.effects.sharpen = fx.sharpen; n++; } U.toast(`Copied to ${n} camera input(s)`, 'ok'); } }),
+        U.el('button', { class: 'btn', text: 'Reset', onclick: () => { Object.assign(c, U.deepClone(CC_DEF)); fx.sharpen = 0; rebuild(); } })
+      ]);
+      wheels = [wheel('LIFT (shadows)', c, 'lift', 0.25), wheel('GAMMA (mid-tones)', c, 'gammaW', 0.5), wheel('GAIN (highlights)', c, 'gain', 0.5)];
+      formEl = F([
+        { section: 'Basic' },
+        { label: 'Brightness', key: 'brightness', type: 'range', min: -0.5, max: 0.5, step: 0.005, default: 0 },
+        { label: 'Contrast', key: 'contrast', type: 'range', min: 0, max: 2, step: 0.01, default: 1 },
+        { label: 'Saturation', key: 'saturation', type: 'range', min: 0, max: 2, step: 0.01, default: 1 },
+        { label: 'Hue', key: 'hue', type: 'range', min: -180, max: 180, step: 1, default: 0, unit: '°' },
+        { label: 'Gamma', key: 'gamma', type: 'range', min: 0.3, max: 2.5, step: 0.01, default: 1 },
+        { label: 'Temperature', key: 'temperature', type: 'range', min: -1, max: 1, step: 0.01, default: 0 },
+        { label: 'Tint', key: 'tint', type: 'range', min: -1, max: 1, step: 0.01, default: 0 }
+      ], c);
+      const sh = F([{ section: 'Detail' }, { label: 'Sharpen', key: 'sharpen', type: 'range', min: 0, max: 2, step: 0.05, default: 0 }], fx);
+      box.append(bar, U.el('div', { class: 'cw-row' }, wheels), formEl, sh,
+        U.el('p', { class: 'hint', text: 'GPU-accelerated, applied live. Open the Scopes module (Modules → Scopes) to grade by numbers. Presets save as .btscolor files you can share between computers.' }));
+    };
+    rebuild();
+    return box;
   }
 
   function keying(inp) {
@@ -274,25 +343,102 @@
     ], s)]);
   }
 
+  /** Scene Layers: drag-on-screen Layer Designer + numeric table + layout presets */
   function layers(inp, st) {
     const box = U.el('div');
-    const draw = () => {
-      box.innerHTML = '';
-      const opts = st.inputs.filter(i => i !== inp && !(i.type === 'scene' && i.containsInput(inp.id)));
+    let sel = 0;
+    const SW = 640, SH = Math.round(640 * st.H / st.W);
+    const stage = U.el('canvas', { width: SW, height: SH, class: 'ld-stage', title: 'Drag a layer to move · drag a corner to resize (Shift keeps proportions) · arrow keys nudge · Alt+drag snaps off' });
+    const sctx = stage.getContext('2d');
+    const tableBox = U.el('div');
+    const snap = (v) => (dragSnap ? Math.round(v * 40) / 40 : v);
+    let drag = null, dragSnap = true;
+    const L = () => inp.cfg.layers;
+    const hit = (x, y) => { for (let i = L().length - 1; i >= 0; i--) { const l = L()[i]; if (l.visible === false) continue; if (x >= l.x && x <= l.x + l.w && y >= l.y && y <= l.y + l.h) return i; } return -1; };
+    const corner = (x, y) => { const l = L()[sel]; if (!l) return null; const tol = 10 / SW; for (const [cx, cy, k] of [[l.x, l.y, 'tl'], [l.x + l.w, l.y, 'tr'], [l.x, l.y + l.h, 'bl'], [l.x + l.w, l.y + l.h, 'br']]) if (Math.abs(x - cx) < tol && Math.abs(y - cy) < tol * SW / SH) return k; return null; };
+    const pos = (e) => { const r = stage.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; };
+    stage.addEventListener('pointerdown', (e) => {
+      try { stage.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ } stage.focus();
+      const [x, y] = pos(e); dragSnap = !e.altKey;
+      const c = corner(x, y);
+      if (c) drag = { mode: c, x, y, l0: { ...L()[sel] } };
+      else { const i = hit(x, y); if (i >= 0) { sel = i; drag = { mode: 'move', x, y, l0: { ...L()[i] } }; drawTable(); } }
+    });
+    stage.addEventListener('pointermove', (e) => {
+      const [x, y] = pos(e);
+      stage.style.cursor = corner(x, y) ? 'nwse-resize' : hit(x, y) >= 0 ? 'move' : 'default';
+      if (!drag) return;
+      const l = L()[sel], o = drag.l0, dx = x - drag.x, dy = y - drag.y;
+      if (drag.mode === 'move') { l.x = snap(o.x + dx); l.y = snap(o.y + dy); }
+      else {
+        let x1 = o.x, y1 = o.y, x2 = o.x + o.w, y2 = o.y + o.h;
+        if (drag.mode.includes('l')) x1 = snap(o.x + dx); else x2 = snap(x2 + dx);
+        if (drag.mode.includes('t')) y1 = snap(o.y + dy); else y2 = snap(y2 + dy);
+        let w = Math.max(0.02, x2 - x1), h = Math.max(0.02, y2 - y1);
+        if (e.shiftKey) { h = w * (o.h / o.w); if (drag.mode.includes('t')) y1 = y2 - h; }
+        l.x = x1; l.y = y1; l.w = w; l.h = h;
+      }
+    });
+    stage.addEventListener('pointerup', () => { if (drag) { drag = null; drawTable(); } });
+    stage.tabIndex = 0;
+    stage.addEventListener('keydown', (e) => {
+      const l = L()[sel]; if (!l) return;
+      const d = e.shiftKey ? 0.05 : 0.005;
+      if (e.key === 'ArrowLeft') l.x -= d; else if (e.key === 'ArrowRight') l.x += d; else if (e.key === 'ArrowUp') l.y -= d; else if (e.key === 'ArrowDown') l.y += d;
+      else if (e.key === 'Delete') { L().splice(sel, 1); sel = 0; st._updateLive(); drawTable(); } else return;
+      e.preventDefault(); e.stopPropagation(); drawTable();
+    });
+    let raf;
+    const paint = () => {
+      if (!box.isConnected && box._mounted) return;
+      if (box.isConnected) box._mounted = true;
+      sctx.fillStyle = '#000'; sctx.fillRect(0, 0, SW, SH);
+      const f = inp.getFrame(); if (f) sctx.drawImage(f.src, 0, 0, SW, SH);
+      // title-safe guides
+      sctx.strokeStyle = 'rgba(255,255,255,.15)'; sctx.setLineDash([4, 4]); sctx.strokeRect(SW * 0.05, SH * 0.05, SW * 0.9, SH * 0.9); sctx.setLineDash([]);
+      L().forEach((l, i) => {
+        const x = l.x * SW, y = l.y * SH, w = l.w * SW, h = l.h * SH, on = i === sel;
+        sctx.strokeStyle = on ? '#f5a524' : 'rgba(255,255,255,.5)'; sctx.lineWidth = on ? 2 : 1; sctx.strokeRect(x, y, w, h);
+        sctx.fillStyle = on ? '#f5a524' : 'rgba(0,0,0,.6)'; sctx.font = '700 11px Segoe UI'; const t = `${i + 1} ${st.byId(l.inputId)?.title || '?'}`;
+        sctx.fillRect(x, y, sctx.measureText(t).width + 8, 16); sctx.fillStyle = on ? '#1a1203' : '#fff'; sctx.fillText(t, x + 4, y + 12);
+        if (on) for (const [cx, cy] of [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]) { sctx.fillStyle = '#f5a524'; sctx.fillRect(cx - 4, cy - 4, 8, 8); }
+      });
+      raf = requestAnimationFrame(paint);
+    };
+    const PRESETS = {
+      'PiP ↘': [[0, 0, 1, 1], [0.66, 0.62, 0.3, 0.3]], 'PiP ↖': [[0, 0, 1, 1], [0.04, 0.06, 0.3, 0.3]],
+      'Side by side': [[0, 0.25, 0.5, 0.5], [0.5, 0.25, 0.5, 0.5]], 'Over-the-shoulder': [[0, 0, 1, 1], [0.06, 0.12, 0.42, 0.42]],
+      '2×2 grid': [[0, 0, 0.5, 0.5], [0.5, 0, 0.5, 0.5], [0, 0.5, 0.5, 0.5], [0.5, 0.5, 0.5, 0.5]],
+      '1 + 2': [[0.02, 0.17, 0.64, 0.64], [0.68, 0.17, 0.3, 0.3], [0.68, 0.51, 0.3, 0.3]],
+      '3 across': [[0, 0.33, 0.333, 0.333], [0.333, 0.33, 0.334, 0.333], [0.667, 0.33, 0.333, 0.333]],
+      'Interview (2 boxes)': [[0.04, 0.2, 0.44, 0.6], [0.52, 0.2, 0.44, 0.6]]
+    };
+    const presetSel = U.el('select'); presetSel.append(U.el('option', { value: '', text: 'Arrange layers as…' }));
+    for (const k of Object.keys(PRESETS)) presetSel.append(U.el('option', { value: k, text: k }));
+    presetSel.onchange = () => { const p = PRESETS[presetSel.value]; if (!p) return; p.forEach((r, i) => { if (L()[i]) Object.assign(L()[i], { x: r[0], y: r[1], w: r[2], h: r[3] }); }); presetSel.value = ''; drawTable(); };
+    const drawTable = () => {
+      tableBox.innerHTML = '';
+      const opts = st.inputs.filter(i => i !== inp && !(i.containsInput && i.containsInput(inp.id)));
       const tbl = U.el('table', { class: 'tbl' });
       tbl.append(U.el('tr', {}, ['#', 'Input', 'X', 'Y', 'W', 'H', 'Opacity', 'On', ''].map(h => U.el('th', { text: h }))));
-      inp.cfg.layers.forEach((l, i) => {
-        const sel = U.el('select'); for (const o of opts) { const op = U.el('option', { value: o.id, text: `${o.number}. ${o.title}` }); if (o.id === l.inputId) op.selected = true; sel.append(op); }
-        sel.onchange = () => { l.inputId = sel.value; st._updateLive(); };
-        const n = (k, def) => { const e = U.el('input', { type: 'number', step: 0.01, min: -1, max: 2, value: l[k] ?? def, style: { width: '64px' } }); e.oninput = () => { l[k] = +e.value; }; return e; };
+      L().forEach((l, i) => {
+        const s2 = U.el('select'); for (const o of opts) s2.append(U.el('option', { value: o.id, text: `${o.number}. ${o.title}`, selected: o.id === l.inputId }));
+        s2.onchange = () => { l.inputId = s2.value; st._updateLive(); };
+        const n = (k, def) => { const e = U.el('input', { type: 'number', step: 0.01, min: -1, max: 2, value: (+(l[k] ?? def)).toFixed(3), style: { width: '64px' } }); e.oninput = () => { l[k] = +e.value; }; e.onkeydown = (ev) => ev.stopPropagation(); return e; };
         const on = U.el('input', { type: 'checkbox' }); on.checked = l.visible !== false; on.onchange = () => { l.visible = on.checked; st._updateLive(); };
-        tbl.append(U.el('tr', {}, [U.el('td', { text: String(i + 1) }), U.el('td', {}, [sel]), U.el('td', {}, [n('x', 0)]), U.el('td', {}, [n('y', 0)]), U.el('td', {}, [n('w', 1)]), U.el('td', {}, [n('h', 1)]), U.el('td', {}, [n('opacity', 1)]), U.el('td', {}, [on]),
-          U.el('td', {}, [U.el('button', { class: 'tbtn small', text: '▲', onclick: () => { if (i) { [inp.cfg.layers[i - 1], inp.cfg.layers[i]] = [inp.cfg.layers[i], inp.cfg.layers[i - 1]]; draw(); } } }), U.el('button', { class: 'tbtn small', text: '✕', onclick: () => { inp.cfg.layers.splice(i, 1); st._updateLive(); draw(); } })])]));
+        const row = U.el('tr', { class: i === sel ? 'sel' : '', onclick: () => { sel = i; drawTable(); } }, [U.el('td', { text: String(i + 1) }), U.el('td', {}, [s2]), U.el('td', {}, [n('x', 0)]), U.el('td', {}, [n('y', 0)]), U.el('td', {}, [n('w', 1)]), U.el('td', {}, [n('h', 1)]), U.el('td', {}, [n('opacity', 1)]), U.el('td', {}, [on]),
+          U.el('td', {}, [U.el('button', { class: 'tbtn small', text: '▲', title: 'Move down (behind)', onclick: (e) => { e.stopPropagation(); if (i) { [L()[i - 1], L()[i]] = [L()[i], L()[i - 1]]; sel = i - 1; drawTable(); } } }), U.el('button', { class: 'tbtn small', text: '✕', onclick: (e) => { e.stopPropagation(); L().splice(i, 1); sel = Math.max(0, sel - 1); st._updateLive(); drawTable(); } })])]);
+        tbl.append(row);
       });
-      box.append(tbl, U.el('div', { style: { marginTop: '8px' } }, [U.el('button', { class: 'btn', text: '＋ Add layer', onclick: () => { if (inp.cfg.layers.length >= 10) return U.toast('Maximum 10 layers', 'error'); if (!opts[0]) return U.toast('Add other inputs first', 'error'); inp.cfg.layers.push({ inputId: opts[0].id, x: 0.6, y: 0.6, w: 0.35, h: 0.35, visible: true }); st._updateLive(); draw(); } })]),
-        U.el('p', { class: 'hint', text: 'X/Y/W/H are fractions of the frame (0–1). Layers draw top-to-bottom: the last row is on top. Each layer also uses its input\'s own crop, zoom & effects.' }));
+      tableBox.append(tbl);
     };
-    draw();
+    box.append(stage, U.el('div', { class: 'rp-row' }, [
+      U.el('button', { class: 'btn', text: '＋ Add layer', onclick: () => { const opts = st.inputs.filter(i => i !== inp && !(i.containsInput && i.containsInput(inp.id))); if (L().length >= 10) return U.toast('Maximum 10 layers', 'error'); if (!opts[0]) return U.toast('Add other inputs first', 'error'); L().push({ inputId: (st.preview && st.preview !== inp ? st.preview.id : opts[0].id), x: 0.6, y: 0.6, w: 0.35, h: 0.35, visible: true }); sel = L().length - 1; st._updateLive(); drawTable(); } }),
+      presetSel,
+      U.el('span', { class: 'hint', text: 'Drag on the picture to move / resize. Shift = keep proportions, Alt = no snapping, arrows = nudge.' })
+    ]), tableBox);
+    drawTable();
+    paint();
     return box;
   }
 

@@ -31,9 +31,11 @@
         replay: m('Instant Replay', '⟲', '#replayModule', { onShow: () => BTS.replayUI && BTS.replayUI.setVisible(true), onHide: () => BTS.replayUI && BTS.replayUI.setVisible(false) }),
         playlist: m('Playlist', '☰', '#playlistModule'),
         scripts: m('Scripts', 'ϟ', '#scriptsModule'),
+        scopes: m('Scopes', '◫', '#scopesModule', { onShow: () => BTS.scopesUI && BTS.scopesUI.setVisible(true), onHide: () => BTS.scopesUI && BTS.scopesUI.setVisible(false) }),
         stats: m('Statistics', '▤', '#statsModule', { onShow: () => { this.statsOn = true; this.renderStats(); }, onHide: () => { this.statsOn = false; } })
       };
       BTS.replayUI = new BTS.ReplayUI(studio, U.$('#replayModule'));
+      BTS.scopesUI = new BTS.ScopesUI(studio, U.$('#scopesModule'));
       this.layout = BTS.layout = new BTS.Layout(U.$('#workspace'), U.$('#moduleStash'), this.modules);
       this.layout.on('change', () => this.syncBar());
       this.layout.on('resize', () => BTS.ui && BTS.ui._fitSafe && BTS.ui._fitSafe());

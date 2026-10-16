@@ -74,7 +74,7 @@
 
     fxActive() {
       const fx = this.props.effects;
-      return (fx.color && fx.color.enabled) || (fx.chroma && fx.chroma.enabled) || (fx.luma && fx.luma.enabled) || !!fx.deinterlace;
+      return (fx.color && fx.color.enabled) || (fx.chroma && fx.chroma.enabled) || (fx.luma && fx.luma.enabled) || !!fx.deinterlace || (fx.sharpen > 0);
     }
 
     /** processed frame for this render tick */

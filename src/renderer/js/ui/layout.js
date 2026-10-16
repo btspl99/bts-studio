@@ -90,7 +90,7 @@
       let f = this._leafOf(id);
       if (!f) {
         // add as a tab next to a sensible neighbour, else the largest leaf
-        const pref = { replay: ['inputs', 'mixer'], playlist: ['inputs'], scripts: ['inputs'], stats: ['mixer'], multiview: ['output', 'preview'], mixer: ['inputs'] }[id] || ['inputs'];
+        const pref = { scopes: ['multiview', 'mixer', 'output'], replay: ['inputs', 'mixer'], playlist: ['inputs'], scripts: ['inputs'], stats: ['mixer'], multiview: ['output', 'preview'], mixer: ['inputs'] }[id] || ['inputs'];
         let target = null;
         for (const p of pref) { const l = this._leafOf(p); if (l) { target = l.leaf; break; } }
         if (!target) target = this._leaves()[0];
