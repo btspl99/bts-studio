@@ -95,6 +95,11 @@ contextBridge.exposeInMainWorld('bts', {
     clearCache: () => ipcRenderer.invoke('media:clear-cache'),
     onProgress: listen('media:progress')
   },
+  data: {
+    readSheet: (f) => ipcRenderer.invoke('data:read-sheet', f),
+    mtime: (f) => ipcRenderer.invoke('data:mtime', f),
+    writeAsset: (rel, d) => ipcRenderer.invoke('assets:write', rel, d)
+  },
   guests: {
     start: () => ipcRenderer.invoke('guests:start'),
     stop: () => ipcRenderer.invoke('guests:stop'),

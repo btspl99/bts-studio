@@ -10,6 +10,7 @@ BTS Studio is MIT-licensed. It bundles or depends on the following third-party s
 | FFmpeg | GPL v3 (the bundled static build) | Shipped as a separate executable (`resources/ffmpeg/ffmpeg.exe`) invoked as a child process. Source: https://ffmpeg.org/download.html — build from https://github.com/eugeneware/ffmpeg-static (b6.0). |
 | OpenH264 (inside Chromium) | BSD | Video Codec provided by Cisco Systems, Inc. |
 | PDF.js (pdfjs-dist 6.4) | Apache 2.0 | Slides input — PDF rendering. https://mozilla.github.io/pdf.js/ (licence in `src/renderer/vendor/pdfjs/LICENSE`) |
+| ag-psd 31 (with pako, base64-js) | MIT | Photoshop PSD import for titles. https://github.com/Agamnentzar/ag-psd (licence in `src/renderer/vendor/ag-psd/LICENSE`) |
 | selfsigned, @peculiar/x509, pkijs | MIT / BSD-3-Clause | Self-signed HTTPS certificate for the Remote Guests page |
 | LibreOffice / Microsoft PowerPoint | — | Not bundled. Used if installed to convert .pptx/.ppt/.odp to PDF for the Slides input |
 

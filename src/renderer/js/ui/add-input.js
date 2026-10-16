@@ -18,6 +18,7 @@
     ['scene', '🧩', 'Scene', 'PiP, side-by-side, layers'],
     ['mix', '🔀', 'Mix', 'A second, independent switcher'],
     ['delay', '⏱️', 'Video Delay', 'Delay any input by up to 10 s'],
+    ['telestrator', '✍️', 'Telestrator', 'Draw arrows & circles on air'],
     ['audio', '🎙️', 'Audio Input', 'Microphone / line-in'],
     ['audio-file', '🎵', 'Audio File', 'MP3, WAV, AAC, FLAC']
   ];
@@ -293,22 +294,67 @@
     },
 
     async title(el) {
-      let sel = 'lower-third';
+      let sel = 'lower-third', imported = null, cat = 'All', q = '';
       el.innerHTML = '';
-      const grid = U.el('div', { class: 'grid-cards' });
-      for (const [id, name] of BTS.Titles.TEMPLATE_LIST) {
-        const t = BTS.Titles.TEMPLATES[id]();
-        const r = new BTS.Titles.TitleRenderer(t);
+      const grid = U.el('div', { class: 'grid-cards title-grid' });
+      const cats = U.el('div', { class: 'seg', style: { display: 'flex', gap: '4px', flexWrap: 'wrap' } });
+      const search = U.el('input', { type: 'search', placeholder: 'Search templates…', style: { width: '180px' } });
+      const status = U.el('div', { class: 'hint' });
+      const thumbs = new Map();
+      const thumb = (id) => {
+        if (thumbs.has(id)) return thumbs.get(id);
+        const r = new BTS.Titles.TitleRenderer(BTS.Titles.TEMPLATES[id]());
         const c = r.render(performance.now(), true);
         const cv = U.el('canvas', { width: 240, height: 135, style: { width: '100%', background: 'repeating-conic-gradient(#2a2b30 0 25%, #222327 0 50%) 0 0 / 14px 14px', borderRadius: '3px' } });
         cv.getContext('2d').drawImage(c, 0, 0, 240, 135);
-        const card = U.el('div', { class: 'type-card' + (id === sel ? ' on' : ''), style: { padding: '6px' } }, [cv, U.el('div', { class: 'lbl', text: name, style: { marginTop: '4px', fontSize: '11px' } })]);
-        card.onclick = () => { sel = id; U.$$('.type-card', grid).forEach(x => x.classList.remove('on')); card.classList.add('on'); };
-        card.ondblclick = () => { sel = id; BTS.Dialog.top && U.$('.modal-foot .btn.primary', BTS.Dialog.top.el).click(); };
-        grid.append(card);
-      }
-      el.append(grid, U.el('p', { class: 'hint', text: 'After adding, edit text in Input Settings or design your own layout in the Title Designer. Bind fields to CSV/JSON/Google Sheets via Tools → Data Sources.' }));
-      return () => [{ type: 'title', title: BTS.Titles.TEMPLATE_LIST.find(x => x[0] === sel)[1].split(' —')[0], cfg: { templateId: sel } }];
+        thumbs.set(id, cv); return cv;
+      };
+      const C = BTS.Titles.CATEGORIES || {};
+      const draw = () => {
+        grid.innerHTML = '';
+        const list = BTS.Titles.TEMPLATE_LIST.filter(([id, name]) => (cat === 'All' || (C[cat] || []).includes(id) || (cat === 'Other' && !Object.values(C).flat().includes(id))) && (!q || name.toLowerCase().includes(q)));
+        for (const [id, name] of list) {
+          const card = U.el('div', { class: 'type-card' + (id === sel && !imported ? ' on' : ''), style: { padding: '6px' } }, [thumb(id), U.el('div', { class: 'lbl', text: name, style: { marginTop: '4px', fontSize: '11px' } })]);
+          card.onclick = () => { sel = id; imported = null; status.textContent = ''; U.$$('.type-card', grid).forEach(x => x.classList.remove('on')); card.classList.add('on'); };
+          card.ondblclick = () => { sel = id; imported = null; BTS.Dialog.top && U.$('.modal-foot .btn.primary', BTS.Dialog.top.el).click(); };
+          grid.append(card);
+        }
+        status.textContent = imported ? status.textContent : `${list.length} of ${BTS.Titles.TEMPLATE_LIST.length} templates`;
+        U.$$('button', cats).forEach(b => b.classList.toggle('on', b.dataset.c === cat));
+      };
+      for (const c of ['All', ...Object.keys(C), 'Other']) cats.append(U.el('button', { class: 'tbtn small', 'data-c': c, text: c, onclick: () => { cat = c; draw(); } }));
+      search.oninput = () => { q = search.value.trim().toLowerCase(); draw(); };
+      const usePsd = async (flatten) => {
+        const f = await window.bts.dialog.open({ properties: ['openFile'], filters: [{ name: 'Photoshop', extensions: ['psd', 'psb'] }] });
+        if (!f) return;
+        status.textContent = 'Importing ' + U.baseName(f[0]) + '…';
+        try {
+          const r = await BTS.PsdImport.importPsd(f[0], { flatten });
+          imported = r.template; U.$$('.type-card', grid).forEach(x => x.classList.remove('on'));
+          status.textContent = `✔ ${U.baseName(f[0])}: ${r.template.elements.length} layers imported (${r.template.elements.filter(e => e.type === 'text').length} editable text)${r.skipped ? `, ${r.skipped} hidden/empty skipped` : ''} — press OK to add.`;
+        } catch (e) { imported = null; status.textContent = ''; U.toast('PSD import failed: ' + e.message, 'error'); }
+      };
+      const openTitle = async () => {
+        const f = await window.bts.dialog.open({ properties: ['openFile'], filters: [{ name: 'BTS Title', extensions: ['btstitle', 'json'] }] });
+        if (!f) return;
+        try { imported = JSON.parse(await window.bts.file.readText(f[0])); if (!Array.isArray(imported.elements)) throw new Error('not a title file'); status.textContent = `✔ ${U.baseName(f[0])} loaded — press OK to add.`; U.$$('.type-card', grid).forEach(x => x.classList.remove('on')); }
+        catch (e) { imported = null; U.toast('Invalid title file: ' + e.message, 'error'); }
+      };
+      el.append(
+        U.el('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap' } }, [cats, U.el('span', { style: { flex: 1 } }), search]),
+        grid,
+        U.el('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', marginTop: '10px', flexWrap: 'wrap' } }, [
+          U.el('button', { class: 'btn', text: '🖼 Import Photoshop PSD (layers)…', title: 'Text layers become editable fields; other layers become images', onclick: () => usePsd(false) }),
+          U.el('button', { class: 'btn', text: 'PSD as one image…', onclick: () => usePsd(true) }),
+          U.el('button', { class: 'btn', text: 'Open .btstitle…', onclick: openTitle }),
+          status
+        ]),
+        U.el('p', { class: 'hint', text: 'After adding, edit text in Input Settings or the Title Designer. Bind fields to Excel, Google Sheets, CSV, JSON, XML or RSS via Tools → Data Sources.' }));
+      draw();
+      return () => {
+        if (imported) return [{ type: 'title', title: imported.name || 'Title', cfg: { template: imported } }];
+        return [{ type: 'title', title: BTS.Titles.TEMPLATE_LIST.find(x => x[0] === sel)[1].split(' —')[0], cfg: { templateId: sel } }];
+      };
     },
 
     async color(el) {
@@ -381,6 +427,12 @@
         const src = st.byId(o.sourceId);
         return [{ type: 'delay', title: o.title || `${src.title} (+${(o.delayMs / 1000).toFixed(1)}s)`, cfg: { sourceId: o.sourceId, delayMs: o.delayMs, height: o.height } }];
       };
+    },
+
+    async telestrator(el) {
+      el.innerHTML = '';
+      el.append(U.el('p', { class: 'hint', style: { lineHeight: '1.7' }, html: 'A transparent drawing layer. Put it on an <b>Overlay</b> channel and draw on it from the <b>Telestrator</b> window (bottom bar → Telestrator, or Ctrl+Shift+T): pen, highlighter, arrows, circles, boxes and spotlight, with optional auto-fade. Works with a mouse, touchscreen or pen tablet.' }));
+      return () => [{ type: 'telestrator', title: 'Telestrator', cfg: { fadeSeconds: 0 } }];
     },
 
     async audio(el) {

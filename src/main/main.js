@@ -17,6 +17,7 @@ const streamInputs = require('./streamInputs');
 const replay = require('./replay');
 const media = require('./media');
 const guests = require('./guests');
+const dataFiles = require('./dataFiles');
 
 log.initialize();
 log.transports.file.level = 'info';
@@ -278,6 +279,7 @@ function buildMenu() {
       label: 'Tools', submenu: [
         { label: 'Title Designer…', click: m('title-designer') },
         { label: 'Data Sources…', click: m('data-sources') },
+        { label: 'Telestrator…', accelerator: 'CmdOrCtrl+Shift+T', click: m('telestrator') },
         { label: 'Keyboard Shortcuts…', click: m('shortcuts') },
         { label: 'Web Controller', click: () => shell.openExternal(`http://127.0.0.1:${settings.api.port}/`) },
         { type: 'separator' },
@@ -396,6 +398,7 @@ function registerIpc() {
   replay.registerIpc(ipcMain);
   media.registerIpc(ipcMain);
   guests.registerIpc(ipcMain);
+  dataFiles.registerIpc(ipcMain);
   api.registerIpc(ipcMain);
   updater.registerIpc(ipcMain);
 }

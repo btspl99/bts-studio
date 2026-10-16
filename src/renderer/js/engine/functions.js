@@ -101,6 +101,10 @@
   def('BrowserBack', 'Browser', ['Input'], (p) => { window.bts.browser.nav(need(inp(p)).id, 'back'); return true; });
   def('BrowserForward', 'Browser', ['Input'], (p) => { window.bts.browser.nav(need(inp(p)).id, 'forward'); return true; });
   def('BrowserExecute', 'Browser', ['Input', 'Value'], async (p) => { const i = need(inp(p)); if (i.type !== 'browser') throw new Error('Not a browser input'); return i.exec(String(p.Value || '')); });
+  const tele = async () => BTS.TelestratorUI ? BTS.TelestratorUI.ensureInput() : S().inputs.find(i => i.type === 'telestrator');
+  def('TelestratorOpen', 'Telestrator', [], () => { BTS.TelestratorUI.open(); return true; });
+  def('TelestratorClear', 'Telestrator', [], async () => { (await tele()).clear(); return true; });
+  def('TelestratorUndo', 'Telestrator', [], async () => { (await tele()).undo(); return true; });
   def('SlideNext', 'Slides', ['Input?'], (p) => { need(inp(p)).next(); return true; });
   def('SlidePrevious', 'Slides', ['Input?'], (p) => { need(inp(p)).prev(); return true; });
   def('SlideSelect', 'Slides', ['Input', 'Value'], (p) => { const i = need(inp(p)); i.load(num(p.Value, 1) - 1); return true; });

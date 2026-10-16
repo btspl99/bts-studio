@@ -227,13 +227,19 @@
     };
     const drawRight = () => {
       right.innerHTML = '';
-      const s = ds.get(cur); if (!s) { right.append(U.el('p', { class: 'hint', text: 'Data sources let you drive titles from CSV/Excel-exported files, JSON APIs or Google Sheets. Create one on the left.' })); return; }
-      const o = { name: s.name, type: s.type, url: s.url, interval: s.interval, jsonPath: s.jsonPath };
+      const s = ds.get(cur); if (!s) { right.append(U.el('p', { class: 'hint', text: 'Data sources drive titles from Excel workbooks, CSV, Google Sheets, JSON APIs, XML files or RSS news feeds — updating live as the data changes. Create one on the left.' })); return; }
+      const o = { name: s.name, type: s.type, url: s.url, interval: s.interval, jsonPath: s.jsonPath, sheet: s.sheet || '', headerRow: s.headerRow || 1, itemPath: s.itemPath || '', maxRows: s.maxRows || 0 };
+      const typeRows = {
+        json: [{ label: 'JSON path', key: 'jsonPath', placeholder: 'e.g. data.players', hint: 'Optional: path to the array inside the JSON.' }],
+        excel: [{ label: 'Sheet', key: 'sheet', type: 'select', options: [['', 'First sheet'], ...(s.sheets || []).map(n => [n, n])] }, { label: 'Header row', key: 'headerRow', type: 'number', min: 1, hint: 'Row that holds the column names. The file is re-read whenever it is saved.' }],
+        xml: [{ label: 'Item element', key: 'itemPath', placeholder: 'auto, or e.g. player  or  /root/players/player', hint: 'The repeating element that becomes one row. Attributes appear as @name.' }],
+        rss: [{ label: 'Max items', key: 'maxRows', type: 'number', min: 0, hint: 'Columns: title, description, link, time, image… Bind "title" to a ticker with "All rows" for a headline ticker.' }]
+      };
       right.append(F([
         { label: 'Name', key: 'name' },
-        { label: 'Type', key: 'type', type: 'select', options: [['csv', 'CSV (file / URL / Google Sheet)'], ['json', 'JSON (file / API)'], ['text', 'Text lines']] },
-        { label: 'File or URL', key: 'url', type: 'file', filters: [{ name: 'Data', extensions: ['csv', 'json', 'txt'] }], hint: 'Google Sheets: paste the share link (sheet must be viewable by link).' },
-        { label: 'JSON path', key: 'jsonPath', placeholder: 'e.g. data.players', hint: 'Optional: path to the array inside the JSON.' },
+        { label: 'Type', key: 'type', type: 'select', options: [['csv', 'CSV (file / URL / Google Sheet)'], ['excel', 'Excel (.xlsx) / OpenDocument (.ods)'], ['json', 'JSON (file / API)'], ['xml', 'XML (file / URL)'], ['rss', 'RSS / Atom news feed'], ['text', 'Text lines']], onChange: () => { Object.assign(s, { type: o.type, url: o.url, name: o.name }); drawRight(); } },
+        { label: 'File or URL', key: 'url', type: 'file', filters: [{ name: 'Data', extensions: ['csv', 'xlsx', 'xlsm', 'ods', 'json', 'xml', 'rss', 'txt'] }], hint: 'Google Sheets: paste the share link (sheet must be viewable by link).' },
+        ...(typeRows[o.type] || []),
         { label: 'Refresh every (s)', key: 'interval', type: 'number', min: 0 }
       ], o), U.el('div', { class: 'inline', style: { margin: '8px 0', display: 'flex', gap: '6px' } }, [
         U.el('button', { class: 'btn primary', text: 'Apply & refresh', onclick: () => { ds.update(s.id, o); setTimeout(drawRight, 800); drawLeft(); } }),
@@ -250,14 +256,17 @@
       // bindings
       const titles = st.inputs.filter(i => i.type === 'title');
       const bt = U.el('table', { class: 'tbl', style: { marginTop: '10px' } });
-      bt.append(U.el('tr', {}, ['Title input', 'Field', 'Column', ''].map(h => U.el('th', { text: h }))));
+      bt.append(U.el('tr', {}, ['Title input', 'Field', 'Column', 'Rows', ''].map(h => U.el('th', { text: h }))));
       s.bindings.forEach((b, i) => {
         const ti = U.el('select'); for (const t of titles) { const op = U.el('option', { value: t.id, text: t.title }); if (t.id === b.inputId) op.selected = true; ti.append(op); }
         const fi = U.el('select');
         const fillFields = () => { fi.innerHTML = ''; const t = st.byId(ti.value); if (t) for (const e of t.renderer.fields) { const op = U.el('option', { value: e.name, text: e.name }); if (e.name === b.field) op.selected = true; fi.append(op); } b.inputId = ti.value; b.field = fi.value; };
         ti.onchange = fillFields; fillFields(); fi.onchange = () => { b.field = fi.value; };
         const co = U.el('select'); for (const c of s.columns) { const op = U.el('option', { value: c, text: c }); if (c === b.column) op.selected = true; co.append(op); } b.column = b.column || co.value; co.onchange = () => { b.column = co.value; ds.apply(s); };
-        bt.append(U.el('tr', {}, [U.el('td', {}, [ti]), U.el('td', {}, [fi]), U.el('td', {}, [co]), U.el('td', {}, [U.el('button', { class: 'tbtn small', text: '✕', onclick: () => { s.bindings.splice(i, 1); drawRight(); } })])]));
+        const mo = U.el('select', { title: 'Selected row, a row relative to it (e.g. +1 for a second lower third or leaderboard row 2), or all rows joined (tickers, lists)' });
+        for (const [v, l] of [['', 'Selected'], ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => ['+' + n, 'Selected +' + n]), ['all', 'All rows']]) mo.append(U.el('option', { value: v, text: l, selected: (b.mode === 'all' ? 'all' : b.rowOffset ? '+' + b.rowOffset : '') === v }));
+        mo.onchange = () => { if (mo.value === 'all') { b.mode = 'all'; b.rowOffset = 0; } else { b.mode = ''; b.rowOffset = +mo.value.slice(1) || 0; } ds.apply(s); };
+        bt.append(U.el('tr', {}, [U.el('td', {}, [ti]), U.el('td', {}, [fi]), U.el('td', {}, [co]), U.el('td', {}, [mo]), U.el('td', {}, [U.el('button', { class: 'tbtn small', text: '✕', onclick: () => { s.bindings.splice(i, 1); drawRight(); } })])]));
       });
       right.append(U.el('h4', { text: 'BINDINGS', style: { margin: '14px 0 4px', color: 'var(--accent2)', fontSize: '11px', letterSpacing: '.08em' } }), bt,
         U.el('div', { class: 'inline', style: { marginTop: '6px', display: 'flex', gap: '6px' } }, [

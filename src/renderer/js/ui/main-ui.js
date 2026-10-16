@@ -203,10 +203,12 @@
       U.$('#btnExternal').onclick = () => this.toggleExternal();
       U.$('#btnMultiCorder').onclick = () => out.toggleMultiCorder();
       U.$('#btnMultiview').onclick = () => this.toggleMultiview();
+      U.$('#btnTelestrator').onclick = () => BTS.TelestratorUI.open();
       U.$('#btnSettings').onclick = (e) => BTS.Dialog.ctxMenu(e.clientX, e.clientY - 220, [
         { label: 'Settings…', onClick: () => BTS.SettingsUI.open() },
         { label: 'Data Sources…', onClick: () => BTS.SettingsUI.dataSources() },
         { label: 'Title Designer…', onClick: () => BTS.TitleDesigner.open() },
+        { label: 'Telestrator…', onClick: () => BTS.TelestratorUI.open() },
         { label: 'Statistics', onClick: () => BTS.SettingsUI.stats() },
         { label: 'Toggle Audio Mixer', key: 'F9', onClick: () => this.toggleMixer() },
         '-',
@@ -393,6 +395,7 @@
         case 'multiview-popout': return this.popoutMultiview();
         case 'title-designer': return BTS.TitleDesigner.open();
         case 'data-sources': return BTS.SettingsUI.dataSources();
+        case 'telestrator': return BTS.TelestratorUI.open();
         case 'shortcuts': return BTS.SettingsUI.open('shortcuts');
         case 'stats': return BTS.SettingsUI.stats();
         case 'toggle-multiview': return this.toggleMultiview();
