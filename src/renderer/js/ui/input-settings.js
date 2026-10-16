@@ -8,6 +8,8 @@
     const st = BTS.studio;
     const tabs = [{ id: 'general', label: 'General', el: general(inp, st) }];
     if (inp.type === 'scene') tabs.push({ id: 'layers', label: 'Layers', el: layers(inp, st) });
+    if (inp.type === 'mix') tabs.push({ id: 'mix', label: 'Mix Switcher', el: mixTab(inp, st) });
+    if (inp.type === 'delay') tabs.push({ id: 'delay', label: 'Delay', el: delayTab(inp, st) });
     if (inp.hasVideo) {
       tabs.push({ id: 'position', label: 'Position / Crop', el: position(inp) });
       tabs.push({ id: 'color', label: 'Colour Correction', el: colour(inp) });
@@ -292,6 +294,61 @@
     };
     draw();
     return box;
+  }
+
+  function mixTab(inp, st) {
+    const box = U.el('div');
+    const mons = U.el('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' } });
+    const pv = U.el('canvas', { width: 480, height: 270, style: { width: '100%', background: '#000', borderRadius: '4px', outline: '2px solid var(--pvw)' } });
+    const pg = U.el('canvas', { width: 480, height: 270, style: { width: '100%', background: '#000', borderRadius: '4px', outline: '2px solid var(--pgm)' } });
+    mons.append(U.el('div', {}, [U.el('div', { class: 'hint', text: 'MIX PREVIEW' }), pv]), U.el('div', {}, [U.el('div', { class: 'hint', text: 'MIX OUTPUT' }), pg]));
+    const tr = U.el('select'); for (const t of BTS.Transitions.list.filter(t => !t.id.startsWith('Stinger'))) tr.append(U.el('option', { value: t.id, text: t.name, selected: t.id === inp.cfg.transition }));
+    tr.onchange = () => { inp.cfg.transition = tr.value; };
+    const dur = U.el('input', { type: 'number', value: inp.cfg.duration, min: 0, step: 100, style: { width: '80px' } }); dur.onchange = () => { inp.cfg.duration = +dur.value || 0; };
+    const ctl = U.el('div', { class: 'rp-row' }, [
+      U.el('button', { class: 'btn primary', text: 'Transition ▶', onclick: () => inp.transition() }),
+      U.el('button', { class: 'btn', text: 'Cut', onclick: () => inp.cut() }), tr, dur, U.el('span', { class: 'hint', text: 'ms' })
+    ]);
+    const grid = U.el('div', { class: 'grid-cards', style: { gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' } });
+    const drawGrid = () => {
+      grid.innerHTML = '';
+      for (const i of st.inputs.filter(x => inp._ok(x))) {
+        const on = i.id === inp.cfg.programId, pvw = i.id === inp.cfg.previewId;
+        grid.append(U.el('div', { class: 'type-card' + (on ? ' on' : ''), style: { padding: '6px', borderColor: on ? 'var(--pgm)' : pvw ? 'var(--pvw)' : '' } }, [
+          U.el('div', { class: 'lbl', text: `${i.number}. ${i.title}`, style: { fontSize: '11px', marginBottom: '4px' } }),
+          U.el('div', { class: 'rp-row', style: { justifyContent: 'center', margin: 0 } }, [
+            U.el('button', { class: 'tbtn small', text: 'PVW', onclick: () => inp.setPreview(i.id) }),
+            U.el('button', { class: 'tbtn small', text: 'Cut', onclick: () => inp.cut(i.id) }),
+            U.el('button', { class: 'tbtn small', text: 'Fade', onclick: () => inp.transition(inp.cfg.transition, inp.cfg.duration, i.id) })
+          ])
+        ]));
+      }
+    };
+    drawGrid();
+    inp.on('mix', drawGrid);
+    let raf;
+    const loop = () => {
+      if (!box.isConnected) { raf = requestAnimationFrame(loop); if (!document.body.contains(box) && box._started) return cancelAnimationFrame(raf); return; }
+      box._started = true;
+      pv.getContext('2d').drawImage(inp.drawPreview(), 0, 0, 480, 270);
+      const f = inp.getFrame(); const g = pg.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, 480, 270); if (f) g.drawImage(f.src, 0, 0, 480, 270);
+      raf = requestAnimationFrame(loop);
+    };
+    loop();
+    box.append(mons, ctl, U.el('div', { class: 'hint', text: 'SOURCES', style: { margin: '10px 0 4px' } }), grid,
+      U.el('p', { class: 'hint', text: 'API: MixPreviewInput / MixCut / MixFade with Input = this Mix and Value = source input.' }));
+    return box;
+  }
+
+  function delayTab(inp) {
+    const o = { delayMs: inp.cfg.delayMs, height: inp.cfg.height };
+    const info = U.el('div', { class: 'hint' });
+    const iv = setInterval(() => { if (!info.isConnected) return; info.textContent = `Buffered ${inp.buffered.toFixed(1)} s · ${inp.ring.length} frames`; }, 500);
+    setTimeout(() => { if (!info.isConnected) clearInterval(iv); }, 600000);
+    return U.el('div', {}, [BTS.Dialog.form([
+      { label: 'Delay (ms)', key: 'delayMs', type: 'number', min: 40, max: 10000, step: 40, onChange: (v) => { inp.cfg.delayMs = U.clamp(v, 40, 10000); if (inp.channel) inp.channel.set({ delayMs: inp.cfg.delayMs }); } },
+      { label: 'Quality', key: 'height', type: 'select', number: true, options: [[360, '360p'], [540, '540p'], [720, '720p'], [1080, '1080p']], onChange: (v) => { inp.cfg.height = v; } }
+    ], o), info]);
   }
 
   BTS.InputSettings = { open };

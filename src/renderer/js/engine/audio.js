@@ -147,7 +147,7 @@ registerProcessor('bts-pcm', BtsPcm);`;
       this.hasSource = false;
       this.input = ctx.createGain();
       this.trim = ctx.createGain();
-      this.delay = ctx.createDelay(2.0);
+      this.delay = ctx.createDelay(10.0);
       this.low = ctx.createBiquadFilter(); this.low.type = 'lowshelf'; this.low.frequency.value = 120;
       this.mid = ctx.createBiquadFilter(); this.mid.type = 'peaking'; this.mid.frequency.value = 1200; this.mid.Q.value = 0.8;
       this.high = ctx.createBiquadFilter(); this.high.type = 'highshelf'; this.high.frequency.value = 8000;
@@ -196,7 +196,7 @@ registerProcessor('bts-pcm', BtsPcm);`;
     apply() {
       const t = this.engine.ctx.currentTime, s = this.s, T = 0.015;
       this.trim.gain.setTargetAtTime(U.fromDb(s.trimDb || 0), t, T);
-      this.delay.delayTime.setTargetAtTime(U.clamp((s.delayMs || 0) / 1000, 0, 2), t, T);
+      this.delay.delayTime.setTargetAtTime(U.clamp((s.delayMs || 0) / 1000, 0, 10), t, T);
       const eqOn = s.eq && s.eq.enabled;
       this.low.gain.setTargetAtTime(eqOn ? s.eq.low : 0, t, T);
       this.mid.gain.setTargetAtTime(eqOn ? s.eq.mid : 0, t, T);

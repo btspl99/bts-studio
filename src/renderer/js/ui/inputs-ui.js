@@ -76,12 +76,12 @@
           U.el('div', { class: 'ic-meter' }, [U.el('i')])
         ]),
         U.el('div', { class: 'ic-btns' }, [
-          U.el('button', { class: 'wide3', text: 'Quick Play', title: 'Transition to Output with the Quick Play effect', onclick: () => st.quickPlay(inp.id) }),
-          U.el('button', { class: 'wide2', text: 'Cut', title: 'Cut to Output', onclick: () => st.cut(inp.id) }),
+          U.el('button', { class: 'qp', text: 'Quick Play', title: 'Transition to Output with the Quick Play effect', onclick: () => st.quickPlay(inp.id) }),
+          U.el('button', { class: 'cut', text: 'Cut', title: 'Cut to Output', onclick: () => st.cut(inp.id) }),
           U.el('button', { 'data-b': 'loop', text: '⟳', title: 'Loop', onclick: () => { BTS.Functions.call('Loop', { Input: inp.id }); this.tally(); } }),
-          ...[1, 2, 3, 4].map(n => U.el('button', { 'data-ovl': n, text: String(n), title: `Overlay ${n}`, onclick: () => st.overlay(n, inp.id, 'toggle') })),
           U.el('button', { 'data-b': 'audio', text: '🔊', title: 'Audio on/off', onclick: () => { if (inp.channel) { inp.channel.set({ muted: !inp.channel.s.muted }); st.emit('mixer-values'); } } })
-        ])
+        ]),
+        U.el('div', { class: 'ic-ovl', title: 'Overlay channels 1–8' }, Array.from({ length: 8 }, (_, k) => U.el('button', { 'data-ovl': k + 1, text: String(k + 1), title: `Overlay ${k + 1}`, onclick: () => st.overlay(k + 1, inp.id, 'toggle') })))
       ]);
       const thumb = el.querySelector('.ic-thumb');
       thumb.addEventListener('click', () => st.setPreview(inp.id));

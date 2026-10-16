@@ -476,3 +476,12 @@ body.compact .ic-btns button { height: 18px; }
 .dk-tab[data-id="output"].on::before { background: var(--pgm); }
 .dk-tab[data-id="replay"] .dk-ico { color: var(--accent); }
 .dk-ico { font-size: 11px; width: 12px; text-align: center; }
+/* v1.3 input card buttons: transport row + 8 overlay channels */
+.ic-btns { grid-template-columns: 5fr 3fr 2fr 2fr !important; }
+.ic-btns button.qp, .ic-btns button.cut { font-size: 10px; }
+.ic-ovl { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; padding: 0 3px 3px; }
+.ic-ovl button { height: 18px; border: 1px solid var(--line2); background: var(--bg3); border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: 700; padding: 0; color: var(--fg2); }
+.ic-ovl button:hover { background: var(--bg4); }
+.ic-ovl button.ovl-on { background: var(--ovl); color: #1d0e00; border-color: #ffb062; }
+.ovl-group { flex-wrap: nowrap; }
+.ovl-ind { width: 22px; }

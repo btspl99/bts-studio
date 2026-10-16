@@ -34,7 +34,7 @@
   def('SetFader', 'Switching', ['Value'], (p) => { S().setTbar(num(p.Value, 0) / 255, { release: true }); return true; }, 'T-Bar position 0-255');
 
   // ---- overlays
-  for (let n = 1; n <= 4; n++) {
+  for (let n = 1; n <= 8; n++) {
     def(`OverlayInput${n}`, 'Overlays', ['Input?'], (p) => S().overlay(n, p.Input ?? null, 'toggle'), `Toggle Input on Overlay ${n}`);
     def(`OverlayInput${n}In`, 'Overlays', ['Input?'], (p) => S().overlay(n, p.Input ?? null, 'in'));
     def(`OverlayInput${n}Out`, 'Overlays', [], () => S().overlay(n, null, 'out'));
@@ -113,6 +113,8 @@
   def('Snapshot', 'Output', [], async () => { const f = await window.bts.snapshot(S().snapshot()); return { ok: true, data: f }; });
   def('SnapshotInput', 'Output', ['Input'], async (p) => { const f = await window.bts.snapshot(S().thumbOf(need(inp(p)).id).replace('image/jpeg', 'image/png')); return { ok: true, data: f }; });
   def('Fullscreen', 'Output', [], () => { BTS.ui && BTS.ui.toggleExternal(); return true; });
+  def('StartExternal', 'Output', ['Value?', 'Input?'], (p) => { BTS.ui.openExternal(null, p.Input ? 'input:' + need(inp(p)).id : 'program', p.Value ? num(p.Value, 1) - 1 : null); return true; }, 'Value = output 1-6, Input = optional single input (else Output)');
+  def('StopExternal', 'Output', ['Value?'], (p) => { if (p.Value) BTS.ui.closeExternal(num(p.Value, 1) - 1); else for (let i = 0; i < 6; i++) BTS.ui.closeExternal(i); return true; });
 
   // ---- data sources
   def('DataSourceNextRow', 'Data', ['Value'], (p) => S().data.nextRow(p.Value), 'Value = data source name');
@@ -159,6 +161,15 @@
   def('SetTickerSpeed', 'Titles', ['Input', 'Value', 'SelectedName?'], (p) => { const r = need(inp(p)).renderer; for (const e of r.t.elements.filter(x => x.type === 'ticker' && (!p.SelectedName || x.name === p.SelectedName))) e.speed = num(p.Value, 120); return true; }, 'pixels per second');
   def('SetRate', 'Playback', ['Input', 'Value'], (p) => { const i = need(inp(p)); if (!i.setSpeed) throw new Error('Not a media input'); i.setSpeed(U.clamp(num(p.Value, 1), 0.1, 4)); return true; }, 'Playback speed, 1 = normal');
   def('SetColourTag', 'General', ['Input', 'Value'], (p) => { const i = need(inp(p)); i.props.colorTag = p.Value || ''; S().emit('inputs'); return true; }, 'Value = #hex or empty');
+
+  // ---- mix inputs (a second switcher)
+  const mix = (p) => { const m = need(st0().resolve(p.Input)); if (m.type !== 'mix') throw new Error('Input is not a Mix'); return m; };
+  const st0 = () => S();
+  def('MixPreviewInput', 'Mix', ['Input', 'Value'], (p) => mix(p).setPreview(p.Value), 'Input = Mix input, Value = source');
+  def('MixCut', 'Mix', ['Input', 'Value?'], (p) => mix(p).cut(p.Value ?? null), 'Cut the Mix (optionally to Value)');
+  def('MixFade', 'Mix', ['Input', 'Value?', 'Duration?'], (p) => mix(p).transition('Fade', num(p.Duration, mix(p).cfg.duration), p.Value ?? null));
+  def('MixTransition', 'Mix', ['Input', 'Value?'], (p) => mix(p).transition(null, null, p.Value ?? null), 'Mix default transition');
+  def('SetDelay', 'General', ['Input', 'Value'], (p) => { const i = need(inp(p)); if (i.type !== 'delay') throw new Error('Not a Video Delay input'); i.cfg.delayMs = U.clamp(num(p.Value, 2000), 40, 10000); if (i.channel) i.channel.set({ delayMs: i.cfg.delayMs }); return true; }, 'Video Delay in ms');
 
   // ---- general
   def('AddInput', 'General', ['Value'], async (p) => { const [type, ...rest] = String(p.Value || '').split('|'); const v = rest.join('|'); const map = { Video: 'video', Image: 'image', Browser: 'browser', Colour: 'color', Color: 'color', Title: 'title' }; const t = map[type] || type.toLowerCase(); const cfg = t === 'browser' ? { url: v } : t === 'color' ? { color: v || '#000000' } : t === 'title' ? { templateId: v || 'lower-third' } : { path: v }; const i = await S().addInput({ type: t, cfg, title: v ? U.baseName(v) : undefined }); return { ok: true, data: i.id }; }, 'Value "Video|C:\\file.mp4", "Browser|https://..", "Title|lower-third"');

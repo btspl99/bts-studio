@@ -8,7 +8,7 @@
       this.studio = studio;
       this.currentFile = null;
       this.shortcuts = [];
-      this.externalWin = null;
+      this.externals = []; // up to 6 external / fullscreen outputs: {win, display, source, label}
       this.multiviewWin = null;
       this._transPanel();
       this._tbar();
@@ -97,7 +97,7 @@
     _monitors() {
       const st = this.studio;
       const ovl = U.$('#overlayStatus');
-      for (let n = 1; n <= 4; n++) {
+      for (let n = 1; n <= 8; n++) {
         const b = U.el('div', { class: 'ovl-ind', text: String(n), title: `Overlay ${n} — click: toggle Preview input • right-click: options` });
         b.onclick = () => { const o = st.overlays[n - 1]; if (o.inputId && o.state !== 'off') st.overlay(n, null, 'out'); else st.overlay(n, st.previewId, 'in'); };
         b.oncontextmenu = (e) => {
@@ -224,7 +224,7 @@
       sb.classList.toggle('warn', out.isStreaming() && streamStates.some(s => s.state !== 'live'));
       U.$('#btnRecord').classList.toggle('on', out.isRecording());
       U.$('#btnMultiCorder').classList.toggle('on', out.isMultiCorder());
-      U.$('#btnExternal').classList.toggle('on', !!(this.externalWin && !this.externalWin.closed));
+      U.$('#btnExternal').classList.toggle('on', this.externals.some(x => x && x.win && !x.win.closed));
       U.$('#btnMultiview').classList.toggle('on', !!(BTS.layout && BTS.layout.isVisible('multiview')));
       const parts = states.filter(s => s.kbps).map(s => `${s.id.replace('stream-', 'S').replace('record', 'REC').replace(/^iso-.*/, 'ISO')} ${Math.round(s.kbps)}k`);
       U.$('#stOut').textContent = parts.slice(0, 4).join(' • ');
@@ -256,27 +256,51 @@
     /* ---------- pop-out windows ---------- */
     _streamFor(source) {
       const st = this.studio;
-      const canvas = source === 'preview' ? st.previewCanvas : source === 'multiview' ? st.multiviewCanvas : st.programCanvas;
-      if (source === 'multiview') st.multiviewPopout = true;
-      return canvas.captureStream(st.fps);
+      if (source === 'multiview') { st.multiviewPopout = (st.multiviewPopout || 0) + 1; return st.multiviewCanvas.captureStream(st.fps); }
+      if (source === 'preview') return st.previewCanvas.captureStream(st.fps);
+      if (source && source.startsWith('input:')) {
+        // a dedicated canvas for one input, redrawn every frame
+        const id = source.slice(6);
+        const c = document.createElement('canvas'); c.width = st.W; c.height = st.H;
+        const g = c.getContext('2d');
+        const off = st.on('frame', () => { const i = st.byId(id); g.fillStyle = '#000'; g.fillRect(0, 0, c.width, c.height); if (i) { if (i.type === 'title' && !i.live) i.drawStatic(g, 0, 0, c.width, c.height); else i.draw(g, 0, 0, c.width, c.height); } });
+        const ms = c.captureStream(st.fps); ms._off = off;
+        return ms;
+      }
+      return st.programCanvas.captureStream(st.fps);
     }
-    openExternal(displayId, source = 'program') {
-      if (this.externalWin && !this.externalWin.closed) this.externalWin.close();
-      const w = window.open(`external.html?display=${displayId || ''}&source=${source}`, 'external');
+    /** slot 0..5; displayId = monitor id or null for a window */
+    openExternal(displayId, source = 'program', slot = null) {
+      if (slot == null) { slot = this.externals.findIndex(x => !x || !x.win || x.win.closed); if (slot < 0) slot = this.externals.length; }
+      if (slot > 5) { U.toast('Maximum 6 external outputs', 'error'); return; }
+      this.closeExternal(slot);
+      const w = window.open(`external.html?display=${displayId || ''}&source=${encodeURIComponent(source)}`, 'external' + (slot + 1));
       if (!w) return U.toast('Could not open external window', 'error');
-      this.externalWin = w;
+      const ms = this._streamFor(source);
+      const rec = this.externals[slot] = { win: w, display: displayId, source, stream: ms };
       const attach = () => {
+        if (w.closed) return;
         const v = w.document.querySelector('video');
         if (!v) return setTimeout(attach, 50);
-        v.srcObject = this._streamFor(source);
-        v.play().catch(() => {});
-        w.document.title = 'BTS Studio — External ' + source;
+        if (v.srcObject !== ms) { v.srcObject = ms; v.play().catch(() => {}); }
+        w.document.title = `BTS Studio — External ${slot + 1} (${this._sourceLabel(source)})`;
         this.updateButtons();
       };
       w.addEventListener('load', attach);
       setTimeout(attach, 300);
-      const iv = setInterval(() => { if (w.closed) { clearInterval(iv); this.externalWin = null; if (source === 'multiview') this.studio.multiviewPopout = false; this.updateButtons(); } }, 500);
+      rec.iv = setInterval(() => { if (w.closed) this._cleanupExternal(slot); }, 500);
     }
+    _cleanupExternal(slot) {
+      const x = this.externals[slot]; if (!x) return;
+      clearInterval(x.iv);
+      if (x.stream) { if (x.stream._off) x.stream._off(); x.stream.getTracks().forEach(t => t.stop()); }
+      if (x.source === 'multiview') this.studio.multiviewPopout = Math.max(0, (this.studio.multiviewPopout || 1) - 1);
+      this.externals[slot] = null;
+      this.updateButtons();
+      BTS.SettingsUI && BTS.SettingsUI.refreshExternals && BTS.SettingsUI.refreshExternals();
+    }
+    closeExternal(slot) { const x = this.externals[slot]; if (x && x.win && !x.win.closed) x.win.close(); this._cleanupExternal(slot); }
+    _sourceLabel(src) { if (src === 'program') return 'Output'; if (src === 'preview') return 'Preview'; if (src === 'multiview') return 'Multiview'; if (src && src.startsWith('input:')) return this.studio.byId(src.slice(6))?.title || 'Input'; return src; }
     toggleExternal() { BTS.SettingsUI.external(); }
     popoutMultiview() { this.openExternal(null, 'multiview'); }
 

@@ -17,12 +17,12 @@
       this.inputs = [];
       this.previewId = null; this.programId = null;
       this.frameId = 0;
-      this.overlays = [0, 1, 2, 3].map(() => ({ inputId: null, state: 'off', t0: 0, dur: 0, type: 'Fade', duration: 500, preview: false }));
+      this.overlays = Array.from({ length: 8 }, () => ({ inputId: null, state: 'off', t0: 0, dur: 0, type: 'Fade', duration: 500, preview: false }));
       this.ftb = { on: false, t0: 0, from: 0, value: 0, duration: 1000 };
       this.transitions = {
         quickPlay: { type: 'Fade', duration: 1000 },
         buttons: [{ type: 'Fade', duration: 500 }, { type: 'Merge', duration: 1000 }, { type: 'Wipe', duration: 800 }, { type: 'Stinger1', duration: 0 }],
-        stingers: { Stinger1: { path: '', cutPoint: 500 }, Stinger2: { path: '', cutPoint: 500 } },
+        stingers: Object.fromEntries(Array.from({ length: 8 }, (_, i) => [`Stinger${i + 1}`, { path: '', cutPoint: 500 }])),
         lastType: 'Fade'
       };
       this.active = null;      // running transition
@@ -265,7 +265,7 @@
     _collect(inp, set, depth = 0) {
       if (!inp || set.has(inp) || depth > 5) return;
       set.add(inp);
-      if (inp.type === 'scene') for (const c of inp.children()) this._collect(c, set, depth + 1);
+      if (inp.children) for (const c of inp.children()) this._collect(c, set, depth + 1);
     }
     _updateLive() {
       const set = new Set();
@@ -479,7 +479,10 @@
     async load(p) {
       await this.clear();
       if (p.video && (p.video.width !== this.W || p.video.height !== this.H || p.video.fps !== this.fps)) this.setVideoFormat(p.video.width, p.video.height, p.video.fps);
-      if (p.transitions) this.transitions = Object.assign(this.transitions, p.transitions);
+      if (p.transitions) {
+        const st = { ...this.transitions.stingers, ...(p.transitions.stingers || {}) };
+        this.transitions = Object.assign(this.transitions, p.transitions, { stingers: st });
+      }
       (p.overlays || []).forEach((o, i) => { if (this.overlays[i]) Object.assign(this.overlays[i], { type: o.type || 'Fade', duration: o.duration ?? 500 }); });
       if (p.master) for (const k of ['M', 'A', 'B']) if (p.master[k]) { this.audio.setBusVolume(k, p.master[k].volume ?? 1); this.audio.setBusMute(k, !!p.master[k].muted); }
       this.previewOverlays = !!p.previewOverlays;

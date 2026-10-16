@@ -19,7 +19,9 @@
     browser: { label: 'Web Browser', icon: '🌐' },
     title: { label: 'Title', icon: '🅃' },
     scene: { label: 'Scene', icon: '🧩' },
-    audio: { label: 'Audio Input', icon: '🎙️' }
+    audio: { label: 'Audio Input', icon: '🎙️' },
+    mix: { label: 'Mix', icon: '🔀' },
+    delay: { label: 'Video Delay', icon: '⏱️' }
   };
 
   const DEFAULT_PROPS = () => ({
@@ -666,7 +668,118 @@
     setLive(on) { super.setLive(on); }
   }
 
-  const CLASSES = { stream: StreamInput, replay: VideoInput, color: ColorInput, image: ImageInput, video: VideoInput, 'audio-file': VideoInput, playlist: PlaylistInput, camera: CameraInput, screen: ScreenInput, audio: AudioDeviceInput, browser: BrowserInput, title: TitleInput, scene: SceneInput };
+  /* ---------------- Mix input: an independent mini-switcher (own Preview / Output) ---------------- */
+  class MixInput extends Input {
+    async init() {
+      this.cfg.programId = this.cfg.programId || null;
+      this.cfg.previewId = this.cfg.previewId || null;
+      this.cfg.transition = this.cfg.transition || 'Fade';
+      this.cfg.duration = this.cfg.duration ?? 500;
+      this.canvas = this.canvas || document.createElement('canvas');
+      this.canvas.width = this.app.W; this.canvas.height = this.app.H;
+      this.ctx2 = this.canvas.getContext('2d');
+      this.pvCanvas = this.pvCanvas || document.createElement('canvas');
+      this.pvCanvas.width = 480; this.pvCanvas.height = 270;
+      this.active = null; this._rf = -1;
+      this.setStatus('ok');
+    }
+    get program() { return this.app.byId(this.cfg.programId); }
+    get preview() { return this.app.byId(this.cfg.previewId); }
+    _ok(i) { return i && i !== this && !(i.type === 'mix' && i.containsInput && i.containsInput(this.id)); }
+    containsInput(id, depth = 0) {
+      if (depth > 4) return true;
+      return [this.cfg.programId, this.cfg.previewId].some(x => x === id || (this.app.byId(x)?.containsInput && this.app.byId(x).containsInput(id, depth + 1)));
+    }
+    children() { const out = [this.program]; if (this.active) out.push(this.app.byId(this.active.from)); return out.filter(Boolean); }
+    setPreview(ref) { const i = this.app.resolve(ref); if (!this._ok(i)) return false; this.cfg.previewId = i.id; this.emit('mix'); return true; }
+    cut(ref) {
+      if (ref != null) { if (!this.setPreview(ref)) return false; }
+      const from = this.cfg.programId; this.cfg.programId = this.cfg.previewId; this.cfg.previewId = from || this.cfg.previewId;
+      this.active = null; this.app._updateLive(); this.emit('mix'); return true;
+    }
+    transition(type, duration, ref) {
+      if (ref != null) { if (!this.setPreview(ref)) return false; }
+      if (!this.cfg.previewId || this.cfg.previewId === this.cfg.programId) return false;
+      type = type || this.cfg.transition; duration = duration ?? this.cfg.duration;
+      if (type === 'Cut' || !duration) return this.cut();
+      this.active = { type, from: this.cfg.programId, to: this.cfg.previewId, start: performance.now(), duration };
+      this.cfg.programId = this.cfg.previewId;
+      this.app._updateLive(); this.emit('mix'); return true;
+    }
+    getFrame() {
+      if (this._rf === this.app.frameId) return { src: this.canvas, w: this.canvas.width, h: this.canvas.height };
+      this._rf = this.app.frameId;
+      if (this._rendering) return null;
+      this._rendering = true;
+      const ctx = this.ctx2, W = this.canvas.width, H = this.canvas.height;
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+      const a = this.active;
+      try {
+        if (a) {
+          const t = (performance.now() - a.start) / a.duration;
+          if (t >= 1) { this.cfg.previewId = a.from || this.cfg.previewId; this.active = null; this.app._updateLive(); this.emit('mix'); this.program?.draw(ctx, 0, 0, W, H); }
+          else { const A = this.app.byId(a.from), B = this.app.byId(a.to); BTS.Transitions.draw(a.type, ctx, W, H, t, (c) => A && A.draw(c, 0, 0, W, H), (c) => B && B.draw(c, 0, 0, W, H)); }
+        } else if (this.program) this.program.draw(ctx, 0, 0, W, H);
+      } finally { this._rendering = false; }
+      return { src: this.canvas, w: W, h: H };
+    }
+    drawPreview() {
+      const c = this.pvCanvas.getContext('2d'); c.fillStyle = '#000'; c.fillRect(0, 0, 480, 270);
+      const p = this.preview; if (p) { if (p.type === 'title' && !p.live) p.drawStatic(c, 0, 0, 480, 270); else p.draw(c, 0, 0, 480, 270); }
+      return this.pvCanvas;
+    }
+  }
+
+  /* ---------------- Video Delay input: delays another input's picture (and sound) ---------------- */
+  class DelayInput extends Input {
+    async init() {
+      this.cfg.delayMs = U.clamp(this.cfg.delayMs ?? 2000, 40, 10000);
+      this.cfg.height = this.cfg.height || 540;
+      this.ring = this.ring || []; this._last = null; this._rf = -1; this._lastCap = 0;
+      // capture continuously — the delay must keep recording even when nothing is showing this input
+      if (!this._offFrame) this._offFrame = this.app.on('frame', (now) => { try { this._capture(now); } catch (e) { console.warn(e); } });
+      const src = this.app.byId(this.cfg.sourceId);
+      if (!src) { this.setStatus('error', 'Choose a source input'); return; }
+      // audio: route the source's sound through this input's own channel with a matching delay
+      const ms = src.getMediaStream && src.getMediaStream();
+      if (ms && ms.getAudioTracks().length) {
+        const ch = this.ensureChannel();
+        try { ch.setSource(this.app.audio.ctx.createMediaStreamSource(new MediaStream(ms.getAudioTracks()))); ch.set({ delayMs: this.cfg.delayMs }); } catch (e) { console.warn(e); }
+      }
+      this.setStatus('ok');
+    }
+    get source() { return this.app.byId(this.cfg.sourceId); }
+    children() { return [this.source].filter(Boolean); }
+    containsInput(id) { return this.cfg.sourceId === id; }
+    _capture(now) {
+      const src = this.source; if (!src || src === this) return;
+      const fps = this.app.fps || 30;
+      if (now - this._lastCap < 1000 / fps - 2) return;
+      this._lastCap = now;
+      const h = this.cfg.height, w = Math.round(h * this.app.W / this.app.H);
+      const c = new OffscreenCanvas(w, h), g = c.getContext('2d');
+      src.draw(g, 0, 0, w, h);
+      const bmp = c.transferToImageBitmap();
+      this.ring.push({ t: now, bmp });
+      // release frames older than the delay (plus a little slack)
+      while (this.ring.length > 2 && now - this.ring[1].t >= this.cfg.delayMs) { const old = this.ring.shift(); if (old.bmp !== this._last) old.bmp.close(); }
+      const max = Math.ceil(this.cfg.delayMs / 1000 * fps) + fps;
+      while (this.ring.length > max) { const old = this.ring.shift(); if (old.bmp !== this._last) old.bmp.close(); }
+    }
+    getFrame() {
+      const now = performance.now();
+      const target = now - this.cfg.delayMs;
+      let pick = null;
+      for (const f of this.ring) { if (f.t <= target) pick = f; else break; }
+      if (pick) { if (this._last && this._last !== pick.bmp && !this.ring.some(f => f.bmp === this._last)) this._last.close(); this._last = pick.bmp; }
+      if (!this._last) return null;
+      return { src: this._last, w: this._last.width, h: this._last.height };
+    }
+    get buffered() { return this.ring.length ? (performance.now() - this.ring[0].t) / 1000 : 0; }
+    destroy() { if (this._offFrame) this._offFrame(); for (const f of this.ring) try { f.bmp.close(); } catch { /* noop */ } this.ring = []; super.destroy(); }
+  }
+
+  const CLASSES = { mix: MixInput, delay: DelayInput, stream: StreamInput, replay: VideoInput, color: ColorInput, image: ImageInput, video: VideoInput, 'audio-file': VideoInput, playlist: PlaylistInput, camera: CameraInput, screen: ScreenInput, audio: AudioDeviceInput, browser: BrowserInput, title: TitleInput, scene: SceneInput };
 
   function create(app, data) {
     const C = CLASSES[data.type];

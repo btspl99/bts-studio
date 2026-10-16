@@ -214,7 +214,7 @@
 
     settings() {
       const R = this.R;
-      const trans = [['quick', 'Quick Play transition'], ['cut', 'Cut'], ['Stinger1', 'Stinger 1'], ['Stinger2', 'Stinger 2']];
+      const trans = [['quick', 'Quick Play transition'], ['cut', 'Cut'], ...Array.from({ length: 8 }, (_, i) => [`Stinger${i + 1}`, `Stinger ${i + 1}`])];
       BTS.Dialog.open({
         title: 'Replay settings', width: 520,
         body: BTS.Dialog.form([

@@ -28,8 +28,7 @@
     { id: 'DipBlack', name: 'Dip to Black' },
     { id: 'DipWhite', name: 'Dip to White' },
     { id: 'Blur', name: 'Blur Dissolve' },
-    { id: 'Stinger1', name: 'Stinger 1' },
-    { id: 'Stinger2', name: 'Stinger 2' }
+    ...Array.from({ length: 8 }, (_, i) => ({ id: `Stinger${i + 1}`, name: `Stinger ${i + 1}` }))
   ];
 
   function withAlpha(ctx, a, fn) { ctx.save(); ctx.globalAlpha *= clamp(a, 0, 1); fn(); ctx.restore(); }

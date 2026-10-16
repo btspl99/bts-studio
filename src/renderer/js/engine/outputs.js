@@ -69,10 +69,16 @@
       const r = this.settings.record;
       const file = this.recordFile('', r.format || 'mp4');
       const ok = await this._start('record', { kind: 'record', file, passthrough: r.mode === 'passthrough', encoder: r.encoder }, this.programStream(), 1000, r.videoBitrate || 20000);
+      // Recorder 2: a second, independently formatted recording of the same programme (e.g. MP4 for editing + MKV safety copy)
+      const r2 = this.settings.record2;
+      if (ok && r2 && r2.enabled) {
+        const f2 = file.replace(/\.[^.]+$/, '') + (r2.suffix || '-2') + '.' + (r2.format || 'mkv');
+        await this._start('record2', { kind: 'record', file: f2, passthrough: r2.mode === 'passthrough', encoder: r2.encoder, quality: r2.quality, name: 'Recorder 2' }, this.programStream(), 1000, r2.videoBitrate || 12000);
+      }
       if (ok) window.bts.power(true);
       return ok;
     }
-    async stopRecording() { await this._stop('record'); this._power(); }
+    async stopRecording() { await this._stop('record'); await this._stop('record2'); this._power(); }
     toggleRecording() { return this.isRecording() ? this.stopRecording() : this.startRecording(); }
 
     async startIso(inputId) {
@@ -148,7 +154,7 @@
       o.stats = { fps: s.fps, kbps: s.kbps, time: s.time, speed: s.speed, buffered: s.buffered };
       if (s.state === 'stopped') {
         this.outs.delete(s.id);
-        if (s.file && s.id === 'record') U.toast(`Recording saved: ${s.file}`, 'ok', 6000);
+        if (s.file && (s.id === 'record' || s.id === 'record2')) U.toast(`Recording saved: ${s.file}`, 'ok', 6000);
       } else if (s.state === 'reconnecting' && o.want) {
         if (o.recorder && o.recorder.state !== 'inactive') { try { o.recorder.stop(); } catch { /* noop */ } }
         o.recorder = null;

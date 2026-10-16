@@ -93,7 +93,8 @@ function buildArgs(cfg) {
   const file = cfg.file;
   const ext = path.extname(file).slice(1).toLowerCase();
   const canCopy = cfg.passthrough && !audioOnly && (cfg.inputCodec === 'h264' || ext === 'mkv' || ext === 'webm');
-  const crf = r.quality === 'lossless-ish' ? 14 : r.quality === 'high' ? 18 : r.quality === 'medium' ? 22 : 26;
+  const q = cfg.quality || r.quality;
+  const crf = q === 'lossless-ish' ? 14 : q === 'high' ? 18 : q === 'medium' ? 22 : 26;
   const v = audioOnly ? ['-vn']
     : canCopy ? ['-c:v', 'copy']
       : ['-fps_mode', 'cfr', '-r', String(fps), ...videoEncoderArgs(cfg.encoder || r.encoder, { bitrate: r.videoBitrate, fps, keyint: 2, preset: 'veryfast', crf, cbr: false })];

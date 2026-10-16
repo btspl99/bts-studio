@@ -14,6 +14,8 @@
     ['title', '🅃', 'Title / XAML-free', 'Lower thirds, scores, clocks'],
     ['color', '🎨', 'Colour', 'Solid, gradient, bars'],
     ['scene', '🧩', 'Scene', 'PiP, side-by-side, layers'],
+    ['mix', '🔀', 'Mix', 'A second, independent switcher'],
+    ['delay', '⏱️', 'Video Delay', 'Delay any input by up to 10 s'],
     ['audio', '🎙️', 'Audio Input', 'Microphone / line-in'],
     ['audio-file', '🎵', 'Audio File', 'MP3, WAV, AAC, FLAC']
   ];
@@ -300,6 +302,36 @@
           blank: []
         }[o.layout].filter(Boolean);
         return [{ type: 'scene', title: o.title || 'Scene', cfg: { layers: lay, background: o.background } }];
+      };
+    },
+
+    async mix(el, st) {
+      const o = { title: 'Mix ' + (st.inputs.filter(i => i.type === 'mix').length + 1), transition: 'Fade', duration: 500 };
+      el.innerHTML = '';
+      el.append(BTS.Dialog.form([
+        { label: 'Title', key: 'title' },
+        { label: 'Default transition', key: 'transition', type: 'select', options: BTS.Transitions.list.filter(t => !t.id.startsWith('Stinger')).map(t => [t.id, t.name]) },
+        { label: 'Duration (ms)', key: 'duration', type: 'number', min: 0 }
+      ], o));
+      el.append(U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'A Mix input is a complete second switcher with its own Preview and Output. Use it as a source anywhere — in a Scene layer, an overlay, or on an External output (for example a separate feed for a stage screen or an ISO record). Switch it from Input Settings → Mix, or with the MixCut / MixFade / MixPreviewInput API functions.' }));
+      return () => [{ type: 'mix', title: o.title, cfg: { transition: o.transition, duration: o.duration } }];
+    },
+
+    async delay(el, st) {
+      const srcs = st.inputs.filter(i => i.hasVideo && !['delay', 'mix'].includes(i.type));
+      const o = { sourceId: srcs[0]?.id || '', delayMs: 2000, height: 540, title: '' };
+      el.innerHTML = '';
+      el.append(BTS.Dialog.form([
+        { label: 'Source', key: 'sourceId', type: 'select', options: srcs.length ? srcs.map(i => [i.id, `${i.number}. ${i.title}`]) : [['', 'Add a camera or video first']] },
+        { label: 'Delay (ms)', key: 'delayMs', type: 'number', min: 40, max: 10000, step: 40 },
+        { label: 'Quality', key: 'height', type: 'select', number: true, options: [[360, '360p (low memory)'], [540, '540p (balanced)'], [720, '720p'], [1080, '1080p (uses a lot of memory)']] },
+        { label: 'Title', key: 'title', placeholder: 'Optional' }
+      ], o));
+      el.append(U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'Delays the picture (and the source\'s sound, if it has any) — for broadcast safety delays, lip-sync fixes, or showing a coach a few seconds behind live. Memory use grows with delay × quality.' }));
+      return () => {
+        if (!o.sourceId) { U.toast('Choose a source', 'error'); return null; }
+        const src = st.byId(o.sourceId);
+        return [{ type: 'delay', title: o.title || `${src.title} (+${(o.delayMs / 1000).toFixed(1)}s)`, cfg: { sourceId: o.sourceId, delayMs: o.delayMs, height: o.height } }];
       };
     },
 

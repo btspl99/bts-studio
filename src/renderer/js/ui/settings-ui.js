@@ -76,7 +76,15 @@
       { label: 'Quality', key: 'quality', type: 'select', options: [['lossless-ish', 'Near lossless (huge files)'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low (small files)']] },
       { label: 'Capture bitrate (kbps)', key: 'videoBitrate', type: 'number', hint: 'Quality of the internal capture. 20000 = excellent 1080p.' },
       { label: 'File name', key: 'filenamePattern', hint: '{date} {time} placeholders' }
-    ], s.record)]);
+    ], s.record), U.el('div', { style: { height: '10px' } }), F([
+      { section: 'Recorder 2 (second recording of the same output)' },
+      { label: 'Enable Recorder 2', key: 'enabled', type: 'checkbox', hint: 'Starts and stops with Record. Example: MP4 for editing plus an MKV safety copy.' },
+      { label: 'Format', key: 'format', type: 'select', options: [['mkv', 'MKV (crash-safe)'], ['mp4', 'MP4'], ['mov', 'MOV'], ['webm', 'WebM']] },
+      { label: 'Mode', key: 'mode', type: 'select', options: [['encode', 'Re-encode with FFmpeg'], ['passthrough', 'Pass-through (low CPU)']] },
+      { label: 'Encoder', key: 'encoder', type: 'select', options: encOpts },
+      { label: 'Quality', key: 'quality', type: 'select', options: [['high', 'High'], ['medium', 'Medium'], ['low', 'Low (proxy)']] },
+      { label: 'File name suffix', key: 'suffix' }
+    ], s.record2 || (s.record2 = { enabled: false, format: 'mkv', mode: 'encode', encoder: 'libx264', quality: 'medium', suffix: '-2' }))]);
 
     // transitions
     const tr = st.transitions;
@@ -246,19 +254,35 @@
   }
 
   /* ---------------- external output ---------------- */
+  /* ---------------- external / fullscreen outputs (up to 6) ---------------- */
+  let extDlg = null, extRefresh = null;
   async function external() {
-    const ui = BTS.ui;
-    if (ui.externalWin && !ui.externalWin.closed) { ui.externalWin.close(); ui.externalWin = null; ui.updateButtons(); return; }
+    const ui = BTS.ui, st = BTS.studio;
     const displays = await window.bts.displays();
-    const o = { display: String(displays.find(d => !/primary/.test(d.label))?.id ?? displays[0].id), source: 'program' };
-    BTS.Dialog.open({
-      title: 'External Output', body: F([
-        { label: 'Display', key: 'display', type: 'select', options: [...displays.map(d => [String(d.id), d.label]), ['window', 'Windowed (resizable)']] },
-        { label: 'Source', key: 'source', type: 'select', options: [['program', 'Output (program)'], ['preview', 'Preview'], ['multiview', 'Multiview']] },
-        { custom: U.el('div', { class: 'hint', text: 'Sends a clean full-screen feed to a projector, LED wall or a capture device. Press Esc in the window to close it.' }) }
-      ], o), buttons: [{ label: 'Cancel' }, { label: 'Start', primary: true, onClick: () => ui.openExternal(o.display === 'window' ? null : o.display, o.source) }]
-    });
+    const box = U.el('div');
+    const srcOpts = () => [['program', 'Output (program)'], ['preview', 'Preview'], ['multiview', 'Multiview'], ...st.inputs.map(i => ['input:' + i.id, `Input ${i.number}: ${i.title}`])];
+    const draw = () => {
+      box.innerHTML = '';
+      const tbl = U.el('table', { class: 'tbl' });
+      tbl.append(U.el('tr', {}, ['#', 'Screen', 'Source', 'Status', ''].map(h => U.el('th', { text: h }))));
+      for (let slot = 0; slot < 6; slot++) {
+        const x = ui.externals[slot];
+        const live = x && x.win && !x.win.closed;
+        const disp = U.el('select'); for (const [v, l] of [...displays.map(d => [String(d.id), d.label]), ['', 'Window (resizable)']]) disp.append(U.el('option', { value: v, text: l, selected: live ? String(x.display || '') === v : v === String(displays.find(d => !/primary/.test(d.label))?.id ?? '') }));
+        const src = U.el('select'); for (const [v, l] of srcOpts()) src.append(U.el('option', { value: v, text: l, selected: live ? x.source === v : v === 'program' }));
+        const btn = live ? U.el('button', { class: 'btn danger', text: 'Stop', onclick: () => { ui.closeExternal(slot); draw(); } })
+          : U.el('button', { class: 'btn primary', text: 'Start', onclick: () => { ui.openExternal(disp.value || null, src.value, slot); setTimeout(draw, 400); } });
+        tbl.append(U.el('tr', {}, [U.el('td', { text: String(slot + 1) }), U.el('td', {}, [disp]), U.el('td', {}, [src]),
+          U.el('td', { html: live ? '<b style="color:var(--pvw)">● Live</b>' : '<span class="hint">Off</span>' }), U.el('td', {}, [btn])]));
+      }
+      box.append(tbl, U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'Each output is a clean feed for a projector, LED wall, confidence monitor or a capture device — choose a full screen or a resizable window. Source can be Output, Preview, Multiview or any single input (e.g. a Mix input as a stage feed). Press Esc in an output window to close it.' }));
+    };
+    draw();
+    if (extDlg) extDlg.close();
+    extRefresh = draw;
+    extDlg = BTS.Dialog.open({ title: 'External Outputs', body: box, width: 760, onClose: () => { extDlg = null; extRefresh = null; } });
   }
+  function refreshExternals() { if (extRefresh) extRefresh(); }
 
   function about() {
     window.bts.info().then(info => {
@@ -329,5 +353,5 @@
     }
   }
 
-  BTS.SettingsUI = { open, dataSources, external, about, stats, onUpdateStatus, DEFAULT_SHORTCUTS, keyName, save };
+  BTS.SettingsUI = { open, dataSources, external, refreshExternals, about, stats, onUpdateStatus, DEFAULT_SHORTCUTS, keyName, save };
 })(window.BTS);

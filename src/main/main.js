@@ -61,7 +61,9 @@ const DEFAULT_SETTINGS = {
     destinations: [
       { enabled: true, name: 'Destination 1', service: 'youtube', url: 'rtmp://a.rtmp.youtube.com/live2', key: '' },
       { enabled: false, name: 'Destination 2', service: 'facebook', url: 'rtmps://live-api-s.facebook.com:443/rtmp/', key: '' },
-      { enabled: false, name: 'Destination 3', service: 'custom', url: '', key: '' }
+      { enabled: false, name: 'Destination 3', service: 'custom', url: '', key: '' },
+      { enabled: false, name: 'Destination 4', service: 'custom', url: '', key: '' },
+      { enabled: false, name: 'Destination 5', service: 'custom', url: '', key: '' }
     ],
     encoder: 'libx264', preset: 'veryfast', videoBitrate: 6000, audioBitrate: 160, keyint: 2,
     autoReconnect: true
@@ -70,6 +72,7 @@ const DEFAULT_SETTINGS = {
     folder: '', format: 'mp4', mode: 'passthrough', encoder: 'libx264', quality: 'high', videoBitrate: 20000,
     filenamePattern: 'BTS-Studio-{date}-{time}'
   },
+  record2: { enabled: false, format: 'mkv', mode: 'encode', encoder: 'libx264', quality: 'medium', videoBitrate: 12000, suffix: '-2' },
   api: { enabled: true, port: 8088, allowRemote: true },
   updates: { autoCheck: true, url: '' },
   ui: { theme: 'dark', showMultiview: true, tbarReverse: false },
@@ -98,6 +101,8 @@ function writeJSON(file, data) {
 }
 
 let settings = deepMerge(DEFAULT_SETTINGS, readJSON(SETTINGS_FILE, {}));
+// older settings files had 3 stream destinations — pad to 5
+while (settings.stream.destinations.length < 5) settings.stream.destinations.push({ enabled: false, name: 'Destination ' + (settings.stream.destinations.length + 1), service: 'custom', url: '', key: '' });
 if (!settings.record.folder) settings.record.folder = path.join(app.getPath('videos'), 'BTS Studio');
 
 function saveSettings() { writeJSON(SETTINGS_FILE, settings); }
@@ -138,7 +143,7 @@ function createMainWindow() {
       const opts = {
         backgroundColor: '#000000',
         autoHideMenuBar: true,
-        title: frameName === 'external' ? 'BTS Studio — External Output' : 'BTS Studio — ' + (frameName || 'Window'),
+        title: /^external/.test(frameName) ? 'BTS Studio — External Output' : 'BTS Studio — ' + (frameName || 'Window'),
         icon: path.join(ROOT, '..', 'build', 'icon.png'),
         webPreferences: { contextIsolation: true, nodeIntegration: false, backgroundThrottling: false }
       };
