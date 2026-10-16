@@ -106,7 +106,20 @@ function registerIpc(ipcMain) {
   ipcMain.handle('browser:exec', (e, id, js) => { const s = sources.get(id); return s ? s.win.webContents.executeJavaScript(js, true) : null; });
   ipcMain.handle('browser:devtools', (e, id) => { const s = sources.get(id); if (s) s.win.webContents.openDevTools({ mode: 'detach' }); });
   ipcMain.on('browser:ack', (e, id) => { const s = sources.get(id); if (s && s.flush) s.flush(); });
-  ipcMain.handle('browser:input', (e, id, ev) => { const s = sources.get(id); if (s) s.win.webContents.sendInputEvent(ev); });
+  ipcMain.handle('browser:input', (e, id, ev) => {
+    const s = sources.get(id); if (!s) return;
+    const wc = s.win.webContents;
+    if (!s.focused) { s.focused = true; try { wc.focus(); } catch { /* noop */ } }
+    wc.sendInputEvent(ev);
+  });
+  ipcMain.handle('browser:nav', (e, id, action) => {
+    const s = sources.get(id); if (!s) return null;
+    const wc = s.win.webContents, h = wc.navigationHistory;
+    if (action === 'back' && h.canGoBack()) h.goBack();
+    else if (action === 'forward' && h.canGoForward()) h.goForward();
+    else if (action === 'stop') wc.stop();
+    return { url: wc.getURL(), title: wc.getTitle(), canGoBack: h.canGoBack(), canGoForward: h.canGoForward() };
+  });
 }
 
 module.exports = { init, registerIpc, destroyAll };

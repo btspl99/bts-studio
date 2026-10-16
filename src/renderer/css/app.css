@@ -496,3 +496,17 @@ body.compact .ic-btns button { height: 18px; }
 .ld-stage { width: 100%; max-width: 680px; display: block; margin: 0 auto 8px; background: #000; border-radius: 6px; outline: none; touch-action: none; }
 .ld-stage:focus { box-shadow: 0 0 0 2px var(--accent); }
 table.tbl tr.sel { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+
+/* ---------- Phase 3: slides, remote guests, interactive browser ---------- */
+.slide-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;max-height:300px;overflow:auto;padding:2px}
+.slide-th{position:relative;background:#000;border:2px solid var(--line,#353841);border-radius:5px;cursor:pointer;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.slide-th img{max-width:100%;max-height:100%;display:block}
+.slide-th span{position:absolute;left:4px;bottom:3px;font-size:10px;font-weight:700;background:rgba(0,0,0,.7);padding:1px 5px;border-radius:3px}
+.slide-th:hover{border-color:var(--accent,#f0a53a)}.slide-th.on{border-color:var(--pgm,#e2453c);box-shadow:0 0 0 1px var(--pgm,#e2453c)}
+.browser-live{width:100%;aspect-ratio:16/9;background:#000 repeating-conic-gradient(#222 0 25%,#2b2b2b 0 50%) 0 0/24px 24px;border:1px solid var(--line,#353841);border-radius:5px;display:block;outline:none;cursor:default}
+.browser-live:focus{border-color:var(--accent,#f0a53a)}
+.guest-status{padding:10px;background:var(--bg3);border-radius:6px;margin-bottom:8px}
+.guest-status .dot{width:10px;height:10px;border-radius:50%;background:#777;display:inline-block}.guest-status .dot.ok{background:var(--pvw,#2fbf62)}.guest-status .dot.wait{background:var(--accent,#f0a53a)}
+.guest-chat{height:120px;overflow:auto;background:var(--bg0);border:1px solid var(--line2);border-radius:5px;padding:6px;font-size:12px;display:flex;flex-direction:column;gap:4px}
+.guest-chat b{color:var(--accent,#f0a53a)}
+.mono{font-family:Consolas,"Cascadia Mono",monospace;font-size:12px}

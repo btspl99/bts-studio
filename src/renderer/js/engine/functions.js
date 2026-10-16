@@ -98,6 +98,14 @@
   // ---- browser
   def('BrowserNavigate', 'Browser', ['Input', 'Value'], (p) => { const i = need(inp(p)); if (i.type !== 'browser') throw new Error('Not a browser input'); i.update({ url: p.Value }); return true; });
   def('BrowserReload', 'Browser', ['Input'], (p) => { need(inp(p)).reload(); return true; });
+  def('BrowserBack', 'Browser', ['Input'], (p) => { window.bts.browser.nav(need(inp(p)).id, 'back'); return true; });
+  def('BrowserForward', 'Browser', ['Input'], (p) => { window.bts.browser.nav(need(inp(p)).id, 'forward'); return true; });
+  def('BrowserExecute', 'Browser', ['Input', 'Value'], async (p) => { const i = need(inp(p)); if (i.type !== 'browser') throw new Error('Not a browser input'); return i.exec(String(p.Value || '')); });
+  def('SlideNext', 'Slides', ['Input?'], (p) => { need(inp(p)).next(); return true; });
+  def('SlidePrevious', 'Slides', ['Input?'], (p) => { need(inp(p)).prev(); return true; });
+  def('SlideSelect', 'Slides', ['Input', 'Value'], (p) => { const i = need(inp(p)); i.load(num(p.Value, 1) - 1); return true; });
+  def('GuestHangUp', 'Remote Guests', ['Input'], (p) => { const i = need(inp(p)); if (i.type !== 'guest') throw new Error('Not a Remote Guest input'); i.hangup(true); return true; });
+  def('GuestMessage', 'Remote Guests', ['Input', 'Value'], (p) => { const i = need(inp(p)); if (i.type !== 'guest') throw new Error('Not a Remote Guest input'); return !!i.sendChat(String(p.Value || '')); });
   def('BrowserExecute', 'Browser', ['Input', 'Value'], async (p) => { const i = need(inp(p)); if (i.type !== 'browser') throw new Error('Not a browser input'); return { ok: true, data: await i.exec(p.Value) }; }, 'Run JavaScript in the page');
 
   // ---- outputs

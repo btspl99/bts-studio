@@ -15,6 +15,8 @@ const api = require('./api');
 const updater = require('./updater');
 const streamInputs = require('./streamInputs');
 const replay = require('./replay');
+const media = require('./media');
+const guests = require('./guests');
 
 log.initialize();
 log.transports.file.level = 'info';
@@ -74,6 +76,8 @@ const DEFAULT_SETTINGS = {
   },
   record2: { enabled: false, format: 'mkv', mode: 'encode', encoder: 'libx264', quality: 'medium', videoBitrate: 12000, suffix: '-2' },
   api: { enabled: true, port: 8088, allowRemote: true },
+  guests: { port: 8089, stun: 'stun:stun.l.google.com:19302', turn: '', turnUser: '', turnPass: '' },
+  media: { autoConvert: true, convertQuality: 'fast' },
   updates: { autoCheck: true, url: '' },
   ui: { theme: 'dark', showMultiview: true, tbarReverse: false },
   shortcuts: null,
@@ -206,6 +210,8 @@ function createMainWindow() {
   browserSources.init({ getWin: () => mainWin });
   streamInputs.init({ getWin: () => mainWin });
   replay.init({ getWin: () => mainWin, getSettings: () => settings });
+  media.init({ getWin: () => mainWin });
+  guests.init({ getWin: () => mainWin, getSettings: () => settings, webRoot: path.join(ROOT, 'web') });
   updater.init({ getWin: () => mainWin, getSettings: () => settings, isPackaged: app.isPackaged });
   restartApi();
 }
@@ -388,6 +394,8 @@ function registerIpc() {
   browserSources.registerIpc(ipcMain);
   streamInputs.registerIpc(ipcMain);
   replay.registerIpc(ipcMain);
+  media.registerIpc(ipcMain);
+  guests.registerIpc(ipcMain);
   api.registerIpc(ipcMain);
   updater.registerIpc(ipcMain);
 }
@@ -427,5 +435,5 @@ if (!gotLock) {
   });
 
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-  app.on('before-quit', () => { outputs.stopAll(); browserSources.destroyAll(); streamInputs.stopAll(); replay.stopAll(); api.stop(); });
+  app.on('before-quit', () => { outputs.stopAll(); browserSources.destroyAll(); streamInputs.stopAll(); replay.stopAll(); guests.stop(); api.stop(); });
 }

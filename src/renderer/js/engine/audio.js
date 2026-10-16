@@ -105,8 +105,33 @@ registerProcessor('bts-pcm', BtsPcm);`;
       this.monitor.gain.setTargetAtTime(this.monitorOn && !anySolo ? 1 : 0, this.ctx.currentTime, 0.02);
     }
 
-    createChannel(opts) { const c = new AudioChannel(this, opts); this.channels.add(c); return c; }
-    removeChannel(c) { this.channels.delete(c); c.dispose(); }
+    createChannel(opts) { const c = new AudioChannel(this, opts); this.channels.add(c); this._refreshMixMinus(); return c; }
+    removeChannel(c) { this.channels.delete(c); c.dispose(); this._refreshMixMinus(); }
+
+    /**
+     * Mix-minus: everything that is going to the Master bus except `exclude` (a remote guest hears the show
+     * without their own voice coming back). Returns { stream, dispose }.
+     */
+    createMixMinus(exclude) {
+      const sum = this.ctx.createGain();
+      const dest = this.ctx.createMediaStreamDestination();
+      sum.connect(dest);
+      const mm = { exclude, sum, dest, stream: dest.stream, links: new Map() };
+      mm.dispose = () => { this.mixMinus.delete(mm); for (const [ch, g] of mm.links) { try { ch.sends.M.disconnect(g); } catch { /* noop */ } try { g.disconnect(); } catch { /* noop */ } } mm.links.clear(); try { sum.disconnect(); } catch { /* noop */ } };
+      (this.mixMinus || (this.mixMinus = new Set())).add(mm);
+      this._refreshMixMinus();
+      return mm;
+    }
+    _refreshMixMinus() {
+      if (!this.mixMinus) return;
+      for (const mm of this.mixMinus) {
+        for (const [ch, g] of mm.links) if (!this.channels.has(ch) || ch === mm.exclude) { try { ch.sends.M.disconnect(g); } catch { /* noop */ } g.disconnect(); mm.links.delete(ch); }
+        for (const ch of this.channels) {
+          if (ch === mm.exclude || mm.links.has(ch) || !ch.sends || !ch.sends.M) continue;
+          const g = this.ctx.createGain(); ch.sends.M.connect(g); g.connect(mm.sum); mm.links.set(ch, g);
+        }
+      }
+    }
 
     static peak(analyser, buf) {
       analyser.getFloatTimeDomainData(buf);

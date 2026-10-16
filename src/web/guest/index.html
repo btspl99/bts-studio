@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#101114">
+<title>BTS Studio — Join as guest</title>
+<style>
+:root{--bg:#101114;--p:#1b1d22;--p2:#24262d;--l:#353841;--fg:#e4e6eb;--fg2:#9da2ad;--a:#f0a53a;--ok:#2fbf62;--bad:#e2453c}
+*{box-sizing:border-box}html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px "Segoe UI",system-ui,-apple-system,sans-serif;display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:10px;padding:10px 16px;background:#16171b;border-bottom:1px solid var(--l)}
+header b{font-size:16px}header b span{color:var(--a)}.sp{flex:1}
+.pill{font-size:12px;font-weight:700;padding:4px 10px;border-radius:99px;background:var(--p2);color:var(--fg2)}
+.pill.live{background:var(--bad);color:#fff}.pill.ok{background:var(--ok);color:#04150a}
+main{flex:1;display:grid;gap:12px;padding:12px 16px;grid-template-columns:1fr;max-width:1200px;width:100%;margin:0 auto}
+@media(min-width:900px){main.in{grid-template-columns:2fr 1fr}}
+.card{background:var(--p);border:1px solid var(--l);border-radius:10px;padding:14px}
+h1{font-size:20px;margin:0 0 4px}p{color:var(--fg2);margin:4px 0 12px;line-height:1.45}
+.vid{position:relative;background:#000;border-radius:8px;overflow:hidden;aspect-ratio:16/9}
+.vid video{width:100%;height:100%;object-fit:contain;display:block}
+.vid span{position:absolute;left:8px;top:8px;font-size:11px;font-weight:700;background:rgba(0,0,0,.65);padding:3px 8px;border-radius:4px}
+#self{transform:scaleX(-1)}
+label{display:block;font-size:12px;color:var(--fg2);margin:10px 0 4px}
+input,select{width:100%;font:inherit;color:var(--fg);background:#121317;border:1px solid var(--l);border-radius:6px;padding:10px}
+button{font:inherit;font-weight:700;color:inherit;border:1px solid var(--l);background:var(--p2);border-radius:8px;padding:11px 14px;cursor:pointer}
+button.go{background:var(--a);color:#1b1103;border-color:#ffbf63;width:100%;margin-top:14px}
+button.end{background:var(--bad);border-color:#ff7a72;color:#fff}
+button.off{background:#4a2020;border-color:#7a2f2f}
+button:disabled{opacity:.5;cursor:default}
+.ctl{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.ctl button{flex:1;min-width:110px}
+.meter{height:6px;background:#0b0c0e;border-radius:3px;overflow:hidden;margin-top:6px}.meter i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--ok),#e0d23a 75%,var(--bad))}
+#err{color:#ff8b84;white-space:pre-line}
+.hide{display:none!important}
+.chat{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;font-size:13px}
+.chat div{background:var(--p2);padding:6px 8px;border-radius:6px}.chat div b{color:var(--a)}
+.stats{font-size:12px;color:var(--fg2);margin-top:8px}
+</style>
+</head>
+<body>
+<header><b><span>BTS</span> Studio</b><span class="sp"></span><span class="pill" id="state">Not connected</span></header>
+
+<main id="setup">
+  <section class="card">
+    <h1 id="title">Join the show</h1>
+    <p>You've been invited to join a live production as a remote guest. Check your camera and microphone, then press <b>Join</b>. Use headphones to avoid echo.</p>
+    <div class="vid"><video id="pre" autoplay muted playsinline></video><span>YOU</span></div>
+    <div class="meter"><i id="lvl"></i></div>
+    <label for="name">Your name</label><input id="name" maxlength="40" placeholder="Your name" autocomplete="name">
+    <label for="cam">Camera</label><select id="cam"></select>
+    <label for="mic">Microphone</label><select id="mic"></select>
+    <label for="qual">Video quality</label>
+    <select id="qual"><option value="1080">1080p (best connection)</option><option value="720" selected>720p (recommended)</option><option value="480">480p (slow connection)</option><option value="0">Audio only</option></select>
+    <div id="pwRow" class="hide"><label for="pw">Password</label><input id="pw" type="password" autocomplete="off"></div>
+    <button class="go" id="join" disabled>Join</button>
+    <p id="err"></p>
+  </section>
+</main>
+
+<main id="live" class="in hide">
+  <section class="card">
+    <div class="vid"><video id="ret" autoplay playsinline></video><span>PROGRAM</span></div>
+    <div class="ctl">
+      <button id="bMic">Mute mic</button><button id="bCam">Camera off</button><button class="end" id="bEnd">Leave</button>
+    </div>
+    <div class="stats" id="stats"></div>
+  </section>
+  <section class="card">
+    <div class="vid"><video id="self" autoplay muted playsinline></video><span>YOU</span></div>
+    <div class="meter"><i id="lvl2"></i></div>
+    <label>Messages from the producer</label>
+    <div class="chat" id="chat"></div>
+    <div class="ctl"><input id="msg" placeholder="Message to producer" maxlength="300"><button id="send" style="flex:0 0 auto;min-width:0">Send</button></div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const q = new URLSearchParams(location.search);
+  const K = q.get('k') || '';
+  const SID = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2)) ;
+  let info = null, stream = null, pc = null, es = null, meterRaf = 0;
+  try { $('name').value = localStorage.getItem('bts-guest-name') || ''; } catch {}
+
+  const setState = (t, cls) => { const s = $('state'); s.textContent = t; s.className = 'pill' + (cls ? ' ' + cls : ''); };
+  const fail = (m) => { $('err').textContent = m; };
+
+  async function api(path, body) {
+    const r = await fetch('/guest/api/' + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.ok === false) throw new Error(j.error || ('HTTP ' + r.status));
+    return j;
+  }
+
+  async function listDevices() {
+    const ds = await navigator.mediaDevices.enumerateDevices();
+    const fill = (sel, kind) => { const cur = sel.value; sel.innerHTML = ''; ds.filter(d => d.kind === kind).forEach((d, i) => { const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || `${kind === 'videoinput' ? 'Camera' : 'Microphone'} ${i + 1}`; sel.appendChild(o); }); if (cur) sel.value = cur; };
+    fill($('cam'), 'videoinput'); fill($('mic'), 'audioinput');
+  }
+
+  async function getMedia() {
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    const h = +$('qual').value;
+    const video = h ? { deviceId: $('cam').value ? { exact: $('cam').value } : undefined, height: { ideal: h }, width: { ideal: Math.round(h * 16 / 9) }, frameRate: { ideal: 30 } } : false;
+    const audio = { deviceId: $('mic').value ? { exact: $('mic').value } : undefined, echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 };
+    stream = await navigator.mediaDevices.getUserMedia({ video, audio });
+    $('pre').srcObject = stream; $('self').srcObject = stream;
+    meter(stream);
+  }
+
+  function meter(s) {
+    cancelAnimationFrame(meterRaf);
+    if (!s.getAudioTracks().length) return;
+    const ac = meter.ac || (meter.ac = new AudioContext());
+    const an = ac.createAnalyser(); an.fftSize = 512;
+    ac.createMediaStreamSource(s).connect(an);
+    const buf = new Float32Array(an.fftSize);
+    const loop = () => { an.getFloatTimeDomainData(buf); let pk = 0; for (const v of buf) pk = Math.max(pk, Math.abs(v)); const w = Math.min(100, Math.pow(pk, 0.5) * 100) + '%'; $('lvl').style.width = w; $('lvl2').style.width = w; meterRaf = requestAnimationFrame(loop); };
+    loop();
+  }
+
+  function waitIce(pc, ms) {
+    return new Promise((res) => { if (pc.iceGatheringState === 'complete') return res(); const t = setTimeout(res, ms); pc.addEventListener('icegatheringstatechange', () => { if (pc.iceGatheringState === 'complete') { clearTimeout(t); res(); } }); });
+  }
+
+  async function join() {
+    $('join').disabled = true; fail('');
+    try {
+      const name = $('name').value.trim() || 'Guest';
+      try { localStorage.setItem('bts-guest-name', name); } catch {}
+      if (!stream) await getMedia();
+      es = new EventSource(`/guest/api/events?k=${encodeURIComponent(K)}&sid=${encodeURIComponent(SID)}`);
+      es.onmessage = (e) => onMsg(JSON.parse(e.data));
+      await new Promise((res, rej) => { es.onopen = res; setTimeout(() => rej(new Error('Could not reach BTS Studio')), 8000); });
+      pc = new RTCPeerConnection({ iceServers: info.iceServers || [] });
+      stream.getTracks().forEach(t => pc.addTrack(t, stream));
+      // receive the program return feed
+      pc.addTransceiver('video', { direction: 'recvonly' }); pc.addTransceiver('audio', { direction: 'recvonly' });
+      const rs = new MediaStream();
+      pc.ontrack = (e) => { rs.addTrack(e.track); $('ret').srcObject = rs; };
+      pc.onconnectionstatechange = () => {
+        const s = pc.connectionState;
+        if (s === 'connected') setState('Connected', 'ok');
+        else if (s === 'failed' || s === 'disconnected') setState(s === 'failed' ? 'Connection failed' : 'Reconnecting…');
+      };
+      // prefer high bitrate for the camera
+      for (const s of pc.getSenders()) if (s.track && s.track.kind === 'video') { const p = s.getParameters(); p.encodings = [{ maxBitrate: +$('qual').value >= 1080 ? 6e6 : 3e6 }]; try { await s.setParameters(p); } catch {} }
+      await pc.setLocalDescription(await pc.createOffer());
+      await waitIce(pc, 3000);
+      setState('Waiting for producer…');
+      await api('signal', { k: K, sid: SID, type: 'offer', name, sdp: pc.localDescription.sdp, password: $('pw').value });
+      $('setup').classList.add('hide'); $('live').classList.remove('hide');
+      stats();
+    } catch (e) {
+      fail(e.message || String(e)); $('join').disabled = false; setState('Not connected');
+      if (es) { es.close(); es = null; } if (pc) { pc.close(); pc = null; }
+    }
+  }
+
+  async function onMsg(m) {
+    if (m.type === 'answer' && pc) { await pc.setRemoteDescription({ type: 'answer', sdp: m.sdp }); }
+    else if (m.type === 'chat') { const d = document.createElement('div'); d.innerHTML = '<b></b> '; d.querySelector('b').textContent = (m.from || 'Producer') + ':'; d.append(m.text); $('chat').appendChild(d); $('chat').scrollTop = 1e9; }
+    else if (m.type === 'tally') setState(m.state === 'program' ? 'ON AIR' : m.state === 'preview' ? 'In preview' : 'Connected', m.state === 'program' ? 'live' : 'ok');
+    else if (m.type === 'bye') leave(m.reason || 'The producer ended the call');
+  }
+
+  function leave(reason) {
+    try { api('signal', { k: K, sid: SID, type: 'bye' }); } catch {}
+    if (pc) pc.close(); pc = null; if (es) es.close(); es = null;
+    $('live').classList.add('hide'); $('setup').classList.remove('hide'); $('join').disabled = false;
+    setState('Not connected'); if (reason) fail(reason);
+  }
+
+  async function stats() {
+    if (!pc) return;
+    try {
+      const r = await pc.getStats(); let out = '';
+      r.forEach(s => { if (s.type === 'outbound-rtp' && s.kind === 'video' && s.frameWidth) out = `Sending ${s.frameWidth}×${s.frameHeight} @ ${Math.round(s.framesPerSecond || 0)} fps`; if (s.type === 'candidate-pair' && s.state === 'succeeded' && s.currentRoundTripTime) out += ` · RTT ${Math.round(s.currentRoundTripTime * 1000)} ms`; });
+      $('stats').textContent = out;
+    } catch {}
+    setTimeout(stats, 2000);
+  }
+
+  $('join').onclick = join;
+  $('cam').onchange = $('mic').onchange = $('qual').onchange = () => getMedia().catch(e => fail(e.message));
+  $('bMic').onclick = () => { const t = stream.getAudioTracks()[0]; if (!t) return; t.enabled = !t.enabled; $('bMic').textContent = t.enabled ? 'Mute mic' : 'Unmute mic'; $('bMic').classList.toggle('off', !t.enabled); api('signal', { k: K, sid: SID, type: 'state', mic: t.enabled }).catch(() => {}); };
+  $('bCam').onclick = () => { const t = stream.getVideoTracks()[0]; if (!t) return; t.enabled = !t.enabled; $('bCam').textContent = t.enabled ? 'Camera off' : 'Camera on'; $('bCam').classList.toggle('off', !t.enabled); };
+  $('bEnd').onclick = () => leave();
+  const send = () => { const t = $('msg').value.trim(); if (!t) return; api('signal', { k: K, sid: SID, type: 'chat', text: t, name: $('name').value }).catch(() => {}); onMsg({ type: 'chat', from: 'You', text: t }); $('msg').value = ''; };
+  $('send').onclick = send; $('msg').onkeydown = (e) => { if (e.key === 'Enter') send(); };
+  window.addEventListener('beforeunload', () => { if (pc) navigator.sendBeacon && navigator.sendBeacon('/guest/api/signal', new Blob([JSON.stringify({ k: K, sid: SID, type: 'bye' })], { type: 'application/json' })); });
+
+  (async () => {
+    if (!window.isSecureContext || !navigator.mediaDevices) return fail('This page must be opened over https:// for camera access.');
+    try {
+      info = await api('info?k=' + encodeURIComponent(K));
+      $('title').textContent = 'Join ' + (info.title || 'the show');
+      if (info.needsPassword) $('pwRow').classList.remove('hide');
+      await getMedia(); await listDevices();
+      $('join').disabled = false;
+    } catch (e) { fail(e.message || String(e)); }
+  })();
+})();
+</script>
+</body>
+</html>

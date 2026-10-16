@@ -10,6 +10,9 @@
     if (inp.type === 'scene') tabs.push({ id: 'layers', label: 'Layers', el: layers(inp, st) });
     if (inp.type === 'mix') tabs.push({ id: 'mix', label: 'Mix Switcher', el: mixTab(inp, st) });
     if (inp.type === 'delay') tabs.push({ id: 'delay', label: 'Delay', el: delayTab(inp, st) });
+    if (inp.type === 'slides') tabs.push({ id: 'slides', label: 'Slides', el: slidesTab(inp) });
+    if (inp.type === 'guest') tabs.push({ id: 'guest', label: 'Remote Guest', el: guestTab(inp) });
+    if (inp.type === 'browser') tabs.push({ id: 'interact', label: 'Interact', el: browserTab(inp) });
     if (inp.hasVideo) {
       tabs.push({ id: 'position', label: 'Position / Crop', el: position(inp) });
       tabs.push({ id: 'color', label: 'Colour Correction', el: colour(inp) });
@@ -495,6 +498,158 @@
       { label: 'Delay (ms)', key: 'delayMs', type: 'number', min: 40, max: 10000, step: 40, onChange: (v) => { inp.cfg.delayMs = U.clamp(v, 40, 10000); if (inp.channel) inp.channel.set({ delayMs: inp.cfg.delayMs }); } },
       { label: 'Quality', key: 'height', type: 'select', number: true, options: [[360, '360p'], [540, '540p'], [720, '720p'], [1080, '1080p']], onChange: (v) => { inp.cfg.height = v; } }
     ], o), info]);
+  }
+
+  /* ---------- Slides ---------- */
+  function slidesTab(inp) {
+    const box = U.el('div');
+    const grid = U.el('div', { class: 'slide-grid' });
+    const info = U.el('span', { class: 'hint' });
+    const o = inp.cfg;
+    const reinit = () => { inp.init().then(draw); };
+    const nav = U.el('div', { style: { display: 'flex', gap: '6px', alignItems: 'center', margin: '0 0 8px' } }, [
+      U.el('button', { class: 'btn', text: '⏮ First', onclick: () => inp.load(0) }),
+      U.el('button', { class: 'btn', text: '◀ Previous', onclick: () => inp.prev() }),
+      U.el('button', { class: 'btn primary', text: 'Next ▶', onclick: () => inp.next() }),
+      U.el('button', { class: 'btn', text: '⟳ Reload', title: 'Re-open the file (after editing the deck)', onclick: reinit }),
+      U.el('span', { style: { flex: 1 } }), info
+    ]);
+    const mark = () => { info.textContent = inp.count ? `Slide ${inp.index + 1} / ${inp.count}` : (inp.statusMsg || ''); U.$$('.slide-th', grid).forEach((t, i) => t.classList.toggle('on', i === inp.index)); const cur = grid.children[inp.index]; if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest' }); };
+    function draw() {
+      grid.innerHTML = '';
+      for (let i = 0; i < inp.count; i++) {
+        const img = U.el('img', { alt: '' });
+        const t = U.el('div', { class: 'slide-th', onclick: () => inp.load(i) }, [img, U.el('span', { text: String(i + 1) })]);
+        grid.append(t);
+      }
+      // thumbnails rendered progressively so huge decks stay responsive
+      let i = 0;
+      const step = () => { if (!grid.isConnected && i > 0) return; if (i >= inp.count) return; const k = i++; inp.thumbnail(k).then(u => { const im = grid.children[k]?.querySelector('img'); if (im) im.src = u; }).catch(() => {}).finally(() => setTimeout(step, 0)); };
+      step();
+      mark();
+    }
+    const offItem = inp.on('item', mark);
+    const offSt = inp.on('status', () => { if (inp.status === 'ok') draw(); else mark(); });
+    const iv = setInterval(() => { if (!box.isConnected && box._shown) { offItem(); offSt(); clearInterval(iv); } if (box.isConnected) box._shown = true; }, 1000);
+    box.append(BTS.Dialog.form([
+      { label: 'File', key: 'path', type: 'file', filters: [{ name: 'Presentations', extensions: U.SLIDES_EXT }], onChange: () => { o.folder = ''; inp.index = 0; reinit(); } },
+      { label: 'or image folder', key: 'folder', type: 'file', folder: true, onChange: () => { o.path = ''; inp.index = 0; reinit(); } },
+      { label: 'Transition', key: 'transition', type: 'select', options: [['cut', 'Cut'], ['fade', 'Fade'], ['slide', 'Slide (push)']] },
+      { label: 'Transition (ms)', key: 'transitionMs', type: 'number', min: 0, max: 3000, step: 50 },
+      { label: 'Auto-advance when live', key: 'autoAdvance', type: 'checkbox' },
+      { label: 'Seconds per slide', key: 'slideSeconds', type: 'number', min: 1, max: 600 },
+      { label: 'Loop', key: 'loop', type: 'checkbox' },
+      { label: 'Transparent PDF background', key: 'transparent', type: 'checkbox', onChange: reinit }
+    ], o), nav, grid);
+    if (inp.status === 'ok') setTimeout(draw, 0); else mark();
+    return box;
+  }
+
+  /* ---------- Remote Guest ---------- */
+  function guestTab(inp) {
+    const box = U.el('div');
+    const links = U.el('div', { class: 'list' });
+    const status = U.el('div', { class: 'guest-status' });
+    const chat = U.el('div', { class: 'guest-chat' });
+    const msg = U.el('input', { type: 'text', placeholder: 'Message to guest…', maxlength: 300, style: { flex: 1 } });
+    const send = () => { const t = msg.value.trim(); if (!t) return; if (!inp.sendChat(t)) U.toast('No guest connected', 'error'); msg.value = ''; };
+    msg.onkeydown = (e) => { if (e.key === 'Enter') send(); };
+    const drawLinks = async () => {
+      links.innerHTML = '<div class="li hint">Starting guest server…</div>';
+      try {
+        const urls = await inp.links();
+        links.innerHTML = '';
+        for (const u of urls) {
+          const local = /localhost/.test(u);
+          links.append(U.el('div', { class: 'li' }, [
+            U.el('span', { class: 'grow mono', text: u, title: local ? 'This computer only — for testing' : 'Send this link to the guest' }),
+            local ? U.el('span', { class: 'hint', text: 'this PC' }) : null,
+            U.el('button', { class: 'tbtn small', text: 'Copy', onclick: () => { navigator.clipboard.writeText(u); U.toast('Link copied'); } }),
+            U.el('button', { class: 'tbtn small', text: 'Open', onclick: () => window.bts.shell.open(u) })
+          ]));
+        }
+      } catch (e) { links.innerHTML = ''; links.append(U.el('div', { class: 'li', style: { color: 'var(--danger, #e2453c)' }, text: String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '') })); }
+    };
+    const drawStatus = () => {
+      const g = inp.guest;
+      status.innerHTML = '';
+      status.append(g
+        ? U.el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center' } }, [
+          U.el('span', { class: 'dot ' + (inp.pc && inp.pc.connectionState === 'connected' ? 'ok' : 'wait') }),
+          U.el('b', { text: g.name }), U.el('span', { class: 'hint', text: `${g.ip || ''} · ${inp.pc ? inp.pc.connectionState : ''}${g.mic === false ? ' · mic muted' : ''}` }),
+          U.el('span', { style: { flex: 1 } }),
+          U.el('button', { class: 'btn danger', text: 'Hang up', onclick: () => inp.hangup(true) })
+        ])
+        : U.el('div', { class: 'hint', text: 'No guest connected — send one of the links below.' }));
+    };
+    const drawChat = () => { chat.innerHTML = ''; for (const m of inp.chat.slice(-50)) chat.append(U.el('div', {}, [U.el('b', { text: m.from + ': ' }), m.text])); chat.scrollTop = 1e9; };
+    const offs = [inp.on('state', drawStatus), inp.on('status', drawStatus), inp.on('chat', drawChat)];
+    const iv = setInterval(() => { if (box._shown && !box.isConnected) { offs.forEach(f => f()); clearInterval(iv); } if (box.isConnected) box._shown = true; }, 1000);
+    const o = inp.cfg;
+    box.append(status, U.el('h4', { text: 'Guest links' }), links,
+      U.el('p', { class: 'hint', text: 'Use the address on the same network as the guest. The page uses a self-signed certificate — the guest taps Advanced → Continue once.' }),
+      BTS.Dialog.form([
+        { label: 'Password', key: 'password', placeholder: 'None', onChange: () => BTS.Guests.add(inp) },
+        { label: 'Return feed', key: 'returnSource', type: 'select', options: [['program', 'Program output'], ['preview', 'Preview'], ['multiview', 'Multiview']] },
+        { label: 'Return bitrate (kbps)', key: 'returnKbps', type: 'number', min: 300, max: 6000, step: 100 },
+        { label: 'Use guest name as title', key: 'autoTitle', type: 'checkbox' }
+      ], o),
+      U.el('div', { style: { display: 'flex', gap: '8px', margin: '8px 0' } }, [
+        U.el('button', { class: 'btn', text: '🔑 New link', title: 'Invalidate the old link and make a new one', onclick: () => { BTS.Guests.remove(inp); inp.hangup(true); inp.cfg.key = Array.from(crypto.getRandomValues(new Uint8Array(6)), b => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 32]).join(''); BTS.Guests.add(inp).then(drawLinks); } })
+      ]),
+      U.el('h4', { text: 'Chat' }), chat, U.el('div', { style: { display: 'flex', gap: '6px', marginTop: '6px' } }, [msg, U.el('button', { class: 'btn', text: 'Send', onclick: send })]));
+    drawStatus(); drawChat(); drawLinks();
+    return box;
+  }
+
+  /* ---------- Web browser: interactive ---------- */
+  const KEYMAP = { ArrowLeft: 'Left', ArrowRight: 'Right', ArrowUp: 'Up', ArrowDown: 'Down', ' ': 'Space', Escape: 'Escape', Enter: 'Return' };
+  function browserTab(inp) {
+    const box = U.el('div');
+    const url = U.el('input', { type: 'text', value: inp.cfg.url || '', style: { flex: 1 }, spellcheck: false });
+    const go = () => { let u = url.value.trim(); if (!u) return; inp.update({ url: u }); };
+    url.onkeydown = (e) => { if (e.key === 'Enter') go(); };
+    const nav = (a) => window.bts.browser.nav(inp.id, a).then(r => { if (r) url.value = r.url; });
+    const cv = U.el('canvas', { class: 'browser-live', tabindex: 0 });
+    const g = cv.getContext('2d');
+    const W = () => inp.cfg.width || inp.app.W, H = () => inp.cfg.height || inp.app.H;
+    let raf = 0;
+    const loop = () => {
+      if (!box.isConnected && box._shown) return;
+      if (box.isConnected) box._shown = true;
+      if (cv.width !== W()) { cv.width = W(); cv.height = H(); }
+      if (inp.last) { g.clearRect(0, 0, cv.width, cv.height); g.drawImage(inp.canvas, 0, 0, cv.width, cv.height); }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    const pt = (e) => { const r = cv.getBoundingClientRect(); return { x: Math.round((e.clientX - r.left) / r.width * W()), y: Math.round((e.clientY - r.top) / r.height * H()) }; };
+    const mods = (e) => [e.shiftKey && 'shift', e.ctrlKey && 'control', e.altKey && 'alt', e.metaKey && 'meta'].filter(Boolean);
+    const btn = (e) => ['left', 'middle', 'right'][e.button] || 'left';
+    const send = (ev) => window.bts.browser.input(inp.id, ev);
+    cv.addEventListener('mousedown', (e) => { cv.focus(); e.preventDefault(); send({ type: 'mouseDown', ...pt(e), button: btn(e), clickCount: e.detail || 1, modifiers: mods(e) }); });
+    cv.addEventListener('mouseup', (e) => send({ type: 'mouseUp', ...pt(e), button: btn(e), clickCount: e.detail || 1, modifiers: mods(e) }));
+    cv.addEventListener('mousemove', (e) => send({ type: 'mouseMove', ...pt(e), modifiers: mods(e) }));
+    cv.addEventListener('contextmenu', (e) => e.preventDefault());
+    cv.addEventListener('wheel', (e) => { e.preventDefault(); send({ type: 'mouseWheel', ...pt(e), deltaX: -e.deltaX, deltaY: -e.deltaY, canScroll: true, modifiers: mods(e) }); }, { passive: false });
+    cv.addEventListener('keydown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const kc = KEYMAP[e.key] || e.key;
+      send({ type: 'keyDown', keyCode: kc, modifiers: mods(e) });
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) send({ type: 'char', keyCode: e.key, modifiers: mods(e) });
+    });
+    cv.addEventListener('keyup', (e) => { e.preventDefault(); e.stopPropagation(); send({ type: 'keyUp', keyCode: KEYMAP[e.key] || e.key, modifiers: mods(e) }); });
+    box.append(
+      U.el('div', { style: { display: 'flex', gap: '6px', marginBottom: '8px' } }, [
+        U.el('button', { class: 'tbtn', text: '◀', title: 'Back', onclick: () => nav('back') }),
+        U.el('button', { class: 'tbtn', text: '▶', title: 'Forward', onclick: () => nav('forward') }),
+        U.el('button', { class: 'tbtn', text: '⟳', title: 'Reload', onclick: () => inp.reload() }),
+        url, U.el('button', { class: 'btn primary', text: 'Go', onclick: go }),
+        U.el('button', { class: 'tbtn', text: 'DevTools', onclick: () => window.bts.browser.devtools(inp.id) })
+      ]),
+      cv,
+      U.el('p', { class: 'hint', text: 'Click, scroll and type directly on the page above — e.g. log in to a social-media comments dashboard, start a web scoreboard, or click through a web presentation. What you see here is what goes to air.' })
+    );
+    return box;
   }
 
   BTS.InputSettings = { open };

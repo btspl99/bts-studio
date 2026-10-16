@@ -7,11 +7,13 @@
     ['camera', '🎥', 'Camera / Capture', 'Webcam, Blackmagic, AVerMedia, Elgato…'],
     ['stream', '📡', 'Stream / IP Cam', 'RTSP, SRT, RTMP, HLS, UDP'],
     ['screen', '🖥️', 'Desktop Capture', 'Screen or application window'],
-    ['video', '🎞️', 'Video', 'MP4, MOV, MKV, WebM… or URL'],
+    ['guest', '📞', 'Remote Guest', 'Callers join from a browser link'],
+    ['video', '🎞️', 'Video', 'MP4, MOV, AVI, WMV, MXF, MPEG-2…'],
+    ['slides', '📑', 'Slides / PowerPoint', 'PDF, PPTX, Keynote or image folder'],
     ['image', '🖼️', 'Image', 'PNG, JPG, GIF, SVG, WebP'],
     ['playlist', '📃', 'List', 'Playlist of videos & images'],
     ['browser', '🌐', 'Web Browser', 'URL or local HTML overlay'],
-    ['title', '🅃', 'Title / XAML-free', 'Lower thirds, scores, clocks'],
+    ['title', '🅃', 'Title', 'Lower thirds, scores, clocks'],
     ['color', '🎨', 'Colour', 'Solid, gradient, bars'],
     ['scene', '🧩', 'Scene', 'PiP, side-by-side, layers'],
     ['mix', '🔀', 'Mix', 'A second, independent switcher'],
@@ -19,7 +21,6 @@
     ['audio', '🎙️', 'Audio Input', 'Microphone / line-in'],
     ['audio-file', '🎵', 'Audio File', 'MP3, WAV, AAC, FLAC']
   ];
-  TYPES[6][2] = 'Title';
 
   async function devices(kind) {
     let list = await navigator.mediaDevices.enumerateDevices();
@@ -197,6 +198,53 @@
     async 'audio-file'(el) { return fileType(el, 'audio-file', 'Audio files', U.AUDIO_EXT, false); },
     async image(el) { return fileType(el, 'image', 'Images', U.IMAGE_EXT, false); },
 
+    async slides(el) {
+      const o = { path: '', folder: '', transition: 'fade', transitionMs: 300, autoAdvance: false, slideSeconds: 8, loop: false, title: '' };
+      el.innerHTML = '';
+      const lbl = U.el('div', { class: 'li hint', text: 'Nothing selected' });
+      const show = () => { lbl.textContent = o.folder ? '📁 ' + o.folder : o.path || 'Nothing selected'; lbl.classList.toggle('hint', !(o.folder || o.path)); };
+      const pickFile = async () => { const f = await window.bts.dialog.open({ properties: ['openFile'], filters: [{ name: 'Presentations', extensions: U.SLIDES_EXT }, { name: 'All files', extensions: ['*'] }] }); if (f) { o.path = f[0]; o.folder = ''; show(); } };
+      const pickFolder = async () => { const f = await window.bts.dialog.folder(); if (f) { o.folder = f; o.path = ''; show(); } };
+      el.append(U.el('div', { style: { display: 'flex', gap: '8px', marginBottom: '8px' } }, [
+        U.el('button', { class: 'btn primary', text: 'Presentation / PDF…', onclick: pickFile }),
+        U.el('button', { class: 'btn', text: 'Folder of slide images…', onclick: pickFolder })
+      ]), U.el('div', { class: 'list' }, [lbl]), U.el('div', { style: { height: '10px' } }));
+      el.append(BTS.Dialog.form([
+        { label: 'Transition', key: 'transition', type: 'select', options: [['cut', 'Cut'], ['fade', 'Fade'], ['slide', 'Slide (push)']] },
+        { label: 'Transition (ms)', key: 'transitionMs', type: 'number', min: 0, max: 3000, step: 50 },
+        { label: 'Auto-advance when live', key: 'autoAdvance', type: 'checkbox' },
+        { label: 'Seconds per slide', key: 'slideSeconds', type: 'number', min: 1, max: 600 },
+        { label: 'Loop', key: 'loop', type: 'checkbox' },
+        { label: 'Title', key: 'title', placeholder: 'Optional' }
+      ], o));
+      el.append(U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, html: 'PDF opens directly. <b>PowerPoint</b> (.pptx / .ppt) is converted with Microsoft PowerPoint if installed, otherwise LibreOffice. You can also export the deck as PNG/JPEG (File → Export) and pick that folder. Use <b>Next / Previous</b> on the input, the shortcuts NextItem / PreviousItem, a clicker mapped to them, or the web controller to change slides.' }));
+      setTimeout(pickFile, 50);
+      return () => {
+        if (!o.path && !o.folder) { U.toast('Choose a presentation or a folder', 'error'); return null; }
+        const name = o.title || U.baseName(o.path || o.folder).replace(/\.[^.]+$/, '');
+        const { title, ...cfg } = o;
+        return [{ type: 'slides', title: name, cfg }];
+      };
+    },
+
+    async guest(el, st) {
+      const o = { title: '', password: '', returnSource: 'program', returnKbps: 1500 };
+      const n = st.inputs.filter(i => i.type === 'guest').length + 1;
+      el.innerHTML = '';
+      el.append(BTS.Dialog.form([
+        { label: 'Title', key: 'title', placeholder: `Guest ${n}` },
+        { label: 'Password (optional)', key: 'password', placeholder: 'Leave empty for none' },
+        { label: 'Return feed', key: 'returnSource', type: 'select', options: [['program', 'Program output'], ['preview', 'Preview'], ['multiview', 'Multiview']] },
+        { label: 'Return bitrate (kbps)', key: 'returnKbps', type: 'number', min: 300, max: 6000, step: 100 }
+      ], o));
+      el.append(U.el('div', { class: 'hint', style: { lineHeight: '1.7', marginTop: '10px' }, html:
+        'Each Remote Guest input has its own private link. Send it to your guest — they open it in Chrome, Edge, Safari or Firefox, allow camera and microphone, and press <b>Join</b>. No install needed.<br>' +
+        '• Guests hear the show without their own voice (<b>mix-minus</b>) and see the return feed you choose.<br>' +
+        '• On your network it works straight away. The page uses a self-signed certificate, so the guest taps <i>Advanced → Continue</i> once.<br>' +
+        '• For guests outside your network, forward the guest port (Settings → Remote Guests, default 8089) on your router or use a VPN/tunnel, and add a TURN server if a guest cannot connect.' }));
+      return () => [{ type: 'guest', title: o.title || `Guest ${n}`, cfg: { password: o.password, returnSource: o.returnSource, returnKbps: o.returnKbps, autoTitle: !o.title } }];
+    },
+
     async playlist(el) {
       const o = { title: 'List', loop: true, shuffle: false, imgDur: 5, items: [] };
       el.innerHTML = '';
@@ -365,7 +413,7 @@
     if (type !== 'image') rows.push({ label: 'Loop', key: 'loop', type: 'checkbox' });
     if (allowUrl) rows.push({ label: 'or URL', key: 'url', placeholder: 'https://example.com/video.mp4' });
     el.append(BTS.Dialog.form(rows, o));
-    el.append(U.el('p', { class: 'hint', text: 'Tip: you can also drag & drop files onto the inputs area. Selecting several files adds one input per file.' }));
+    el.append(U.el('p', { class: 'hint', text: 'Tip: you can also drag & drop files onto the inputs area. Selecting several files adds one input per file.' + (type === 'image' ? '' : ' Formats the player cannot decode directly (AVI, WMV, MXF, MPEG-2, VOB, FLV, ProRes…) are converted automatically the first time — progress shows on the input.') }));
     setTimeout(pick, 50);
     return () => {
       const items = [...o.files];

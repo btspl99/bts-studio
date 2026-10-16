@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld('bts', {
     exec: (id, js) => ipcRenderer.invoke('browser:exec', id, js),
     devtools: (id) => ipcRenderer.invoke('browser:devtools', id),
     input: (id, ev) => ipcRenderer.invoke('browser:input', id, ev),
+    nav: (id, action) => ipcRenderer.invoke('browser:nav', id, action),
     ack: (id) => ipcRenderer.send('browser:ack', id),
     onFrame: listen('browser:frame'),
     onStatus: listen('browser:status')
@@ -83,6 +84,24 @@ contextBridge.exposeInMainWorld('bts', {
     stop: (id) => ipcRenderer.invoke('stream:stop', id),
     onStatus: listen('stream:status'),
     onAudio: listen('stream:audio')
+  },
+  media: {
+    probe: (f) => ipcRenderer.invoke('media:probe', f),
+    needsConvert: (f) => ipcRenderer.invoke('media:needs-convert', f),
+    convert: (f, o) => ipcRenderer.invoke('media:convert', f, o),
+    officeToPdf: (f) => ipcRenderer.invoke('media:office-to-pdf', f),
+    listImages: (d) => ipcRenderer.invoke('media:list-images', d),
+    readBinary: (f) => ipcRenderer.invoke('media:read-binary', f),
+    clearCache: () => ipcRenderer.invoke('media:clear-cache'),
+    onProgress: listen('media:progress')
+  },
+  guests: {
+    start: () => ipcRenderer.invoke('guests:start'),
+    stop: () => ipcRenderer.invoke('guests:stop'),
+    slot: (k, info) => ipcRenderer.invoke('guests:slot', k, info),
+    send: (sid, msg) => ipcRenderer.invoke('guests:send', sid, msg),
+    urls: () => ipcRenderer.invoke('guests:urls'),
+    onSignal: listen('guests:signal')
   },
   replay: {
     start: (id, cfg) => ipcRenderer.invoke('replay:start', id, cfg),

@@ -109,6 +109,23 @@
       U.el('div', { html: `<b>API</b>: <span class="kbd">http://127.0.0.1:${s.api.port}/api/?Function=Cut&amp;Input=2</span> • state: <span class="kbd">/api</span> (JSON) or <span class="kbd">/api?format=xml</span> • list: <span class="kbd">/api/functions</span>` })
     ]));
 
+    s.guests = s.guests || {}; s.media = s.media || {};
+    const guestsEl = U.el('div', {}, [
+      F([{ section: 'Media files' },
+        { label: 'Auto-convert unsupported formats', key: 'autoConvert', type: 'checkbox', hint: 'AVI, WMV, MXF, MPEG-2, VOB, FLV, ProRes/DNxHD MOV… are converted once to an H.264 proxy with FFmpeg and cached.' },
+        { label: 'Conversion quality', key: 'convertQuality', type: 'select', options: [['fast', 'Fast (good quality, quick)'], ['high', 'High (slower, near-original)']] }
+      ], s.media),
+      U.el('div', { style: { margin: '6px 0 14px' } }, [U.el('button', { class: 'btn', text: 'Clear converted-file cache', onclick: async () => { await window.bts.media.clearCache(); U.toast('Cache cleared'); } })]),
+      F([{ section: 'Remote Guests (browser call-in)' },
+        { label: 'Guest page port (HTTPS)', key: 'port', type: 'number', min: 1024, max: 65535, hint: 'Forward this TCP port on your router to allow guests from outside your network.' },
+        { label: 'STUN server(s)', key: 'stun', placeholder: 'stun:stun.l.google.com:19302', hint: 'Helps guests behind home routers find a direct path. Separate several with commas.' },
+        { label: 'TURN server', key: 'turn', placeholder: 'turn:turn.example.com:3478', hint: 'Optional relay for guests on strict corporate / mobile networks.' },
+        { label: 'TURN user name', key: 'turnUser' },
+        { label: 'TURN password', key: 'turnPass', type: 'password' }
+      ], s.guests),
+      U.el('p', { class: 'hint', text: 'Port changes apply the next time BTS Studio starts.' })
+    ]);
+
     const sc = shortcutsEditor();
 
     const info = await window.bts.info();
@@ -128,7 +145,7 @@
     const t = BTS.Dialog.tabs([
       { id: 'general', label: 'General', el: general }, { id: 'stream', label: 'Streaming', el: stream }, { id: 'record', label: 'Recording', el: record },
       { id: 'transitions', label: 'Transitions', el: trans }, { id: 'shortcuts', label: 'Shortcuts', el: sc.el }, { id: 'midi', label: 'MIDI', el: midiEl },
-      { id: 'devices', label: 'Devices & Performance', el: devEl }, { id: 'api', label: 'Web Controller / API', el: api }, { id: 'updates', label: 'Updates', el: upd }
+      { id: 'devices', label: 'Devices & Performance', el: devEl }, { id: 'api', label: 'Web Controller / API', el: api }, { id: 'guests', label: 'Media & Guests', el: guestsEl }, { id: 'updates', label: 'Updates', el: upd }
     ]);
     BTS.Dialog.open({
       title: 'Settings', body: t.el, width: 820, onClose: () => { if (midiEl._cleanup) midiEl._cleanup(); },

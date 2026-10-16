@@ -238,6 +238,31 @@
     getFrame() { return this.img ? { src: this.img, w: this.img.naturalWidth, h: this.img.naturalHeight } : null; }
   }
 
+  /* ---------------- Auto-convert (AVI, WMV, MXF, MPEG-2, ProRes…) ---------------- */
+  // Containers/codecs Chromium cannot decode are transcoded once to an H.264/AAC proxy by FFmpeg (cached).
+  const CONVERT_EXT = /\.(avi|wmv|asf|mxf|mpg|mpeg|m2v|vob|ts|m2ts|mts|flv|f4v|3gp|3g2|divx|dv|rm|rmvb|ogv|gxf|mod|tod|qt|wma|aif|aiff|ac3|mp2)$/i;
+  const PROBE_EXT = /\.(mov|mkv|mp4|m4v)$/i;
+  const probeCache = new Map();
+  async function playableUrl(input, file, force = false) {
+    if (!file || /^(https?|data|blob|file|rtmp|rtsp|srt|udp):/i.test(file)) return file;
+    const ms = (BTS.settings && BTS.settings.media) || {};
+    if (window.bts.media && (force || ms.autoConvert !== false)) {
+      let convert = force || CONVERT_EXT.test(file);
+      if (!convert && PROBE_EXT.test(file)) {
+        if (!probeCache.has(file)) probeCache.set(file, window.bts.media.needsConvert(file).then(r => r.convert).catch(() => false));
+        convert = await probeCache.get(file);
+      }
+      if (convert) {
+        input.setStatus('loading', 'Converting for playback…');
+        const off = window.bts.media.onProgress((m) => { if (m.file === file && m.state === 'progress') input.setStatus('loading', `Converting ${Math.round(m.progress * 100)}%`); });
+        try { file = await window.bts.media.convert(file, { quality: ms.convertQuality || 'fast' }); input.converted = file; }
+        catch (e) { input.setStatus('error', String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '')); off(); return null; }
+        off();
+      }
+    }
+    return window.bts.file.url(file);
+  }
+
   /* ---------------- Video / Audio file ---------------- */
   class VideoInput extends Input {
     get isMedia() { return true; }
@@ -245,7 +270,9 @@
     async init() {
       this.setStatus('loading');
       this._createEl();
-      const src = /^(https?|file|data|blob):/i.test(this.cfg.path || '') ? this.cfg.path : await window.bts.file.url(this.cfg.path);
+      this._curPath = this.cfg.path; this._triedConvert = false;
+      const src = await playableUrl(this, this.cfg.path);
+      if (!src) return;
       if (this.el.src !== src) { this.el.src = src; this.el.load(); }
       this.el.loop = !!this.props.loop && this.props.markOut == null;
       if (this.isAudioOnly) this._initAudioVis();
@@ -258,7 +285,16 @@
         el.preservesPitch = false;
         el.addEventListener('loadedmetadata', () => { el.playbackRate = this.props.speed || 1; });
         el.addEventListener('timeupdate', () => this._onTime());
-        el.addEventListener('error', () => this.setStatus('error', el.error ? `Media error ${el.error.code}: ${el.error.message || ''}` : 'Media error'));
+        el.addEventListener('error', () => {
+          // Unsupported codec inside a normally-playable container (e.g. HEVC without the extension, ProRes): convert once.
+          if (el.error && (el.error.code === 4 || el.error.code === 3) && this._curPath && !this._triedConvert && !/^[a-z]+:/i.test(this._curPath)) {
+            this._triedConvert = true;
+            const t = el.currentTime;
+            playableUrl(this, this._curPath, true).then(src => { if (src) { el.src = src; el.load(); if (t) this.seek(t); if (this.live && this.props.autoPlay) this.play(); } });
+            return;
+          }
+          this.setStatus('error', el.error ? `Media error ${el.error.code}: ${el.error.message || ''}` : 'Media error');
+        });
         el.addEventListener('loadeddata', () => this.setStatus('ok'));
         el.addEventListener('play', () => this.emit('state'));
         el.addEventListener('pause', () => this.emit('state'));
@@ -332,7 +368,9 @@
       this.cfg.index = this.index;
       const it = items[this.index];
       const kind = U.kindOfFile(it.path);
-      const url = /^(https?|file):/i.test(it.path) ? it.path : await window.bts.file.url(it.path);
+      this._curPath = it.path; this._triedConvert = false;
+      const url = kind === 'image' ? (/^(https?|file):/i.test(it.path) ? it.path : await window.bts.file.url(it.path)) : await playableUrl(this, it.path);
+      if (!url) return;
       clearTimeout(this.imgTimer);
       this.curKind = kind;
       if (kind === 'image') {
@@ -781,11 +819,12 @@
 
   const CLASSES = { mix: MixInput, delay: DelayInput, stream: StreamInput, replay: VideoInput, color: ColorInput, image: ImageInput, video: VideoInput, 'audio-file': VideoInput, playlist: PlaylistInput, camera: CameraInput, screen: ScreenInput, audio: AudioDeviceInput, browser: BrowserInput, title: TitleInput, scene: SceneInput };
 
+  function register(type, Cls, info) { CLASSES[type] = Cls; if (info) TYPE_INFO[type] = info; }
   function create(app, data) {
     const C = CLASSES[data.type];
     if (!C) throw new Error('Unknown input type ' + data.type);
     return new C(app, data);
   }
 
-  BTS.Inputs = { create, TYPE_INFO, DEFAULT_PROPS, Input, cardHint, findPairedAudio };
+  BTS.Inputs = { create, register, playableUrl, VideoInput, TYPE_INFO, DEFAULT_PROPS, Input, cardHint, findPairedAudio };
 })(window.BTS);

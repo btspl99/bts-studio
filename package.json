@@ -22,7 +22,8 @@
   },
   "dependencies": {
     "electron-log": "^5.4.3",
-    "electron-updater": "^6.8.9"
+    "electron-updater": "^6.8.9",
+    "selfsigned": "^5.5.0"
   },
   "devDependencies": {
     "electron": "^44.7.2",
