@@ -54,7 +54,8 @@
         { label: 'Service', key: 'service', type: 'select', options: Object.entries(SERVICES).map(([k, v]) => [k, v.name]), onChange: (v) => { d.url = SERVICES[v].url; urlInput.value = d.url; } },
         { label: 'Server URL', key: 'url' },
         { label: 'Stream key', key: 'key', type: 'password', placeholder: 'Paste your stream key' },
-        { label: 'Bitrate override (kbps)', key: 'videoBitrate', type: 'number', hint: 'Leave blank to use the global bitrate below.' }
+        { label: 'Bitrate override (kbps)', key: 'videoBitrate', type: 'number', hint: 'Leave blank to use the global bitrate below.' },
+        { label: 'Audio', key: 'audioBus', type: 'select', options: [['M', 'Master'], ...['A', 'B', 'C', 'D', 'E', 'F', 'G'].map(b => [b, 'Bus ' + b])], hint: 'e.g. a second destination with a different-language commentary on Bus B.' }
       ], d));
       const urlInput = destBox.querySelectorAll('.form')[i].querySelectorAll('input[type=text]')[1];
     });
@@ -83,7 +84,8 @@
       { label: 'Mode', key: 'mode', type: 'select', options: [['encode', 'Re-encode with FFmpeg'], ['passthrough', 'Pass-through (low CPU)']] },
       { label: 'Encoder', key: 'encoder', type: 'select', options: encOpts },
       { label: 'Quality', key: 'quality', type: 'select', options: [['high', 'High'], ['medium', 'Medium'], ['low', 'Low (proxy)']] },
-      { label: 'File name suffix', key: 'suffix' }
+      { label: 'File name suffix', key: 'suffix' },
+      { label: 'Audio', key: 'audioBus', type: 'select', options: [['M', 'Master'], ...['A', 'B', 'C', 'D', 'E', 'F', 'G'].map(b => [b, 'Bus ' + b])] }
     ], s.record2 || (s.record2 = { enabled: false, format: 'mkv', mode: 'encode', encoder: 'libx264', quality: 'medium', suffix: '-2' }))]);
 
     // transitions

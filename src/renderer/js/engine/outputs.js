@@ -24,14 +24,17 @@
       return { mime: '', codec: 'unknown' };
     }
 
-    programStream() {
+    /** Program video with the Master mix, or with an aux bus (A–G) as the audio — e.g. a second stream in another language. */
+    programStream(bus = 'M') {
       const st = this.studio;
       if (!this._pgm || this._pgmFps !== st.fps || this._pgmCanvas !== st.programCanvas) {
         const v = st.programCanvas.captureStream(st.fps);
         this._pgm = new MediaStream([...v.getVideoTracks(), ...st.audio.masterStream.getAudioTracks()]);
-        this._pgmFps = st.fps; this._pgmCanvas = st.programCanvas;
+        this._pgmFps = st.fps; this._pgmCanvas = st.programCanvas; this._pgmBus = {};
       }
-      return this._pgm;
+      if (!bus || bus === 'M' || !st.audio.buses[bus]) return this._pgm;
+      if (!this._pgmBus[bus]) this._pgmBus[bus] = new MediaStream([...this._pgm.getVideoTracks(), ...st.audio.busStream(bus).getAudioTracks()]);
+      return this._pgmBus[bus];
     }
 
     get settings() { return this.studio.settings; }
@@ -47,7 +50,7 @@
       for (const d of dests) {
         const base = d.url.trim();
         const url = d.key ? (base.endsWith('/') || base.endsWith('=') ? base + d.key.trim() : base + '/' + d.key.trim()) : base;
-        await this._start(`stream-${d.n}`, { kind: 'stream', url, key: d.key, name: d.name, videoBitrate: d.videoBitrate || undefined, encoder: d.encoder || undefined }, this.programStream(), 250,
+        await this._start(`stream-${d.n}`, { kind: 'stream', url, key: d.key, name: d.name, videoBitrate: d.videoBitrate || undefined, encoder: d.encoder || undefined }, this.programStream(d.audioBus), 250,
           Math.max(8000, (d.videoBitrate || this.settings.stream.videoBitrate) * 1.6));
       }
       window.bts.power(true);
@@ -73,7 +76,7 @@
       const r2 = this.settings.record2;
       if (ok && r2 && r2.enabled) {
         const f2 = file.replace(/\.[^.]+$/, '') + (r2.suffix || '-2') + '.' + (r2.format || 'mkv');
-        await this._start('record2', { kind: 'record', file: f2, passthrough: r2.mode === 'passthrough', encoder: r2.encoder, quality: r2.quality, name: 'Recorder 2' }, this.programStream(), 1000, r2.videoBitrate || 12000);
+        await this._start('record2', { kind: 'record', file: f2, passthrough: r2.mode === 'passthrough', encoder: r2.encoder, quality: r2.quality, name: 'Recorder 2' }, this.programStream(r2.audioBus), 1000, r2.videoBitrate || 12000);
       }
       if (ok) window.bts.power(true);
       return ok;

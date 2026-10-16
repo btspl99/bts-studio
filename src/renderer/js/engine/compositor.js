@@ -454,7 +454,7 @@
         previewId: this.previewId, programId: this.programId,
         overlays: this.overlays.map(o => ({ type: o.type, duration: o.duration })),
         transitions: U.deepClone(this.transitions),
-        master: { M: { volume: this.audio.buses.M.volume, muted: this.audio.buses.M.muted }, A: { volume: this.audio.buses.A.volume, muted: this.audio.buses.A.muted }, B: { volume: this.audio.buses.B.volume, muted: this.audio.buses.B.muted } },
+        master: this.audio.busState(),
         dataSources: this.data ? this.data.serialize() : [],
         macros: this.macros ? this.macros.serialize() : [],
         replay: this.replay ? this.replay.serialize() : null,
@@ -484,7 +484,7 @@
         this.transitions = Object.assign(this.transitions, p.transitions, { stingers: st });
       }
       (p.overlays || []).forEach((o, i) => { if (this.overlays[i]) Object.assign(this.overlays[i], { type: o.type || 'Fade', duration: o.duration ?? 500 }); });
-      if (p.master) for (const k of ['M', 'A', 'B']) if (p.master[k]) { this.audio.setBusVolume(k, p.master[k].volume ?? 1); this.audio.setBusMute(k, !!p.master[k].muted); }
+      if (p.master) this.audio.loadBusState(p.master);
       this.previewOverlays = !!p.previewOverlays;
       // add non-scene inputs first so scenes can reference them
       const list = p.inputs || [];

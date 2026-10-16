@@ -74,14 +74,21 @@
   def('Audio', 'Audio', ['Input'], (p) => { const c = ch(p); c.set({ muted: !c.s.muted }); S().emit('mixer-values'); return true; }, 'Toggle mute');
   def('Solo', 'Audio', ['Input'], (p) => { const c = ch(p); c.set({ solo: !c.s.solo }); S().emit('mixer-values'); return true; });
   def('AudioAutoToggle', 'Audio', ['Input'], (p) => { const c = ch(p); c.set({ followVideo: !c.s.followVideo }); S().emit('mixer-values'); return true; }, 'Toggle audio-follow-video');
-  def('AudioBus', 'Audio', ['Input', 'Value'], (p) => { const c = ch(p); const b = String(p.Value || 'M').toUpperCase(); c.s.buses[b] = !c.s.buses[b]; c.apply(); S().emit('mixer-values'); return true; }, 'Toggle routing to bus M/A/B');
+  def('AudioBus', 'Audio', ['Input', 'Value'], (p) => { const c = ch(p); const b = String(p.Value || 'M').toUpperCase(); c.s.buses[b] = !c.s.buses[b]; c.apply(); S().emit('mixer-values'); return true; }, 'Toggle routing to bus M/A–G');
   def('SetBalance', 'Audio', ['Input', 'Value'], (p) => { ch(p).set({ balance: num(p.Value, 0) }); return true; }, '-1..1');
   def('SetMasterVolume', 'Audio', ['Value'], (p) => { S().audio.setBusVolume('M', U.faderToGain(num(p.Value, 75) / 100)); S().emit('mixer-values'); return true; });
   def('MasterAudioON', 'Audio', [], () => { S().audio.setBusMute('M', false); S().emit('mixer-values'); return true; });
   def('MasterAudioOFF', 'Audio', [], () => { S().audio.setBusMute('M', true); S().emit('mixer-values'); return true; });
   def('MasterAudio', 'Audio', [], () => { const a = S().audio; a.setBusMute('M', !a.buses.M.muted); S().emit('mixer-values'); return true; });
-  def('SetBusAVolume', 'Audio', ['Value'], (p) => { S().audio.setBusVolume('A', U.faderToGain(num(p.Value, 75) / 100)); S().emit('mixer-values'); return true; });
-  def('SetBusBVolume', 'Audio', ['Value'], (p) => { S().audio.setBusVolume('B', U.faderToGain(num(p.Value, 75) / 100)); S().emit('mixer-values'); return true; });
+  for (const b of ['A', 'B', 'C', 'D', 'E', 'F', 'G']) {
+    def(`SetBus${b}Volume`, 'Audio', ['Value'], (p) => { S().audio.setBusVolume(b, U.faderToGain(num(p.Value, 75) / 100)); S().emit('mixer-values'); return true; }, `Bus ${b} fader 0-100`);
+    def(`Bus${b}Audio`, 'Audio', [], () => { const a = S().audio; a.setBusMute(b, !a.buses[b].muted); S().emit('mixer-values'); return true; }, `Toggle mute of Bus ${b}`);
+    def(`Bus${b}AudioOn`, 'Audio', [], () => { S().audio.setBusMute(b, false); S().emit('mixer-values'); return true; });
+    def(`Bus${b}AudioOff`, 'Audio', [], () => { S().audio.setBusMute(b, true); S().emit('mixer-values'); return true; });
+    def(`Bus${b}ToMaster`, 'Audio', ['Value?'], (p) => { const a = S().audio; a.setBusToMaster(b, p.Value == null ? !a.buses[b].toMaster : /^(1|true|on)$/i.test(String(p.Value))); S().emit('mixer'); return true; });
+  }
+  def('AudioBusOn', 'Audio', ['Input', 'Value'], (p) => { const c = ch(p); c.s.buses[String(p.Value || 'M').toUpperCase()] = true; c.apply(); S().emit('mixer'); return true; }, 'Route input to bus M/A–G');
+  def('AudioBusOff', 'Audio', ['Input', 'Value'], (p) => { const c = ch(p); c.s.buses[String(p.Value || 'M').toUpperCase()] = false; c.apply(); S().emit('mixer'); return true; });
 
   // ---- position / effects
   const pos = (p) => need(inp(p)).props.position;
@@ -153,6 +160,13 @@
   def('ReplayPlay', 'Replay', [], () => R().goLive(), 'Send the loaded replay to Output');
   def('ReplayPause', 'Replay', [], () => { const i = R().replayInput(); if (!i) throw new Error('No replay loaded'); i.togglePlay(); return true; });
   def('ReplayPlayHighlights', 'Replay', [], () => R().playHighlights(), 'Play starred events back-to-back');
+  def('ReplaySelectChannel', 'Replay', ['Value'], (p) => R().select(String(p.Value || 'A').toUpperCase()), 'A or B — which replay channel the controls act on');
+  def('ReplayChannelA', 'Replay', [], () => R().select('A'));
+  def('ReplayChannelB', 'Replay', [], () => R().select('B'));
+  def('ReplayBFollowA', 'Replay', ['Value?'], (p) => { R().cfg.bFollow = p.Value == null ? !R().cfg.bFollow : /^(1|true|on)$/i.test(String(p.Value)); R().emit('change'); return true; }, 'Replay B plays the same moment as A from another angle');
+  def('ReplayBAngle', 'Replay', ['Value'], (p) => { R().cfg.bAngle = U.clamp(num(p.Value, 2), 1, 8); R().emit('change'); return true; });
+  def('ReplayMusicOn', 'Replay', [], async () => { await R()._musicIn(); return true; }, 'Fade in the highlights music bed');
+  def('ReplayMusicOff', 'Replay', [], () => { R()._musicOut(); return true; });
   def('ReplayJog', 'Replay', ['Value'], (p) => { const i = R().replayInput(); if (!i) throw new Error('No replay loaded'); i.pause(); i.seek(i.currentTime + num(p.Value, 0.04)); return true; }, 'Seconds (negative = back)');
 
   // ---- scripting (macros)

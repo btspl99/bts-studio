@@ -48,12 +48,13 @@ class BtsPcm extends AudioWorkletProcessor {
 registerProcessor('bts-pcm', BtsPcm);`;
 
   class AudioEngine {
+    static get BUSES() { return ['M', 'A', 'B', 'C', 'D', 'E', 'F', 'G']; }
     constructor(sampleRate = 48000) {
       this.ctx = new AudioContext({ sampleRate, latencyHint: 'interactive' });
       this.channels = new Set();
       this.workletReady = this.ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([GATE_WORKLET], { type: 'application/javascript' }))).then(() => true).catch(e => { console.warn('Gate worklet unavailable', e); return false; });
       this.buses = {};
-      for (const name of ['M', 'A', 'B']) this.buses[name] = this._makeBus(name);
+      for (const name of AudioEngine.BUSES) this.buses[name] = this._makeBus(name);
       // master gets a limiter
       const m = this.buses.M;
       this.limiter = this.ctx.createDynamicsCompressor();
@@ -66,6 +67,8 @@ registerProcessor('bts-pcm', BtsPcm);`;
       this.soloBus = this.ctx.createGain();
       this.soloBus.connect(this.ctx.destination);
       m.meterIn.connect(this.monitor);
+      // aux buses can also feed the master (sub-group) and the headphones
+      for (const name of AudioEngine.BUSES.slice(1)) { const b = this.buses[name]; b.toM = this.ctx.createGain(); b.toM.gain.value = 0; b.post.connect(b.toM); b.toM.connect(m.sum); b.hp = this.ctx.createGain(); b.hp.gain.value = 0; b.post.connect(b.hp); b.hp.connect(this.ctx.destination); }
       this.monitor.connect(this.ctx.destination);
       this.monitorOn = true;
       this.masterDelay = 0;
@@ -96,6 +99,25 @@ registerProcessor('bts-pcm', BtsPcm);`;
 
     setBusVolume(name, v) { const b = this.buses[name]; if (!b) return; b.volume = v; b.fader.gain.setTargetAtTime(v, this.ctx.currentTime, 0.02); }
     setBusMute(name, m) { const b = this.buses[name]; if (!b) return; b.muted = m; b.mute.gain.setTargetAtTime(m ? 0 : 1, this.ctx.currentTime, 0.01); }
+    setBusToMaster(name, on) { const b = this.buses[name]; if (!b || !b.toM) return; b.toMaster = !!on; b.toM.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.02); }
+    setBusHeadphones(name, on) { const b = this.buses[name]; if (!b || !b.hp) return; b.headphones = !!on; b.hp.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.02); }
+    /** Send a bus to a physical audio output (in-ear / IFB / PA feed). deviceId '' = off. */
+    async setBusDevice(name, deviceId) {
+      const b = this.buses[name]; if (!b) return false;
+      b.device = deviceId || '';
+      if (!deviceId) { if (b.outEl) { b.outEl.pause(); b.outEl.srcObject = null; } return true; }
+      if (!b.outEl) b.outEl = new Audio();
+      b.outEl.srcObject = b.dest.stream;
+      try { await b.outEl.setSinkId(deviceId); await b.outEl.play(); return true; } catch (e) { console.warn('Bus output', e); b.device = ''; return false; }
+    }
+    busState() { return Object.fromEntries(Object.entries(this.buses).map(([k, b]) => [k, { volume: b.volume, muted: b.muted, toMaster: !!b.toMaster, headphones: !!b.headphones, device: b.device || '' }])); }
+    loadBusState(st) {
+      for (const [k, v] of Object.entries(st || {})) {
+        if (!this.buses[k] || !v) continue;
+        this.setBusVolume(k, v.volume ?? 1); this.setBusMute(k, !!v.muted);
+        if (k !== 'M') { this.setBusToMaster(k, !!v.toMaster); this.setBusHeadphones(k, !!v.headphones); if (v.device) this.setBusDevice(k, v.device); }
+      }
+    }
     setMonitor(on) { this.monitorOn = on; this.monitor.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.02); this._updateSolo(); }
     setLimiter(on) { this.limiterOn = on; this.limiter.threshold.value = on ? -1 : 0; this.limiter.ratio.value = on ? 20 : 1; }
 
@@ -162,7 +184,7 @@ registerProcessor('bts-pcm', BtsPcm);`;
       const ctx = engine.ctx;
       this.s = Object.assign({
         volume: 1, trimDb: 0, muted: false, balance: 0, delayMs: 0, solo: false,
-        buses: { M: true, A: false, B: false }, followVideo: false,
+        buses: { M: true, A: false, B: false, C: false, D: false, E: false, F: false, G: false }, followVideo: false,
         eq: { enabled: false, low: 0, mid: 0, high: 0 },
         comp: { enabled: false, threshold: -18, ratio: 3 },
         gate: { enabled: false, threshold: -50 },

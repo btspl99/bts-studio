@@ -28,6 +28,7 @@
       this.root.innerHTML = `
         <div class="rp-bar">
           <button class="rp-rec" id="rpRec"><i></i><span>REC OFF</span></button>
+          <div class="rp-chan" title="Replay channel you are controlling. B can follow A in sync with another angle."><button class="tbtn small" data-ch="A">A</button><button class="tbtn small" data-ch="B">B</button><label class="hint"><input type="checkbox" id="rpFollow"> B follows A, angle <select id="rpBAngle">${[1, 2, 3, 4, 5, 6, 7, 8].map(n => `<option value="${n}">${n}</option>`).join('')}</select></label></div>
           <div class="rp-src" id="rpSources" title="Replay cameras (buffered continuously)"></div>
           <div class="spacer"></div>
           <span class="hint" id="rpBuf">Buffer stopped</span>
@@ -71,7 +72,10 @@
               <button class="rp-btn live" data-a="out-play">▶ PLAY TO OUTPUT</button>
               <button class="rp-btn back" data-a="return">⟲ RETURN TO LIVE</button>
             </div>
-            <button class="rp-btn" data-a="highlights">★ PLAY HIGHLIGHTS</button>
+            <div class="rp-actions two">
+              <button class="rp-btn" data-a="highlights">★ PLAY HIGHLIGHTS</button>
+              <button class="rp-btn" data-a="music" id="rpMusic" title="Music bed for highlights (set the file in ⚙)">♪ MUSIC</button>
+            </div>
           </section>
           <section class="rp-events">
             <div class="rp-ev-head"><span class="hint">EVENTS</span><div class="spacer"></div><input type="search" id="rpFilter" placeholder="Filter…"><label class="hint"><input type="checkbox" id="rpStarOnly"> ★ only</label></div>
@@ -85,6 +89,10 @@
       this.el.secs.onchange = () => { R.cfg.seconds = +this.el.secs.value; if (R.running) U.toast('New buffer length applies when the recorder restarts'); };
       this.el.rec.onclick = async () => { this.el.rec.disabled = true; if (R.running) await R.stop(); else await R.start(); this.el.rec.disabled = false; };
       $('#rpCfg').onclick = () => this.settings();
+      this.root.querySelectorAll('[data-ch]').forEach(b => { b.onclick = () => R.select(b.dataset.ch); });
+      this.el.follow = $('#rpFollow'); this.el.bAngle = $('#rpBAngle');
+      this.el.follow.onchange = async () => { R.cfg.bFollow = this.el.follow.checked; if (R.cfg.bFollow && R.chan.A.loaded) { R.select('A'); await R.load(R.chan.A.loaded.event, { key: R.chan.A.loaded.key, keepTime: true }); } R.emit('change'); };
+      this.el.bAngle.onchange = async () => { R.cfg.bAngle = +this.el.bAngle.value; if (R.cfg.bFollow && R.chan.A.loaded) { const ev = R.chan.A.loaded.event; const a = R.replayInput('A'); await R.load(ev, { key: R._bKey(ev, R.chan.A.loaded.key), channel: 'B', _follow: true }); const b = R.replayInput('B'); if (a && b) { b.seek(a.currentTime); if (a.playing) b.play(); } } };
       this.el.speed.oninput = () => R.setSpeed(+this.el.speed.value / 100);
       this.root.querySelectorAll('[data-sp]').forEach(b => { b.onclick = () => R.setSpeed(+b.dataset.sp / 100); });
       this.el.seek.oninput = () => { const i = R.replayInput(); if (i && i.duration) i.seek(+this.el.seek.value / 1000 * i.duration); };
@@ -104,6 +112,7 @@
         if (a === 'out-play') { if (this.selected) await R.load(this.selected, { toOutput: true }); else if (R.loaded) await R.goLive(); else await R.playLast(); }
         if (a === 'return') R.returnToLive();
         if (a === 'highlights') await R.playHighlights();
+        if (a === 'music') { if (R.musicPlaying) R._musicOut(); else if (!R.cfg.music) this.settings(); else await R._musicIn(); setTimeout(() => this.refresh(), 100); }
       });
       this.el.filter.oninput = () => this.renderEvents();
       this.el.starOnly.onchange = () => this.renderEvents();
@@ -129,6 +138,9 @@
     refresh() {
       const R = this.R;
       this.el.rec.classList.toggle('on', R.running);
+      this.root.querySelectorAll('[data-ch]').forEach(b => b.classList.toggle('on', b.dataset.ch === R.sel));
+      this.el.follow.checked = !!R.cfg.bFollow; this.el.bAngle.value = String(R.cfg.bAngle || 2);
+      U.$('#rpMusic', this.root).classList.toggle('on', R.musicPlaying);
       this.el.rec.querySelector('span').textContent = R.running ? `REC ● ${R.cameras.length} CAM` : 'REC OFF';
       this.el.secs.disabled = R.running;
       this.refreshSources();
@@ -142,7 +154,7 @@
       if (!cams.length) this.el.cams.append(U.el('div', { class: 'hint', text: 'Choose cameras above and press REC' }));
       this.el.marks.textContent = R.markInWall ? `IN ${new Date(R.markInWall).toLocaleTimeString()}${R.markOutWall ? '  →  OUT ' + new Date(R.markOutWall).toLocaleTimeString() + `  (${((R.markOutWall - R.markInWall) / 1000).toFixed(1)} s)` : '  →  …'}` : 'No marks — Mark In, then Mark Out (or Save Event)';
       this.el.marks.classList.toggle('on', !!R.markInWall);
-      this.root.querySelectorAll('.rp-btn, .rp-cam').forEach(b => { if (!['highlights', 'return'].includes(b.dataset.a) && b.classList.contains('rp-btn')) b.disabled = !R.running && !['out-play'].includes(b.dataset.a); });
+      this.root.querySelectorAll('.rp-btn, .rp-cam').forEach(b => { if (!['highlights', 'return', 'music'].includes(b.dataset.a) && b.classList.contains('rp-btn')) b.disabled = !R.running && !['out-play'].includes(b.dataset.a); });
       this.syncSpeed();
       this.renderEvents();
       U.$('#chipReplay')?.classList.toggle('on', R.running);
@@ -193,7 +205,7 @@
         this.el.dur.textContent = U.fmtTimeMs(d).slice(3);
         if (document.activeElement !== this.el.seek && d) this.el.seek.value = Math.round(i.currentTime / d * 1000);
         this.el.play.textContent = i.playing ? '❚❚' : '▶';
-        this.el.osdCam.textContent = R.loaded ? R.sourceLabel(R.loaded.key) : '—';
+        this.el.osdCam.textContent = `${R.sel} · ` + (R.loaded ? R.sourceLabel(R.loaded.key) : '—');
         const onAir = this.studio.programId === i.id;
         this.el.canvas.parentElement.classList.toggle('onair', onAir);
       } else {
@@ -224,8 +236,16 @@
           { label: 'Transition into replay', key: 'transIn', type: 'select', options: trans, hint: 'A stinger (e.g. a logo wipe) is the classic replay transition — set it in Settings → Transitions.' },
           { label: 'Transition back to live', key: 'transOut', type: 'select', options: trans },
           { label: 'Return to live automatically when a replay ends', key: 'autoReturn', type: 'checkbox' },
-          { label: 'Pre-roll (s)', key: 'preroll', type: 'number', min: 0, max: 5, step: 0.5, hint: 'Start playback this far into the event.' }
-        ], Object.assign(R.cfg, { speedPct: Math.round(R.cfg.speed * 100) }), (k, v) => { if (k === 'speedPct') R.setSpeed(v / 100); }),
+          { label: 'Pre-roll (s)', key: 'preroll', type: 'number', min: 0, max: 5, step: 0.5, hint: 'Start playback this far into the event.' },
+          { section: 'Replay B' },
+          { label: 'B follows A (synchronised)', key: 'bFollow', type: 'checkbox', hint: 'Replay B plays the same moment as A from another camera — send it to an external screen, MultiCorder or a second stream.' },
+          { label: 'B angle', key: 'bAngle', type: 'select', number: true, options: [1, 2, 3, 4, 5, 6, 7, 8].map(n => [n, 'Angle ' + n]) },
+          { section: 'Highlights music' },
+          { label: 'Music file', key: 'music', type: 'file', filters: [{ name: 'Audio', extensions: U.AUDIO_EXT }], hint: 'Plays under "Play Highlights" and fades out at the end.' },
+          { label: 'Music volume', key: 'musicVolume', type: 'range', min: 0, max: 1, step: 0.01, format: (v) => Math.round(v * 100) + '%' },
+          { label: 'Replay sound under music', key: 'replayAudio', type: 'range', min: 0, max: 1, step: 0.01, format: (v) => Math.round(v * 100) + '%' },
+          { label: 'Fade (ms)', key: 'musicFadeMs', type: 'number', min: 0, max: 10000, step: 100 }
+        ], Object.assign(R.cfg, { speedPct: Math.round(R.cfg.speed * 100) }), (k, v) => { if (k === 'speedPct') R.setSpeed(v / 100); if (k === 'bFollow' || k === 'bAngle') R.emit('change'); }),
         buttons: [{ label: 'Close', primary: true }]
       });
     }

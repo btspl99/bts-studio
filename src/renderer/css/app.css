@@ -521,3 +521,13 @@ table.tbl tr.sel { background: color-mix(in srgb, var(--accent) 14%, transparent
 .tele-tools input[type=color]{width:30px;height:26px;padding:0;border:none;background:none}
 .tele-canvas{width:100%;aspect-ratio:16/9;display:block;background:#000;border:1px solid var(--line2);border-radius:6px;cursor:crosshair;touch-action:none;outline:none}
 .tele-canvas:focus{border-color:var(--accent)}
+
+/* ---------- Phase 5: replay A/B, buses ---------- */
+.rp-chan{display:flex;align-items:center;gap:4px;padding:0 6px;border-left:1px solid var(--line);border-right:1px solid var(--line)}
+.rp-chan label{display:flex;align-items:center;gap:4px;margin-left:6px}
+.rp-chan select{padding:2px 4px}
+.rp-btn.on{background:var(--accent);color:var(--accent-ink,#1a1205);border-color:var(--accent2)}
+.strip .bus-grid{display:grid;grid-template-columns:repeat(4,15px);gap:2px}
+.strip .bus-grid button{width:15px;height:14px;font-size:8px;padding:0;border:1px solid var(--line2);background:var(--bg4);border-radius:2px;cursor:pointer;font-weight:700;color:var(--fg2)}
+.strip .bus-grid button.on{background:var(--accent);color:#1a1205}
+.strip .bus-flags button{width:20px}
