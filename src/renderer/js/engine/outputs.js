@@ -15,6 +15,7 @@
       this.encoder = typeof VideoEncoder !== 'undefined' ? new BTS.EncodeEngine(studio) : null;
       this.ndi = new BTS.NdiOut(studio);
       this.vcam = new BTS.VcamOut(studio);
+      this.decklinkKey = new BTS.DecklinkKey(studio);
       window.bts.output.onStatus((s) => this._onStatus(s));
     }
     /** Output engine v2 (shared GPU encode) unless the user chose the classic engine or WebCodecs is missing. */

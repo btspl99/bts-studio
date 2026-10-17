@@ -27,6 +27,7 @@ const dataFiles = require('./dataFiles');
 const ptz = require('./ptz');
 const ndi = require('./ndi');
 const vcam = require('./vcam');
+const decklinkKeyer = require('./decklinkKeyer');
 
 log.initialize();
 log.transports.file.level = 'info';
@@ -246,13 +247,14 @@ function createMainWindow() {
       return;
     }
   });
-  mainWin.on('closed', () => { mainWin = null; browserSources.destroyAll(); outputs.stopAll(); streamInputs.stopAll(); ndi.stopAll(); vcam.stop(); replay.stopAll(); });
+  mainWin.on('closed', () => { mainWin = null; browserSources.destroyAll(); outputs.stopAll(); streamInputs.stopAll(); ndi.stopAll(); vcam.stop(); decklinkKeyer.stopAll(); replay.stopAll(); });
 
   outputs.init({ getWin: () => mainWin, getSettings: () => settings, resourcesPath: process.resourcesPath, isPackaged: app.isPackaged, root: path.join(ROOT, '..') });
   browserSources.init({ getWin: () => mainWin });
   streamInputs.init({ getWin: () => mainWin, getSettings: () => settings });
   ndi.init({ getWin: () => mainWin, getSettings: () => settings });
   vcam.init({ getWin: () => mainWin, resourcesPath: process.resourcesPath, isPackaged: app.isPackaged, root: path.join(ROOT, '..') });
+  decklinkKeyer.init({ getWin: () => mainWin, resourcesPath: process.resourcesPath, isPackaged: app.isPackaged, root: path.join(ROOT, '..') });
   replay.init({ getWin: () => mainWin, getSettings: () => settings });
   media.init({ getWin: () => mainWin });
   guests.init({ getWin: () => mainWin, getSettings: () => settings, saveSettings, webRoot: path.join(ROOT, 'web') });
@@ -520,6 +522,7 @@ function registerIpc() {
   streamInputs.registerIpc(ipcMain);
   ndi.registerIpc(ipcMain);
   vcam.registerIpc(ipcMain);
+  decklinkKeyer.registerIpc(ipcMain);
   replay.registerIpc(ipcMain);
   media.registerIpc(ipcMain);
   guests.registerIpc(ipcMain);
@@ -577,5 +580,5 @@ if (!gotLock) {
   });
 
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-  app.on('before-quit', () => { outputs.stopAll(); browserSources.destroyAll(); streamInputs.stopAll(); ndi.stopAll(); vcam.stop(); replay.stopAll(); guests.stop(); ptz.closeAll(); api.stop(); });
+  app.on('before-quit', () => { outputs.stopAll(); browserSources.destroyAll(); streamInputs.stopAll(); ndi.stopAll(); vcam.stop(); decklinkKeyer.stopAll(); replay.stopAll(); guests.stop(); ptz.closeAll(); api.stop(); });
 }
