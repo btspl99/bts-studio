@@ -109,6 +109,20 @@ contextBridge.exposeInMainWorld('bts', {
     audio: (id, data) => ipcRenderer.send('dlk:audio', id, data),
     onStatus: listen('dlk:status')
   },
+  proAudio: {
+    status: () => ipcRenderer.invoke('proaudio:status'),
+    list: (force) => ipcRenderer.invoke('proaudio:list', force),
+    vstInfo: (f) => ipcRenderer.invoke('proaudio:vst-info', f),
+    scan: () => ipcRenderer.invoke('proaudio:scan'),
+    start: (id, cfg) => ipcRenderer.invoke('proaudio:in', id, cfg),
+    stop: (id) => ipcRenderer.invoke('proaudio:in-stop', id),
+    control: (id, msg) => ipcRenderer.invoke('proaudio:control', id, msg),
+    startOut: (key, cfg) => ipcRenderer.invoke('proaudio:out', key, cfg),
+    stopOut: (key) => ipcRenderer.invoke('proaudio:out-stop', key),
+    outputs: () => ipcRenderer.invoke('proaudio:outputs'),
+    pcm: (key, data) => ipcRenderer.send('proaudio:pcm', key, data),
+    onEvent: listen('proaudio:event')
+  },
   ndi: {
     status: () => ipcRenderer.invoke('ndi:status'),
     sources: (wait) => ipcRenderer.invoke('ndi:sources', wait),

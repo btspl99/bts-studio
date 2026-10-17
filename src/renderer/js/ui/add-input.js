@@ -23,6 +23,7 @@
     ['telestrator', '✍️', 'Telestrator', 'Draw arrows & circles on air'],
     ['vset', '🏙️', 'Virtual Set', 'Green-screen presenters in a studio'],
     ['audio', '🎙️', 'Audio Input', 'Microphone / line-in'],
+    ['proaudio', '🎚️', 'Audio Device (Pro)', 'ASIO, WASAPI exclusive, VST3 effects'],
     ['audio-file', '🎵', 'Audio File', 'MP3, WAV, AAC, FLAC']
   ];
 
@@ -560,6 +561,8 @@
       el.append(U.el('p', { class: 'hint', style: { lineHeight: '1.7' }, html: 'A transparent drawing layer. Put it on an <b>Overlay</b> channel and draw on it from the <b>Telestrator</b> window (bottom bar → Telestrator, or Ctrl+Shift+T): pen, highlighter, arrows, circles, boxes and spotlight, with optional auto-fade. Works with a mouse, touchscreen or pen tablet.' }));
       return () => [{ type: 'telestrator', title: 'Telestrator', cfg: { fadeSeconds: 0 } }];
     },
+
+    proaudio(el) { return BTS.ProAudioUI.addPane(el); },
 
     async audio(el) {
       const auds = await devices('audioinput');

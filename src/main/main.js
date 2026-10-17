@@ -28,6 +28,7 @@ const ptz = require('./ptz');
 const ndi = require('./ndi');
 const vcam = require('./vcam');
 const decklinkKeyer = require('./decklinkKeyer');
+const nativeAudio = require('./nativeAudio');
 
 log.initialize();
 log.transports.file.level = 'info';
@@ -247,7 +248,7 @@ function createMainWindow() {
       return;
     }
   });
-  mainWin.on('closed', () => { mainWin = null; browserSources.destroyAll(); outputs.stopAll(); streamInputs.stopAll(); ndi.stopAll(); vcam.stop(); decklinkKeyer.stopAll(); replay.stopAll(); });
+  mainWin.on('closed', () => { mainWin = null; browserSources.destroyAll(); outputs.stopAll(); streamInputs.stopAll(); ndi.stopAll(); vcam.stop(); decklinkKeyer.stopAll(); nativeAudio.stopAll(); replay.stopAll(); });
 
   outputs.init({ getWin: () => mainWin, getSettings: () => settings, resourcesPath: process.resourcesPath, isPackaged: app.isPackaged, root: path.join(ROOT, '..') });
   browserSources.init({ getWin: () => mainWin });
@@ -255,6 +256,7 @@ function createMainWindow() {
   ndi.init({ getWin: () => mainWin, getSettings: () => settings });
   vcam.init({ getWin: () => mainWin, resourcesPath: process.resourcesPath, isPackaged: app.isPackaged, root: path.join(ROOT, '..') });
   decklinkKeyer.init({ getWin: () => mainWin, resourcesPath: process.resourcesPath, isPackaged: app.isPackaged, root: path.join(ROOT, '..') });
+  nativeAudio.init({ getWin: () => mainWin, getSettings: () => settings, resourcesPath: process.resourcesPath, isPackaged: app.isPackaged, root: path.join(ROOT, '..') });
   replay.init({ getWin: () => mainWin, getSettings: () => settings });
   media.init({ getWin: () => mainWin });
   guests.init({ getWin: () => mainWin, getSettings: () => settings, saveSettings, webRoot: path.join(ROOT, 'web') });
@@ -523,6 +525,7 @@ function registerIpc() {
   ndi.registerIpc(ipcMain);
   vcam.registerIpc(ipcMain);
   decklinkKeyer.registerIpc(ipcMain);
+  nativeAudio.registerIpc(ipcMain);
   replay.registerIpc(ipcMain);
   media.registerIpc(ipcMain);
   guests.registerIpc(ipcMain);
@@ -580,5 +583,5 @@ if (!gotLock) {
   });
 
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-  app.on('before-quit', () => { outputs.stopAll(); browserSources.destroyAll(); streamInputs.stopAll(); ndi.stopAll(); vcam.stop(); decklinkKeyer.stopAll(); replay.stopAll(); guests.stop(); ptz.closeAll(); api.stop(); });
+  app.on('before-quit', () => { outputs.stopAll(); browserSources.destroyAll(); streamInputs.stopAll(); ndi.stopAll(); vcam.stop(); decklinkKeyer.stopAll(); nativeAudio.stopAll(); replay.stopAll(); guests.stop(); ptz.closeAll(); api.stop(); });
 }

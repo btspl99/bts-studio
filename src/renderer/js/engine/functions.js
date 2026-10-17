@@ -235,6 +235,13 @@
   def('MixTransition', 'Mix', ['Input', 'Value?'], (p) => mix(p).transition(null, null, p.Value ?? null), 'Mix default transition');
   def('SetDelay', 'General', ['Input', 'Value'], (p) => { const i = need(inp(p)); if (i.type !== 'delay') throw new Error('Not a Video Delay input'); i.cfg.delayMs = U.clamp(num(p.Value, 2000), 40, 10000); if (i.channel) i.channel.set({ delayMs: i.cfg.delayMs }); return true; }, 'Video Delay in ms');
 
+  // ---- pro audio (VST3 on Audio Device (Pro) inputs)
+  const pro = (p) => { const i = need(inp(p)); if (i.type !== 'proaudio') throw new Error('Not an Audio Device (Pro) input'); return i; };
+  def('VSTEditor', 'Audio', ['Input', 'Value?'], (p) => pro(p).vstEditor(num(p.Value, 1) - 1), 'Open the window of plug-in Value (1 = first)');
+  def('VSTBypass', 'Audio', ['Input', 'Value?'], (p) => pro(p).vstBypass(num(p.Value, 1) - 1), 'Toggle bypass of plug-in Value (1 = first)');
+  def('VSTBypassOn', 'Audio', ['Input', 'Value?'], (p) => pro(p).vstBypass(num(p.Value, 1) - 1, true));
+  def('VSTBypassOff', 'Audio', ['Input', 'Value?'], (p) => pro(p).vstBypass(num(p.Value, 1) - 1, false));
+
   // ---- general
   def('AddInput', 'General', ['Value'], async (p) => { const [type, ...rest] = String(p.Value || '').split('|'); const v = rest.join('|'); const map = { Video: 'video', Image: 'image', Browser: 'browser', Colour: 'color', Color: 'color', Title: 'title' }; const t = map[type] || type.toLowerCase(); const cfg = t === 'browser' ? { url: v } : t === 'color' ? { color: v || '#000000' } : t === 'title' ? { templateId: v || 'lower-third' } : { path: v }; const i = await S().addInput({ type: t, cfg, title: v ? U.baseName(v) : undefined }); return { ok: true, data: i.id }; }, 'Value "Video|C:\\file.mp4", "Browser|https://..", "Title|lower-third"');
   def('RemoveInput', 'General', ['Input'], (p) => { S().removeInput(need(inp(p)).id); return true; });
