@@ -160,6 +160,9 @@
     BTS.ui.openExternal(d ? String(d.id) : null, p.Input ? 'input:' + need(inp(p)).id : 'program', slot);
     return true;
   }, 'Value = output 1-6, Input = optional single input (else Output). Opens full screen on a second screen when one is connected.');
+  def('StartVirtualCamera', 'Output', [], () => O().vcam.live || O().vcam.start(), 'Start the BTS Studio Virtual Camera (Windows)');
+  def('StopVirtualCamera', 'Output', [], () => { O().vcam.stop(); return true; });
+  def('StartStopVirtualCamera', 'Output', [], () => O().vcam.toggle());
   def('StartBlackmagic', 'Output', ['Value?'], async (p) => { const n = p.Value ? num(p.Value, 1) : 1; const c = ((BTS.settings.decklink || {}).outputs || [])[n - 1]; if (!c || !c.device) throw new Error('Set up Blackmagic output ' + n + ' in External Outputs first'); return O().startDecklink(n, c); }, 'Value = Blackmagic output 1-2 (configured in External Outputs)');
   def('StopBlackmagic', 'Output', ['Value?'], (p) => O().stopDecklink(p.Value ? num(p.Value, 1) : null));
   def('StopExternal', 'Output', ['Value?'], (p) => { if (p.Value) BTS.ui.closeExternal(num(p.Value, 1) - 1); else for (let i = 0; i < 6; i++) BTS.ui.closeExternal(i); return true; });

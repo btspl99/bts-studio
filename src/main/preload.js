@@ -93,6 +93,13 @@ contextBridge.exposeInMainWorld('bts', {
   onMenu: listen('menu'),
   onNotice: listen('engine:notice'),
   log: (level, msg) => ipcRenderer.send('log', level, String(msg).slice(0, 4000)),
+  vcam: {
+    status: () => ipcRenderer.invoke('vcam:status'),
+    install: (on) => ipcRenderer.invoke('vcam:install', on),
+    start: (w, h, fps) => ipcRenderer.invoke('vcam:start', w, h, fps),
+    stop: () => ipcRenderer.invoke('vcam:stop'),
+    frame: (data) => ipcRenderer.send('vcam:frame', data)
+  },
   ndi: {
     status: () => ipcRenderer.invoke('ndi:status'),
     sources: (wait) => ipcRenderer.invoke('ndi:sources', wait),

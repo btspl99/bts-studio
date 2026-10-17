@@ -409,6 +409,34 @@
       ]));
       box.append(U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'Like vMix: set up each output once, tick it, then press External (or F7) to turn them all on or off. Each output is a clean, full-screen feed. Sources: Output, Clean feed (Output without overlays / titles — for IMAG and recorders), Preview, Multiview 1–4 or any input. Rotate for portrait screens, Mirror for teleprompters, Area or Video wall to spread one picture over several screens. Set each screen’s resolution and refresh rate in Windows display settings. Press Esc on an output to close it.' }));
 
+      /* ----- Virtual camera (Windows) ----- */
+      const VC = out.vcam, vcfg = VC.cfg(), vst = await window.bts.vcam.status();
+      box.append(U.el('div', { class: 'ext-head' }, [
+        U.el('h4', { text: 'Virtual camera — use BTS Studio as a webcam in Zoom, Teams, Google Meet, OBS, Skype…' }),
+        U.el('span', { class: 'hint', html: !vst.supported ? '<b style="color:var(--pgm)">●</b> Not available' : vst.installed ? '<b style="color:var(--pvw)">●</b> Installed' : '<b style="color:var(--accent2)">●</b> Not installed' })
+      ]));
+      if (!vst.supported) box.append(U.el('div', { class: 'ext-warn', text: vst.reason }));
+      else {
+        if (!vst.installed || vst.stale) box.append(U.el('div', { class: 'ext-warn', html: vst.stale ? 'The virtual camera is registered from another BTS Studio folder — click <b>Install</b> again to update it.' : 'Install the camera once (Windows asks for administrator permission). It then appears as <b>“BTS Studio Virtual Camera”</b> in every video app.' }));
+        const vsel = (opts, val, onch) => { const e = U.el('select'); for (const [v, l] of opts) e.append(U.el('option', { value: v, text: l, selected: String(v) === String(val) })); e.onchange = () => onch(e.value); return e; };
+        const set = (k, v) => { vcfg[k] = v; VC.save(); if (VC.live) VC.start().then(() => setTimeout(draw, 300)); };
+        const s2 = VC.status();
+        const row = U.el('div', { class: 'ext-row' }, [
+          vst.installed && !vst.stale
+            ? U.el('button', { class: 'btn', text: 'Remove', title: 'Unregister the virtual camera from Windows', onclick: async () => { const r = await window.bts.vcam.install(false); if (!r.ok) U.toast(r.error, 'error', 8000); draw(); } })
+            : U.el('button', { class: 'btn primary', text: 'Install', onclick: async () => { U.toast('Windows will ask for permission…'); const r = await window.bts.vcam.install(true); U.toast(r.ok ? 'Virtual camera installed — restart Zoom / Teams / your browser to see it' : r.error, r.ok ? 'ok' : 'error', 9000); draw(); } }),
+          U.el('span', { class: 'hint', text: 'Source' }), vsel(srcOpts(), vcfg.source, (v) => set('source', v)),
+          U.el('span', { class: 'hint', text: 'Size' }), vsel([['1080', '1920×1080'], ['720', '1280×720'], ['project', `Project (${st.W}×${st.H})`]], vcfg.size, (v) => set('size', v)),
+          U.el('span', { class: 'hint', text: 'fps' }), vsel([[30, '30'], [25, '25'], [60, '60']], vcfg.fps, (v) => set('fps', +v)),
+          VC.live ? U.el('button', { class: 'btn danger', text: 'Stop', onclick: () => { VC.stop(); setTimeout(draw, 200); } })
+            : U.el('button', { class: 'btn primary', text: 'Start', disabled: !vst.installed, onclick: async () => { await VC.start(); setTimeout(draw, 400); } }),
+          U.el('span', { class: 'hint', html: VC.live ? `<b style="color:var(--pvw)">● Live</b> ${s2 ? s2.frames : 0} frames${vst.connected ? ' · an app is using it' : ''}` : 'Off' }),
+          U.el('span', { class: 'spacer' }),
+          BTS.Dialog.form([{ label: 'Start with BTS Studio', key: 'autoStart', type: 'checkbox', onChange: (v) => { vcfg.autoStart = v; VC.save(); } }], { autoStart: !!vcfg.autoStart }, () => {})
+        ]);
+        box.append(row, U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'Pick “BTS Studio Virtual Camera” as the camera in the other app. For sound, send a bus to a virtual audio cable and pick it as the microphone. Some apps mirror their own self-view — the picture the other people see is not mirrored.' }));
+      }
+
       /* ----- NDI® outputs ----- */
       const NO = out.ndi, ncfg = NO.cfg();
       const ndiState = await window.bts.ndi.status();

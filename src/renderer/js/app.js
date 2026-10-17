@@ -28,6 +28,7 @@
     BTS.operatorUI.mountModules();
     BTS.DisplayOutputs.init();
     setTimeout(() => { try { const n = BTS.studio.outputs.ndi; if (n && n.cfg().autoStart) n.startAll(); } catch (e) { console.warn('ndi autostart', e); } }, 2500);
+    setTimeout(async () => { try { const v = BTS.studio.outputs.vcam; if (v && v.cfg().autoStart && (await window.bts.vcam.status()).installed) v.start(); } catch (e) { console.warn('vcam autostart', e); } }, 3000);
     if (localStorage.getItem('bts.density') === 'compact') document.body.classList.add('compact');
 
     // main-process bridges
