@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.6.0 — 2026-10-17
+
+The outputs release — second step of the vMix gap-analysis roadmap.
+
+### New
+- **Every output can carry its own picture.** Each stream destination and both recorders now have a **Source**: Output, Clean feed (no overlays), Preview, any multiview or a single input — like vMix Outputs 2–4. Example: stream the program, record the clean feed, and send camera 1 to a second platform.
+- **Vertical and square versions of the show.** New 1080×1920, 720×1280 and 1080×1080 stream resolutions with **Framing**: *Fit* (black bars), *Fill* (crop for Shorts / Reels / TikTok, with a left–right crop position) or *Stretch*.
+- **Stream delay** per destination (0–300 s) — picture and sound are held back together for sports and contests.
+- **Multi-track recording** — Master is track 1 and any ticked buses (A–G) are recorded as extra, named audio tracks in MKV / MOV / MP4, ready to remix in an editor.
+- **WAV recording** (24-bit, audio only) for Recorder 1 or 2 — e.g. a clean audio backup next to the video.
+- **Split recordings** into a new file every 5, 10, 15, 30 or 60 minutes (cut on a keyframe: name-001.mp4, name-002.mp4…).
+
+### Not in this release
+Virtual webcam / microphone, ASIO and VST3 need signed Windows drivers or native audio plug-in hosts and are not included yet. For a virtual microphone today, send a bus to a virtual audio cable device (e.g. VB-CABLE) from the mixer. Blackmagic key + fill is not possible through FFmpeg's DeckLink output.
+
 ## 1.5.0 — 2026-10-17
 
 The signal-chain release — first of the vMix gap-analysis roadmap.

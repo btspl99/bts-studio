@@ -4,7 +4,9 @@ Free, open-source live production software for students and creators — switch 
 
 Website & downloads: https://studio.btspl.tech · User guide: https://studio.btspl.tech/docs/
 
-## Features (v1.5)
+## Features (v1.6)
+
+New in 1.6 (outputs): per-output **source** (program, clean feed, preview, multiview or any input) for every stream and recorder, **vertical / square** streams with fill-crop, **stream delay**, **multi-track** recording (buses as separate audio tracks), **WAV** recording and **file splitting**. See CHANGELOG.md.
 
 New in 1.5 (signal chain): **NDI® input and output** (tally, 4 senders), **Capture Card (Pro)** input with input-port, exact-mode and 8/16-channel embedded audio selection (DirectShow / DeckLink / V4L2), **GPU decoding** of H.264/HEVC network streams with no re-compression, **BTS Link** guest links that need no port forwarding, per-input video delay and per-input dropped-frame statistics. See CHANGELOG.md.
 
@@ -26,7 +28,7 @@ New in 1.3 (vMix feature parity): 8 overlay channels, 8 stingers, Mix inputs, Vi
 - Dockable workspace with layouts & themes, presets (`.btsproj`), autosave & crash recovery
 - **Automatic updates** from `https://studio.btspl.tech/updates/`
 
-Not yet included: virtual webcam output, ASIO, VST3 plug-ins (planned for 1.6 — see the roadmap in the project wiki / CHANGELOG).
+Not yet included: virtual webcam output, ASIO and VST3 plug-ins (need native Windows drivers).
 
 ## Develop
 

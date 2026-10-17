@@ -36,7 +36,16 @@
     const ff = (enc.list && enc.list.length ? enc.list : ['libx264']);
     const streamEncOpts = [...(v2 ? ['gpu'] : []), ...ff.filter(e => !['prores_ks', 'dnxhd'].includes(e))].map(e => [e, encLabels[e] || e]);
     const encOpts = [...(v2 ? ['gpu'] : []), ...ff].map(e => [e, encLabels[e] || e]);
-    const resOpts = [['program', 'Same as output'], ['3840x2160', '2160p (4K)'], ['2560x1440', '1440p'], ['1920x1080', '1080p'], ['1280x720', '720p'], ['854x480', '480p'], ['1080x1920', '1080×1920 vertical']];
+    const resOpts = [['program', 'Same as output'], ['3840x2160', '2160p (4K)'], ['2560x1440', '1440p'], ['1920x1080', '1080p'], ['1280x720', '720p'], ['854x480', '480p'], ['1080x1920', '1080×1920 vertical'], ['720x1280', '720×1280 vertical'], ['1080x1080', '1080×1080 square']];
+    const outSrcOpts = [['program', 'Output (program)'], ['clean', 'Clean feed (no overlays)'], ['preview', 'Preview'], ...st.multiviews.list.map(m => ['multiview:' + m.n, m.cfg.name]), ...st.inputs.map(i => ['input:' + i.id, `Input ${i.number}: ${i.title}`])];
+    const tracksPicker = (obj) => { // extra audio tracks for multi-track recording
+      obj.tracks = obj.tracks || [];
+      return U.el('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } }, 'ABCDEFG'.split('').map(b => {
+        const cb = U.el('input', { type: 'checkbox' }); cb.checked = obj.tracks.includes(b);
+        cb.onchange = () => { obj.tracks = cb.checked ? [...new Set([...obj.tracks, b])].sort() : obj.tracks.filter(x => x !== b); };
+        return U.el('label', { style: { display: 'flex', gap: '4px', alignItems: 'center' } }, [cb, 'Bus ' + b]);
+      }));
+    };
 
     const gen = { res: `${s.video.width}x${s.video.height}`, fps: s.video.fps, previewOverlays: st.previewOverlays, tbarReverse: !!s.ui.tbarReverse };
     const general = U.el('div', {}, [F([
@@ -61,7 +70,11 @@
         { label: 'Encoder override', key: 'encoder', type: 'select', options: [['', 'Same as below'], ...streamEncOpts] },
         { label: 'Resolution override', key: 'resolution', type: 'select', options: [['', 'Same as below'], ...resOpts] },
         { label: 'Bitrate override (kbps)', key: 'videoBitrate', type: 'number', hint: 'Leave blank to use the global bitrate below. Destinations with the same encoder, resolution and bitrate share one encode.' },
-        { label: 'Audio', key: 'audioBus', type: 'select', options: [['M', 'Master'], ...['A', 'B', 'C', 'D', 'E', 'F', 'G'].map(b => [b, 'Bus ' + b])], hint: 'e.g. a second destination with a different-language commentary on Bus B.' }
+        { label: 'Audio', key: 'audioBus', type: 'select', options: [['M', 'Master'], ...['A', 'B', 'C', 'D', 'E', 'F', 'G'].map(b => [b, 'Bus ' + b])], hint: 'e.g. a second destination with a different-language commentary on Bus B.' },
+        { label: 'Source', key: 'source', type: 'select', options: outSrcOpts, hint: 'What this destination shows — e.g. the clean feed, a multiview or one camera.' },
+        { label: 'Framing', key: 'framing', type: 'select', options: [['fit', 'Fit (black bars)'], ['fill', 'Fill (crop — vertical / square versions)'], ['stretch', 'Stretch']], hint: 'With a vertical or square resolution, Fill crops the middle of a 16:9 show for Shorts / Reels / TikTok.' },
+        { label: 'Crop position', key: 'cropX', type: 'range', min: 0, max: 1, step: 0.01, default: 0.5, hint: 'Fill only: 0 = left edge, 0.5 = centre, 1 = right edge.' },
+        { label: 'Delay (seconds)', key: 'delaySec', type: 'number', min: 0, max: 300, step: 1, hint: 'Hold this stream back (e.g. 10–30 s for sports or contests). Picture and sound stay in sync.' }
       ], d));
       const urlInput = destBox.querySelectorAll('.form')[i].querySelectorAll('input[type=text]')[1];
     });
@@ -78,7 +91,10 @@
 
     const record = U.el('div', {}, [F([
       { label: 'Folder', key: 'folder', type: 'file', folder: true },
-      { label: 'Format', key: 'format', type: 'select', options: [['mp4', 'MP4 (crash-safe fragmented)'], ['mkv', 'MKV (crash-safe)'], ['mov', 'MOV'], ['webm', 'WebM']] },
+      { label: 'Format', key: 'format', type: 'select', options: [['mp4', 'MP4 (crash-safe fragmented)'], ['mkv', 'MKV (crash-safe)'], ['mov', 'MOV'], ['webm', 'WebM'], ['wav', 'WAV (audio only, 24-bit)']] },
+      { label: 'Source', key: 'source', type: 'select', options: outSrcOpts, hint: 'Record the program, the clean feed, a multiview or one input.' },
+      { label: 'Extra audio tracks', custom: tracksPicker(s.record), hint: 'Multi-track: Master is track 1; each ticked bus is recorded as its own track (MKV / MOV / MP4) for mixing later.' },
+      { label: 'New file every', key: 'splitMinutes', type: 'select', number: true, options: [[0, 'Never (one file)'], [5, '5 minutes'], [10, '10 minutes'], [15, '15 minutes'], [30, '30 minutes'], [60, '1 hour']] },
       { label: 'Encoder', key: 'encoder', type: 'select', options: encOpts, hint: 'GPU writes the encoded picture directly (no second compression). ProRes / DNxHR create large editing files (use MOV or MKV).' },
       { label: 'Rate control', key: 'rateControl', type: 'select', options: [['quality', 'Constant quality (recommended)'], ['bitrate', 'Fixed bitrate']] },
       { label: 'Quality', key: 'quality', type: 'select', options: [['lossless', 'Visually lossless (very large)'], ['lossless-ish', 'Near lossless'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low (small files)']] },
@@ -88,11 +104,12 @@
     ], s.record), U.el('div', { style: { height: '10px' } }), F([
       { section: 'Recorder 2 (second recording of the same output)' },
       { label: 'Enable Recorder 2', key: 'enabled', type: 'checkbox', hint: 'Starts and stops with Record. Example: MP4 for editing plus an MKV safety copy.' },
-      { label: 'Format', key: 'format', type: 'select', options: [['mkv', 'MKV (crash-safe)'], ['mp4', 'MP4'], ['mov', 'MOV'], ['webm', 'WebM']] },
+      { label: 'Format', key: 'format', type: 'select', options: [['mkv', 'MKV (crash-safe)'], ['mp4', 'MP4'], ['mov', 'MOV'], ['webm', 'WebM'], ['wav', 'WAV (audio only)']] },
       { label: 'Encoder', key: 'encoder', type: 'select', options: encOpts },
       { label: 'Quality', key: 'quality', type: 'select', options: [['lossless-ish', 'Near lossless'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low (proxy)']] },
       { label: 'File name suffix', key: 'suffix' },
-      { label: 'Audio', key: 'audioBus', type: 'select', options: [['M', 'Master'], ...['A', 'B', 'C', 'D', 'E', 'F', 'G'].map(b => [b, 'Bus ' + b])] }
+      { label: 'Audio', key: 'audioBus', type: 'select', options: [['M', 'Master'], ...['A', 'B', 'C', 'D', 'E', 'F', 'G'].map(b => [b, 'Bus ' + b])] },
+      { label: 'Source', key: 'source', type: 'select', options: outSrcOpts, hint: 'e.g. Recorder 1 = Output, Recorder 2 = Clean feed.' }
     ], s.record2 || (s.record2 = { enabled: false, format: 'mkv', mode: 'encode', encoder: 'libx264', quality: 'medium', suffix: '-2' }))]);
 
     // encoders tab

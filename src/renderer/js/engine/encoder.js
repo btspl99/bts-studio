@@ -160,13 +160,15 @@ registerProcessor('bts-tap', BtsTap);`;
      */
     async acquire(prof) {
       const st = this.studio;
-      prof = { w: st.W, h: st.H, fps: st.fps, keyint: 2, bus: 'M', ...prof };
+      prof = { w: st.W, h: st.H, fps: st.fps, keyint: 2, bus: 'M', source: 'program', framing: 'fit', cropX: 0.5, ...prof };
       prof.w = Math.round(prof.w / 2) * 2; prof.h = Math.round(prof.h / 2) * 2;
-      const key = JSON.stringify([prof.w, prof.h, prof.fps, prof.mode, prof.bitrate || 0, prof.quality || '', prof.keyint, prof.bus]);
+      const key = JSON.stringify([prof.w, prof.h, prof.fps, prof.mode, prof.bitrate || 0, prof.quality || '', prof.keyint, prof.bus, prof.source, prof.framing, prof.cropX]);
       let s = this.sessions.get(key);
       if (!s) {
         s = new Session(this, key, prof);
         await s.open();
+        if (prof.source === 'clean') st.cleanUsers = (st.cleanUsers || 0) + 1;
+        if (String(prof.source).startsWith('multiview:')) { s.mv = st.multiviews.get(prof.source.slice(10)); if (s.mv) s.mv.users++; }
         this.sessions.set(key, s);
         await this._tap(prof.bus, s);
       }
@@ -178,8 +180,10 @@ registerProcessor('bts-tap', BtsTap);`;
     release(s) {
       if (!s || --s.users > 0) return;
       this.sessions.delete(s.key);
+      if (s.prof.source === 'clean') this.studio.cleanUsers = Math.max(0, (this.studio.cleanUsers || 1) - 1);
+      if (s.mv) s.mv.users = Math.max(0, s.mv.users - 1);
       const t = this.taps.get(s.prof.bus);
-      if (t) { t.sessions.delete(s); if (!t.sessions.size) { try { t.src.disconnect(t.node); t.node.disconnect(); } catch { /* noop */ } this.taps.delete(s.prof.bus); } }
+      if (t) { t.sessions.delete(s); if (!t.sessions.size && !t.tracks.size) { try { t.src.disconnect(t.node); t.node.disconnect(); } catch { /* noop */ } this.taps.delete(s.prof.bus); } }
       s.close();
       this.emit('change');
     }
@@ -193,17 +197,31 @@ registerProcessor('bts-tap', BtsTap);`;
         const node = new AudioWorkletNode(a.ctx, 'bts-tap', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: 'explicit' });
         const mute = a.ctx.createGain(); mute.gain.value = 0;
         src.connect(node); node.connect(mute); mute.connect(a.ctx.destination);
-        t = { node, src, sessions: new Set() };
+        t = { node, src, sessions: new Set(), tracks: new Map() };
         node.port.onmessage = (e) => {
           const { frame, data } = e.data;
           for (const ss of t.sessions) {
             if (ss.sampleOffset == null) continue;
             window.bts.enc.audio(ss.sid, frame - ss.sampleOffset, data);
           }
+          // extra recording tracks: same timeline as the session's main audio
+          for (const [ss, n] of t.tracks) if (n > 0 && ss.sampleOffset != null) window.bts.enc.audio(ss.sid + ':' + bus, frame - ss.sampleOffset, data);
         };
         this.taps.set(bus, t);
       }
-      t.sessions.add(s);
+      if (s) t.sessions.add(s);
+      return t;
+    }
+    /** multi-track recording: also send buses (A–G) as separate audio tracks for this session */
+    async addTracks(s, buses) {
+      for (const b of buses) { const t = await this._tap(b, null); t.tracks.set(s, (t.tracks.get(s) || 0) + 1); }
+    }
+    removeTracks(s, buses) {
+      for (const b of buses) {
+        const t = this.taps.get(b); if (!t) continue;
+        const n = (t.tracks.get(s) || 0) - 1; if (n > 0) t.tracks.set(s, n); else t.tracks.delete(s);
+        if (!t.sessions.size && !t.tracks.size) { try { t.src.disconnect(t.node); t.node.disconnect(); } catch { /* noop */ } this.taps.delete(b); }
+      }
     }
     /** Map the audio clock to the session's video timeline (sample 0 = first video frame). */
     alignAudio(s) {
@@ -218,21 +236,58 @@ registerProcessor('bts-tap', BtsTap);`;
       s.sampleOffset = ctxFrameAtT0 + Math.round((ctx.baseLatency || 0) * ctx.sampleRate) - trim;
     }
 
-    _src(w, h) {
-      const st = this.studio;
-      if (w === st.W && h === st.H) return st.programCanvas;
-      const k = w + 'x' + h;
+    /** the picture an output encodes: program (default), clean feed, preview, a multiview or one input */
+    _from(prof) {
+      const st = this.studio, src = prof.source || 'program';
+      if (src === 'program') return st.programCanvas;
+      if (src === 'clean') return st.cleanCanvas || st.programCanvas;
+      if (src === 'preview') return st.previewCanvas;
+      if (src.startsWith('multiview:')) { const mv = st.multiviews.get(src.slice(10)); return mv ? mv.canvas : st.programCanvas; }
+      if (src.startsWith('input:')) {
+        const k = 'in:' + src, c = this._inputCanvas(k);
+        if (c._frame !== st.frameId) {
+          c._g.fillStyle = '#000'; c._g.fillRect(0, 0, c.width, c.height);
+          const i = st.byId(src.slice(6));
+          if (i) { if (i.type === 'title' && !i.live) i.drawStatic(c._g, 0, 0, c.width, c.height); else i.draw(c._g, 0, 0, c.width, c.height); }
+          c._frame = st.frameId;
+        }
+        return c;
+      }
+      return st.programCanvas;
+    }
+    _inputCanvas(k) {
+      const st = this.studio; let c = this.scalers.get(k);
+      if (!c || c.width !== st.W || c.height !== st.H) { c = document.createElement('canvas'); c.width = st.W; c.height = st.H; c._g = c.getContext('2d', { alpha: false }); this.scalers.set(k, c); }
+      return c;
+    }
+    _src(prof) {
+      const st = this.studio, w = prof.w, h = prof.h;
+      const from = this._from(prof);
+      const same = from.width === w && from.height === h;
+      if (same) return from;
+      const k = [w, h, prof.source, prof.framing, prof.cropX].join('|');
       let c = this.scalers.get(k);
       if (!c || c._frame !== st.frameId) {
         if (!c) { c = document.createElement('canvas'); c.width = w; c.height = h; c._g = c.getContext('2d', { alpha: false }); c._g.imageSmoothingQuality = 'high'; this.scalers.set(k, c); }
-        c._g.drawImage(st.programCanvas, 0, 0, w, h);
+        const g = c._g, fw = from.width, fh = from.height;
+        const sa = fw / fh, da = w / h;
+        if (Math.abs(sa - da) < 0.01 || prof.framing === 'stretch') g.drawImage(from, 0, 0, w, h);
+        else if (prof.framing === 'fill') { // crop: vertical (9:16) / square versions of a 16:9 show
+          let sw = fw, sh = fh, sx = 0, sy = 0;
+          if (sa > da) { sw = fh * da; sx = (fw - sw) * Math.min(1, Math.max(0, prof.cropX ?? 0.5)); } else { sh = fw / da; sy = (fh - sh) / 2; }
+          g.drawImage(from, sx, sy, sw, sh, 0, 0, w, h);
+        } else { // fit with black bars
+          g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
+          const sc = Math.min(w / fw, h / fh), dw = fw * sc, dh = fh * sc;
+          g.drawImage(from, (w - dw) / 2, (h - dh) / 2, dw, dh);
+        }
         c._frame = st.frameId;
       }
       return c;
     }
     _tick(now) {
       if (!this.sessions.size) return;
-      for (const s of this.sessions.values()) s.encodeFrame(this._src(s.prof.w, s.prof.h), now);
+      for (const s of this.sessions.values()) s.encodeFrame(this._src(s.prof), now);
     }
     stats() {
       const el = (performance.now() - this._rate.t) / 1000;

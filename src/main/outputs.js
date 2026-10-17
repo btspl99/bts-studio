@@ -95,7 +95,10 @@ function buildArgs(cfg) {
     ? ['-hide_banner', '-loglevel', 'info', '-stats_period', '1', '-thread_queue_size', '4096', '-probesize', '32', '-analyzeduration', '0', '-f', 'flv', '-i', 'pipe:0',
       '-thread_queue_size', '4096', '-f', 's16le', '-ar', '48000', '-ac', '2', '-i', 'pipe:3']
     : ['-hide_banner', '-loglevel', 'info', '-stats_period', '1', '-fflags', '+genpts+discardcorrupt', '-thread_queue_size', '2048', '-probesize', '1M', '-analyzeduration', '1500000', '-i', 'pipe:0'];
-  const map = cfg.v2 ? ['-map', '0:v:0', '-map', '1:a:0'] : ['-map', '0:v?', '-map', '0:a?'];
+  const tracks = cfg.v2 && Array.isArray(cfg.tracks) ? cfg.tracks.slice(0, 7) : [];
+  for (let i = 0; i < tracks.length; i++) input.push('-thread_queue_size', '4096', '-f', 's16le', '-ar', '48000', '-ac', '2', '-i', `pipe:${4 + i}`);
+  const map = cfg.v2 ? [...(audioOnly ? [] : ['-map', '0:v:0']), '-map', '1:a:0', ...tracks.flatMap((b, i) => ['-map', `${2 + i}:a:0`])] : ['-map', '0:v?', '-map', '0:a?'];
+  const trackMeta = tracks.length ? ['-metadata:s:a:0', 'title=Master', ...tracks.flatMap((b, i) => [`-metadata:s:a:${i + 1}`, `title=Bus ${b}`])] : [];
 
   if (cfg.kind === 'decklink') {
     // Blackmagic DeckLink / UltraStudio playout (SDI / HDMI). Needs Blackmagic Desktop Video and an FFmpeg built with DeckLink.
@@ -133,11 +136,18 @@ function buildArgs(cfg) {
   const v = audioOnly ? ['-vn']
     : canCopy ? ['-c:v', 'copy']
       : ['-fps_mode', 'cfr', '-r', String(fps), ...videoEncoderArgs(cfg.encoder || r.encoder, { bitrate: cfg.videoBitrate || r.videoBitrate, fps, keyint: 2, preset: cfg.preset || 'veryfast', crf, cbr: false }), ...scaleArgs(cfg)];
-  const pcm = cfg.audioCodec === 'pcm' && ['mov', 'mkv', 'wav'].includes(ext);
+  const pcm = (cfg.audioCodec === 'pcm' && ['mov', 'mkv', 'wav'].includes(ext)) || ext === 'wav';
   const a = pcm ? ['-c:a', 'pcm_s24le'] : ext === 'webm' ? ['-c:a', 'libopus', '-b:a', '192k'] : ext === 'wav' ? ['-c:a', 'pcm_s16le'] : ext === 'mp3' ? ['-c:a', 'libmp3lame', '-b:a', '320k'] : ['-c:a', 'aac', '-b:a', `${cfg.audioBitrate || 320}k`, '-ar', '48000'];
   // fragmented MP4 survives a crash or power cut; it is still a normal MP4 for editors and players
-  const extra = ext === 'mp4' || ext === 'mov' ? ['-movflags', cfg.v2 && !pcm ? '+frag_keyframe+empty_moov+default_base_moof' : '+faststart'] : [];
-  return [...input, ...map, ...v, ...a, ...extra, '-y', file];
+  const movflags = cfg.v2 && !pcm ? '+frag_keyframe+empty_moov+default_base_moof' : '+faststart';
+  const split = Number(cfg.splitMinutes) > 0 && cfg.kind === 'record';
+  if (split) { // a new file every N minutes, cut on a keyframe: file-001.mp4, file-002.mp4…
+    const seg = ['-f', 'segment', '-segment_time', String(Math.round(cfg.splitMinutes * 60)), '-reset_timestamps', '1', '-segment_format', ext === 'mkv' ? 'matroska' : ext,
+      ...(ext === 'mp4' || ext === 'mov' ? ['-segment_format_options', `movflags=${movflags}`] : []), '-y', file.replace(/(\.[^.\\/]+)$/, '-%03d$1')];
+    return [...input, ...map, ...v, ...a, ...trackMeta, ...seg];
+  }
+  const extra = ext === 'mp4' || ext === 'mov' ? ['-movflags', movflags] : [];
+  return [...input, ...map, ...v, ...a, ...trackMeta, ...extra, '-y', file];
 }
 
 function scaleArgs(cfg) {
@@ -165,7 +175,8 @@ function start(id, cfg) {
   log.info(`[output ${id}] ${bin} ${args.map(a => (cfg.key && a.includes(cfg.key) ? a.replace(cfg.key, '****') : a)).join(' ')}`);
   let proc;
   try {
-    proc = spawn(bin, args, { windowsHide: true, stdio: cfg.v2 ? ['pipe', 'ignore', 'pipe', 'pipe'] : ['pipe', 'ignore', 'pipe'] });
+    const nTracks = cfg.v2 && Array.isArray(cfg.tracks) ? Math.min(7, cfg.tracks.length) : 0;
+    proc = spawn(bin, args, { windowsHide: true, stdio: cfg.v2 ? ['pipe', 'ignore', 'pipe', 'pipe', ...Array(nTracks).fill('pipe')] : ['pipe', 'ignore', 'pipe'] });
   } catch (err) {
     return { ok: false, error: err.message };
   }
@@ -176,6 +187,8 @@ function start(id, cfg) {
   if (cfg.v2) {
     p.audio = proc.stdio[3];
     p.audio.on('error', (err) => { if (!p.stopping) log.warn(`[output ${id}] audio pipe error`, err.message); });
+    p.tracks = new Map(); // bus -> extra audio track pipe
+    (cfg.tracks || []).slice(0, 7).forEach((b, i) => { const s2 = proc.stdio[4 + i]; if (s2) { s2.on('error', () => {}); p.tracks.set(b, { pipe: s2, next: 0 }); } });
     attach(id, p, cfg.session);
   }
   let partial = '';
@@ -235,6 +248,8 @@ function stop(id, immediate) {
   detach(id, p);
   try { p.proc.stdin.end(); } catch { /* noop */ }
   try { if (p.audio) p.audio.end(); } catch { /* noop */ }
+  if (p.tracks) for (const t of p.tracks.values()) { try { t.pipe.end(); } catch { /* noop */ } }
+  if (p.delayQ) { clearInterval(p.delayTimer); p.delayQ = null; }
   const killAfter = immediate ? 1500 : 15000;
   setTimeout(() => { try { if (p.proc.exitCode === null) p.proc.kill('SIGKILL'); } catch { /* noop */ } }, killAfter);
   return true;
@@ -269,7 +284,23 @@ const FLV_HEADER = Buffer.from([0x46, 0x4c, 0x56, 0x01, 0x01, 0, 0, 0, 9, 0, 0, 
 function avcSeqTag(avcC) { return flvTag(9, 0, Buffer.concat([Buffer.from([0x17, 0, 0, 0, 0]), avcC])); }
 function avcFrameTag(ts, key, data) { return flvTag(9, ts, Buffer.concat([Buffer.from([key ? 0x17 : 0x27, 1, 0, 0, 0]), data])); }
 
+/** stream delay: hold everything (video tags and PCM, so lip-sync is kept) for cfg.delaySec seconds */
 function pipeWrite(p, stream, buf, counts) {
+  const d = p.cfg && Number(p.cfg.delaySec);
+  if (d > 0 && !p.stopping) {
+    if (!p.delayQ) {
+      p.delayQ = [];
+      p.delayTimer = setInterval(() => {
+        const now = Date.now();
+        while (p.delayQ && p.delayQ.length && p.delayQ[0][0] <= now) { const [, s2, b2, c2] = p.delayQ.shift(); rawWrite(p, s2, b2, c2); }
+      }, 10);
+    }
+    p.delayQ.push([Date.now() + d * 1000, stream, buf, counts]);
+    return;
+  }
+  rawWrite(p, stream, buf, counts);
+}
+function rawWrite(p, stream, buf, counts) {
   if (!stream || !stream.writable) return;
   if (counts) { p.bytes += buf.length; p.buffered += buf.length; stream.write(buf, () => { p.buffered -= buf.length; }); } else stream.write(buf);
 }
@@ -304,6 +335,8 @@ function onVideo(sid, pts, key, data) {
 
 const SILENCE = Buffer.alloc(48000 * 4 * 2);
 function onAudio(sid, sample, data) {
+  const colon = sid.indexOf(':');
+  if (colon > 0) return onTrackAudio(sid.slice(0, colon), sid.slice(colon + 1), sample, data);
   const s = sessions.get(sid);
   if (!s) return;
   const buf = Buffer.from(data);
@@ -320,6 +353,25 @@ function onAudio(sid, sample, data) {
     }
     pipeWrite(p, p.audio, off ? buf.subarray(off) : buf, false);
     c.nextSample = sample + frames;
+  }
+}
+
+/** extra audio tracks (multi-track recording): same timeline as the session's main audio */
+function onTrackAudio(sid, bus, sample, data) {
+  const s = sessions.get(sid);
+  if (!s) return;
+  const buf = Buffer.from(data);
+  const frames = buf.length >> 2;
+  for (const p of s.consumers.values()) {
+    const c = p.v2, t = p.tracks && p.tracks.get(bus);
+    if (!t || p.stopping || !c.started) continue;
+    if (!t.next) t.next = Math.round(c.basePts * 48);
+    let start = sample, off = 0;
+    if (start + frames <= t.next) continue;
+    if (start < t.next) { off = (t.next - start) * 4; start = t.next; }
+    if (start > t.next) { let gap = Math.min(start - t.next, 96000) * 4; while (gap > 0) { const n = Math.min(gap, SILENCE.length); pipeWrite(p, t.pipe, SILENCE.subarray(0, n), false); gap -= n; } }
+    pipeWrite(p, t.pipe, off ? buf.subarray(off) : buf, false);
+    t.next = sample + frames;
   }
 }
 

@@ -57,14 +57,16 @@
       for (const d of dests) {
         const base = d.url.trim();
         const url = d.key ? (base.endsWith('/') || base.endsWith('=') ? base + d.key.trim() : base + '/' + d.key.trim()) : base;
-        const cfg = { kind: 'stream', url, key: d.key, name: d.name || `Destination ${d.n}`, videoBitrate: d.videoBitrate || undefined, encoder: d.encoder || st.encoder || 'gpu' };
+        const cfg = { kind: 'stream', url, key: d.key, name: d.name || `Destination ${d.n}`, videoBitrate: d.videoBitrate || undefined, encoder: d.encoder || st.encoder || 'gpu', delaySec: Math.max(0, Math.min(300, Number(d.delaySec) || 0)) };
+        const look = { source: d.source || 'program', framing: d.framing || 'fit', cropX: d.cropX ?? 0.5 };
         if (this.v2) {
           const [w, h] = OutputManager.parseRes(d.resolution || st.resolution, this.studio.W, this.studio.H);
           const kbps = d.videoBitrate || st.videoBitrate;
           const gpu = OutputManager.isGpu(cfg.encoder);
           await this._startV2(`stream-${d.n}`, cfg, gpu
-            ? { w, h, mode: 'cbr', bitrate: kbps, keyint: st.keyint || 2, bus: d.audioBus || 'M' }
-            : { mode: 'quality', quality: 'mezzanine', keyint: 1, bus: d.audioBus || 'M' }, { videoCopy: gpu, scaleTo: !gpu && (w !== this.studio.W || h !== this.studio.H) ? [w, h] : null });
+            ? { w, h, mode: 'cbr', bitrate: kbps, keyint: st.keyint || 2, bus: d.audioBus || 'M', ...look }
+            : { ...(look.framing !== 'fit' || look.source !== 'program' ? { w, h } : {}), mode: 'quality', quality: 'mezzanine', keyint: 1, bus: d.audioBus || 'M', ...look },
+          { videoCopy: gpu, scaleTo: !gpu && (w !== this.studio.W || h !== this.studio.H) && look.framing === 'fit' && look.source === 'program' ? [w, h] : null });
         } else {
           if (OutputManager.isGpu(cfg.encoder)) cfg.encoder = 'libx264';
           await this._start(`stream-${d.n}`, cfg, this.programStream(d.audioBus), 250, Math.max(8000, (d.videoBitrate || st.videoBitrate) * 1.6));
@@ -90,13 +92,16 @@
       const file = this.recordFile('', r.format || 'mp4');
       const rec = (id, rr, f, name) => {
         const enc = rr.encoder || 'gpu';
-        const cfg = { kind: 'record', file: f, encoder: enc, quality: rr.quality, name, audioCodec: rr.audioCodec, preset: rr.preset, passthrough: rr.mode === 'passthrough' };
+        const audioOnly = /\.wav$/i.test(f);
+        const tracks = (rr.tracks || []).filter(b => /^[A-G]$/.test(b) && b !== (rr.audioBus || 'M'));
+        const cfg = { kind: 'record', file: f, encoder: enc, quality: rr.quality, name, audioCodec: rr.audioCodec, preset: rr.preset, passthrough: rr.mode === 'passthrough', audioOnly, tracks: audioOnly ? [] : tracks, splitMinutes: Number(rr.splitMinutes) || 0 };
+        const look = { source: rr.source || 'program', framing: 'fit' };
         if (!this.v2) { if (OutputManager.isGpu(enc)) cfg.encoder = 'libx264'; return this._start(id, cfg, this.programStream(rr.audioBus), 1000, rr.videoBitrate || 20000); }
         const gpu = OutputManager.isGpu(enc);
         const bitrateMode = rr.rateControl === 'bitrate';
         return this._startV2(id, cfg, gpu
-          ? (bitrateMode ? { mode: 'vbr', bitrate: rr.videoBitrate || 40000, keyint: 1, bus: rr.audioBus || 'M' } : { mode: 'quality', quality: rr.quality || 'high', keyint: 1, bus: rr.audioBus || 'M' })
-          : { mode: 'quality', quality: 'mezzanine', keyint: 1, bus: rr.audioBus || 'M' }, { videoCopy: gpu });
+          ? (bitrateMode ? { mode: 'vbr', bitrate: rr.videoBitrate || 40000, keyint: 1, bus: rr.audioBus || 'M', ...look } : { mode: 'quality', quality: rr.quality || 'high', keyint: 1, bus: rr.audioBus || 'M', ...look })
+          : { mode: 'quality', quality: 'mezzanine', keyint: 1, bus: rr.audioBus || 'M', ...look }, { videoCopy: gpu });
       };
       const ok = await rec('record', r, file, 'Recorder');
       // Recorder 2: a second, independently formatted recording of the same programme (e.g. MP4 for editing + MKV safety copy)
@@ -169,6 +174,7 @@
         this.outs.delete(id); U.toast(`${cfg.name || id}: ${e.message}`, 'error', 9000); this.emit('change'); return false;
       }
       if (o.session.prof.w > 1920 && !o.session.hardware && !this._swWarned) { this._swWarned = true; U.toast('No GPU video encoder found — 4K encoding on the CPU may not keep up. Update your graphics driver or lower the output resolution.', 'error', 12000); }
+      if (cfg.tracks && cfg.tracks.length) { try { await this.encoder.addTracks(o.session, cfg.tracks); o.tracks = cfg.tracks; } catch (e) { console.warn('tracks', e); } }
       const full = { ...cfg, ...extra, v2: true, session: o.session.sid, fps: this.studio.fps };
       const r = await window.bts.output.start(id, full);
       if (!r.ok) { this.encoder.release(o.session); o.session = null; o.want = false; this.outs.delete(id); U.toast(`Output failed: ${r.error}`, 'error'); this.emit('change'); return false; }
@@ -176,7 +182,7 @@
       this.emit('change');
       return true;
     }
-    _releaseV2(o) { if (o && o.session) { this.encoder.release(o.session); o.session = null; } }
+    _releaseV2(o) { if (o && o.session) { if (o.tracks) this.encoder.removeTracks(o.session, o.tracks); o.tracks = null; this.encoder.release(o.session); o.session = null; } }
 
     /* ---------- internals: classic engine ---------- */
     async _start(id, cfg, stream, timeslice, kbps) {
