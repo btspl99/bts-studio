@@ -66,6 +66,8 @@
       this.programCanvas.width = w; this.programCanvas.height = h;
       const ps = Math.min(1, 1280 / w);
       this.previewCanvas.width = Math.round(w * ps); this.previewCanvas.height = Math.round(h * ps);
+      // resizing a canvas resets its 2D state — restore high-quality (Lanczos-class) scaling for 4K sources
+      this.pctx.imageSmoothingQuality = 'high'; this.vctx.imageSmoothingQuality = 'medium';
       for (const i of this.inputs) if (['color', 'scene'].includes(i.type)) i.init();
       this._startLoop();
       this.emit('format');
@@ -84,6 +86,7 @@
     get program() { return this.byId(this.programId); }
 
     async addInput(data, { select = true } = {}) {
+      this._lastLoadT = performance.now();
       const inp = BTS.Inputs.create(this, data);
       this.inputs.push(inp);
       inp.on('status', () => this.emit('input-status', inp));
@@ -304,10 +307,17 @@
       const P = this.perf, s = this.stats;
       if (this.settings.performance && this.settings.performance.governor === false) { P.level = 0; } else {
         const budget = 1000 / this.fps;
+        // ignore the start-up / project-load burst (decoders opening, fonts, shaders compiling)
+        if (!this._govT0) this._govT0 = performance.now();
+        if (performance.now() - this._govT0 < 6000 || performance.now() - (this._lastLoadT || 0) < 3000) { s.perfLevel = P.level; return this._govApply(); }
         const struggling = s.fps < this.fps * 0.88 || s.renderMs > budget * 0.7;
         if (struggling) { P.healthy = 0; if (P.level < 3) P.level++; }
         else if (++P.healthy >= 5 && P.level > 0) { P.level--; P.healthy = 0; }
       }
+      this._govApply();
+    }
+    _govApply() {
+      const P = this.perf, s = this.stats;
       const base = Math.max(1, Math.round(this.fps / ((this.settings.performance && this.settings.performance.thumbnailFps) || 10)));
       P.previewEvery = [1, 2, 3, 4][P.level];
       P.thumbEvery = base * [1, 2, 4, 8][P.level];

@@ -174,12 +174,12 @@
     const capBefore = JSON.stringify(s.capture || {}) + JSON.stringify((s.performance || {}).disableGpu);
     const devEl = BTS.operatorUI.devicesTab();
     const t = BTS.Dialog.tabs([
-      { id: 'general', label: 'General', el: general }, { id: 'stream', label: 'Streaming', el: stream }, { id: 'record', label: 'Recording', el: record },
-      { id: 'transitions', label: 'Transitions', el: trans }, { id: 'shortcuts', label: 'Shortcuts', el: sc.el }, { id: 'midi', label: 'MIDI', el: midiEl },
-      { id: 'devices', label: 'Devices & Performance', el: devEl }, { id: 'api', label: 'Web Controller / API', el: api }, { id: 'guests', label: 'Media & Guests', el: guestsEl }, { id: 'encoders', label: 'Encoders', el: encTab }, { id: 'updates', label: 'Updates', el: upd }
+      { id: 'general', icon: '⚙', label: 'General', el: general }, { id: 'stream', icon: '📡', label: 'Streaming', el: stream }, { id: 'record', icon: '⏺', label: 'Recording', el: record },
+      { id: 'transitions', icon: '⇄', label: 'Transitions', el: trans }, { id: 'shortcuts', icon: '⌨', label: 'Shortcuts', el: sc.el }, { id: 'midi', icon: '🎹', label: 'MIDI', el: midiEl },
+      { id: 'devices', icon: '🖥', label: 'Devices & Performance', el: devEl }, { id: 'api', icon: '🌐', label: 'Web Controller / API', el: api }, { id: 'guests', icon: '👥', label: 'Media & Guests', el: guestsEl }, { id: 'encoders', icon: '⚡', label: 'Encoders', el: encTab }, { id: 'updates', icon: '⟳', label: 'Updates', el: upd }
     ]);
     BTS.Dialog.open({
-      title: 'Settings', body: t.el, width: 820, onClose: () => { if (midiEl._cleanup) midiEl._cleanup(); },
+      title: 'Settings', body: t.el, width: 1040, onClose: () => { if (midiEl._cleanup) midiEl._cleanup(); },
       buttons: [{ label: 'Cancel' }, {
         label: 'Save', primary: true, onClick: async () => {
           const g = gen;

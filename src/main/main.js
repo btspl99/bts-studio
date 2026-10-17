@@ -9,6 +9,9 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const log = require('electron-log/main');
+// Last-resort guards: a stray pipe/socket error in one output or API client must never take down a live show.
+process.on('uncaughtException', (err) => { try { log.error('Uncaught exception (kept running)', err && err.stack || err); } catch { /* noop */ } });
+process.on('unhandledRejection', (err) => { try { log.warn('Unhandled rejection', err && err.stack || err); } catch { /* noop */ } });
 
 const outputs = require('./outputs');
 const browserSources = require('./browserSources');

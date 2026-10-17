@@ -54,20 +54,31 @@
     });
   }
 
-  function tabs(defs) {
-    // defs: [{id,label,el}]
-    const bar = U.el('div', { class: 'tabs' });
-    const wrap = U.el('div');
+  function tabs(defs, opts = {}) {
+    // defs: [{id,label,el,icon}] — many tabs get a searchable side navigation instead of a wrapping tab row
+    const side = opts.side ?? defs.length > 6;
+    const bar = U.el('div', { class: side ? 'sidenav' : 'tabs' });
+    const wrap = U.el('div', { class: side ? 'sidenav-body' : '' });
     const panes = {};
-    const show = (id) => { for (const d of defs) { panes[d.id].classList.toggle('hidden', d.id !== id); bar.querySelector(`[data-t="${d.id}"]`).classList.toggle('on', d.id === id); } };
+    let cur = null;
+    const show = (id) => { cur = id; for (const d of defs) { panes[d.id].classList.toggle('hidden', d.id !== id); bar.querySelector(`[data-t="${d.id}"]`).classList.toggle('on', d.id === id); } if (side) wrap.scrollTop = 0; };
+    if (side) {
+      const q = U.el('input', { type: 'search', class: 'sidenav-q', placeholder: 'Search settings…' });
+      q.oninput = () => {
+        const v = q.value.trim().toLowerCase(); let first = null;
+        for (const d of defs) { const hit = !v || d.label.toLowerCase().includes(v) || panes[d.id].textContent.toLowerCase().includes(v); bar.querySelector(`[data-t="${d.id}"]`).classList.toggle('hidden', !hit); if (hit && !first) first = d.id; }
+        if (first && bar.querySelector(`[data-t="${cur}"]`).classList.contains('hidden')) show(first);
+      };
+      bar.append(q);
+    }
     for (const d of defs) {
-      const b = U.el('button', { 'data-t': d.id, text: d.label, onclick: () => show(d.id) });
+      const b = U.el('button', { 'data-t': d.id, onclick: () => show(d.id) }, [...(d.icon ? [U.el('span', { class: 'ico', text: d.icon })] : []), U.el('span', { text: d.label })]);
       bar.append(b);
-      panes[d.id] = U.el('div', { class: 'hidden' }, [d.el]);
+      panes[d.id] = U.el('div', { class: 'hidden' }, [side ? U.el('h3', { class: 'sidenav-title', text: d.label }) : '', d.el].filter(Boolean));
       wrap.append(panes[d.id]);
     }
     show(defs[0].id);
-    return { el: U.el('div', {}, [bar, wrap]), show };
+    return { el: U.el('div', { class: side ? 'sidenav-wrap' : '' }, [bar, wrap]), show };
   }
 
   /** Form builder: rows [{label, key, type, options, min, max, step, hint, full}] bound to obj */

@@ -4,7 +4,9 @@ Free, open-source live production software for students and creators — switch 
 
 Website & downloads: https://studio.btspl.tech · User guide: https://studio.btspl.tech/docs/
 
-## Features (v1.3)
+## Features (v1.4)
+
+New in 1.4 (performance & 4K): shared GPU encoding for every output, hardware and software encoders like vMix (NVENC, Quick Sync, AMF, x264/x265, AV1, ProRes, DNxHR), lossless / constant-quality and crash-safe recording, 4 multiviews with 12 layouts on any monitor, a GT-style **Title Editor** with per-object animation timeline, health monitor and statistics, command palette (Ctrl+K). See CHANGELOG.md.
 
 New in 1.3 (vMix feature parity): 8 overlay channels, 8 stingers, Mix inputs, Video Delay, 6 external outputs, 5 stream destinations, Recorder 2, colour wheels & scopes, Layer Designer, auto-convert of AVI/WMV/MXF/MPEG-2, Slides (PowerPoint/PDF), interactive web browser, Remote Guests (browser call-in), Excel/XML/RSS data, Photoshop title import, 40 title templates, Telestrator, audio buses A–G, Replay A/B with highlight music, PTZ control, TCP API, live web preview, JavaScript scripting and virtual sets. See CHANGELOG.md.
 
@@ -13,11 +15,11 @@ New in 1.3 (vMix feature parity): 8 overlay channels, 8 stingers, Mix inputs, Vi
 - **8 overlay channels** with their own in/out transitions
 - **Inputs** — cameras & capture cards (Blackmagic, AVerMedia, Elgato, Magewell…), IP cameras (RTSP / SRT / RTMP / HLS / UDP), screen capture, video & audio files (AVI, WMV, MXF, MPEG-2, ProRes… converted automatically), images, lists, **Slides** (PDF, PowerPoint, Keynote, image folders), **interactive web browser**, titles, colours, scenes, **Remote Guests** (WebRTC call-in from any browser, mix-minus + return feed), **Video Delay**, **Telestrator**, **Virtual Sets**, PTZ positions
 - **Video** — GPU colour correction with **Lift / Gamma / Gain colour wheels**, looks & presets, sharpen, chroma & luma key; **Scopes** (waveform, RGB parade, vectorscope, histogram); **Layer Designer** — drag & resize layers on the picture
-- **Titles** — **40 templates** (news, sports, lower thirds, full screen, engagement) with categories & search, **Photoshop PSD import** (text layers stay editable), Title Designer, `.btstitle`
+- **Titles** — **40 templates** (news, sports, lower thirds, full screen, engagement) with categories & search, **Photoshop PSD import** (text layers stay editable), **Title Editor** (layers, smart guides, 22 per-object animations on a timeline, 4K canvases), `.btstitle`
 - **Data sources** — **Excel (.xlsx / .ods)**, CSV, Google Sheets, JSON, **XML, RSS/Atom**; auto-refresh; bind to the selected row, a row offset, or all rows (tickers)
 - **Audio mixer** — Master + **buses A–G** (send to master, headphones, any output device, per-stream audio); per-input EQ, compressor, gate, delay, solo, audio-follow-video; limiter
 - **Instant Replay** — 8 angles, multi-angle events, slow motion, highlights with **music bed**, **Replay A/B** (B follows A with another angle)
-- **Outputs** — stream to **5 destinations** at once, **2 recorders**, MultiCorder ISO, **6 external outputs** (output, preview, multiview or any input)
+- **Outputs** — **encode once on the GPU, share with every output**; GPU / x264 / x265 / NVENC / Quick Sync / AMF / AV1 / ProRes / DNxHR; stream to **5 destinations** at once, **2 recorders** (lossless option, crash-safe MP4), MultiCorder ISO, **6 external outputs** (output, preview, any of **4 multiviews** or any input)
 - **Control** — HTTP API, Web Controller with **live video monitors (MJPEG)**, tally pages, **vMix-compatible TCP API** (Companion / Stream Deck / tally boxes), MIDI, shortcuts, step scripts and **JavaScript scripts**, triggers, playlist, **PTZ cameras (VISCA over IP)** with presets
 - Dockable workspace with layouts & themes, presets (`.btsproj`), autosave & crash recovery
 - **Automatic updates** from `https://studio.btspl.tech/updates/`

@@ -7,6 +7,7 @@
   const U = BTS.U;
   const imgCache = new Map();
 
+  let imgEpoch = 0; // bumps when any title image finishes loading (invalidates cached static frames)
   function loadImage(src) {
     if (!src) return null;
     if (imgCache.has(src)) return imgCache.get(src);
@@ -14,6 +15,7 @@
     img.crossOrigin = 'anonymous';
     img.decoding = 'async';
     const url = /^(https?|data|file|blob):/i.test(src) ? src : 'file:///' + String(src).replace(/\\/g, '/').replace(/^\/+/, '');
+    img.onload = img.onerror = () => { imgEpoch++; };
     img.src = url;
     imgCache.set(src, img);
     return img;
@@ -360,13 +362,33 @@
       }
     }
 
-    render(now = performance.now(), editing = false, scrub = false) {
+    /** Signature of everything a static title shows; null when it must redraw every frame. */
+    _staticKey() {
+      let dyn = '';
+      for (const e of this.t.elements) {
+        if (e.hidden) continue;
+        if (e.type === 'ticker' || e.type === 'crawl') return null;
+        if (e.type === 'image' && /\.(gif|webp|apng)$/i.test(e.src || '')) return null;
+        if (e.type === 'clock') dyn += formatClock(e.format) + '|';
+        if (e.type === 'countdown') dyn += formatTimer(this.timerValue(e)) + '|';
+      }
+      return this.progress + '#' + imgEpoch + '#' + dyn + JSON.stringify(this.t.elements);
+    }
+    invalidate() { this._key = null; }
+        render(now = performance.now(), editing = false, scrub = false) {
       const { ctx, t } = this;
       const W = this.canvas.width, H = this.canvas.height;
-      ctx.clearRect(0, 0, W, H);
       const dir = this.animDir;
       const elapsed = now - this.animStart;
       if (dir !== 0 && !scrub && elapsed >= this.totalTime(dir)) { this.progress = dir > 0 ? 1 : 0; this.animDir = 0; }
+      // Static frame cache: a title that is not animating is only re-rasterised when its content changes.
+      // At 4K with several titles this saves most of the GPU fill cost (clocks/timers redraw once per tick, tickers every frame).
+      if (!editing && !scrub && this.animDir === 0) {
+        const key = this._staticKey();
+        if (key && key === this._key && W === this._kw) return this.canvas;
+        this._key = key; this._kw = W;
+      } else this._key = null;
+      ctx.clearRect(0, 0, W, H);
       if (!editing && this.animDir === 0 && this.progress === 0) return this.canvas;
       for (const e of t.elements) {
         if (e.hidden) continue;

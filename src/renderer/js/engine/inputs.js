@@ -695,7 +695,7 @@
       this.cfg.background = this.cfg.background || 'transparent';
       this.canvas = this.canvas || document.createElement('canvas');
       this.canvas.width = this.app.W; this.canvas.height = this.app.H;
-      this.ctx2 = this.canvas.getContext('2d');
+      this.ctx2 = this.canvas.getContext('2d'); this.ctx2.imageSmoothingQuality = 'high';
       this._rf = -1;
       this.setStatus('ok');
     }
@@ -736,7 +736,7 @@
       this.cfg.duration = this.cfg.duration ?? 500;
       this.canvas = this.canvas || document.createElement('canvas');
       this.canvas.width = this.app.W; this.canvas.height = this.app.H;
-      this.ctx2 = this.canvas.getContext('2d');
+      this.ctx2 = this.canvas.getContext('2d'); this.ctx2.imageSmoothingQuality = 'high';
       this.pvCanvas = this.pvCanvas || document.createElement('canvas');
       this.pvCanvas.width = 480; this.pvCanvas.height = 270;
       this.active = null; this._rf = -1;

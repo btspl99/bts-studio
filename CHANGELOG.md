@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.4.0 — unreleased
+
+The performance and 4K release.
+
+### Output engine (rebuilt)
+- **Encode once, use everywhere** — each output profile is encoded a single time by the GPU (NVIDIA / Intel / AMD / Apple hardware H.264 through WebCodecs) and shared by every stream and recording that uses it. Streaming to 5 destinations and recording no longer costs 6 encodes.
+- **GPU or software encoders like vMix** — GPU (shared hardware H.264), x264, x265, NVENC H.264/HEVC/AV1, Intel Quick Sync H.264/HEVC, AMD AMF H.264/HEVC, Apple VideoToolbox, ProRes 422 HQ (10-bit) and DNxHR HQ for editing.
+- **Constant-quality recording** with a new *Lossless* level, 40 Mbps default for fixed bitrate, PCM 24-bit audio in MOV / MKV and AAC 320 kbps elsewhere.
+- **Crash-safe MP4** (fragmented) — a recording survives a power cut.
+- **Per-destination resolution and encoder**, with Lanczos scaling.
+- **Back-pressure protection** — a slow network or disk drops frames cleanly to the next keyframe instead of growing memory or freezing the app.
+- **Audio/video sync** measured at under 10 ms, plus an *Audio offset* trim in Settings → Encoders.
+
+### Performance & stability
+- **Health monitor** — warns about low FPS, encoder drops, slow outputs and low memory, and frees caches automatically when memory runs low.
+- **Statistics module rebuilt** — CPU, app memory, free RAM, GPU memory, GPU encode, FPS / frame-time graph, per-output buffers and every process.
+- **4K-native effects** — colour correction, keying and effects now run at full 4K resolution.
+- **Best camera mode** — cameras automatically open in their highest resolution and frame rate (up to 4096×2160).
+- **Static title cache** — titles are only redrawn when they change, which saves most of the GPU cost of many 4K titles.
+- The load governor ignores the start-up and project-load burst.
+- High-quality scaling is kept after changing the video format.
+
+### Multiview
+- **4 independent multiviews**, each with 12 layouts (2+8, 2+12, 2+16, 2+24, Output only, grids, 4/9/16 inputs). Each multiview has its own resolution (up to 4K), labels, tally borders, audio meters, safe areas and a LIVE / REC / REPLAY / FPS / clock status bar.
+- Right-click any cell to assign an input, Output, Preview or clock to it. Click a cell to send it to Preview, double-click to cut it to Output.
+- **Multiview on an external monitor** — any multiview can go to any screen. External outputs are now drawn directly to the monitor window with one frame of latency.
+
+### Title Editor (new, GT-style)
+- Full-screen designer with **layers** (show, lock, rename, drag to reorder), **move / resize / rotate handles**, marquee and multi-select, **smart guides** and snapping, align and distribute, undo / redo, copy / paste, nudge with the arrow keys, zoom, grid, safe areas, and a live-output background.
+- **Objects**: text, rectangle, ellipse, line, image, clock, countdown / stopwatch, ticker, crawl / credits.
+- **Inspector**: fonts (including installed fonts), gradients, letter spacing, wrapping, shrink-to-fit, background box, outline, soft shadows, blend modes and opacity.
+- **Per-object animation** — 22 In / Out effects (slide, nudge, wipe, reveal, zoom, pop, flip, spin, blur, typewriter and more) with 7 easings. Each object has its own delay and duration on a **timeline** you can drag and scrub.
+- 4K title canvases. PSD import is still supported.
+
+### Interface
+- **Command palette** (Ctrl+K) — search and run any action, input or function.
+- **Settings** now uses a searchable side navigation.
+
 ## 1.3.0 — 2026-10-17
 
 The vMix feature-parity release.
