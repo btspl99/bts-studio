@@ -139,6 +139,7 @@ footer p{margin:4px auto}
       <li><a href="#outputs">External output &amp; Multiview</a></li>
       <li><a href="#shortcuts">Keyboard shortcuts</a></li>
       <li><a href="#api">Web Controller &amp; API</a></li>
+      <li><a href="#new-19">New in 1.9</a></li>
       <li><a href="#new-18">New in 1.8</a></li>
       <li><a href="#new-17">New in 1.7</a></li>
       <li><a href="#new-16">New in 1.6</a></li>
@@ -171,7 +172,8 @@ footer p{margin:4px auto}
         <li><a href="#outputs">External output &amp; Multiview</a></li>
         <li><a href="#shortcuts">Keyboard shortcuts</a></li>
         <li><a href="#api">Web Controller &amp; API</a></li>
-        <li><a href="#new-18">New in 1.8</a></li>
+        <li><a href="#new-19">New in 1.9</a></li>
+      <li><a href="#new-18">New in 1.8</a></li>
       <li><a href="#new-17">New in 1.7</a></li>
       <li><a href="#new-16">New in 1.6</a></li>
       <li><a href="#new-15">New in 1.5</a></li>
@@ -454,6 +456,18 @@ footer p{margin:4px auto}
     </section>
 
     <!-- 14 -->
+    <section class="doc" id="new-19" aria-labelledby="h-new19">
+      <h2 id="h-new19">New in 1.9</h2>
+      <h3>Virtual camera and microphone</h3>
+      <p>Open the ⚙ next to <strong>External</strong>. In <em>Virtual camera</em> click <strong>Install</strong> (Windows asks for permission once), choose the source and size, and press <strong>Start</strong>. Restart Zoom, Teams or your browser and pick <em>BTS Studio Virtual Camera</em>. For sound, install the free <strong>VB-CABLE</strong> driver (Settings → Media &amp; Guests → <em>Get VB-CABLE</em>), restart the PC, then choose which bus to send to the virtual microphone; in the meeting app select <em>CABLE Output</em> as the microphone.</p>
+      <h3>ASIO, WASAPI exclusive and VST3</h3>
+      <p><strong>Add Input → Audio Device (Pro)</strong> lists ASIO interfaces and low-latency Windows devices. Pick the channels, then add VST3 effects (compressors, de-essers, EQs) — <em>Edit</em> opens the plug-in's own window. Set ASIO interfaces to 48 kHz in their control panel. To send the mix to an ASIO or WASAPI output, use Settings → Devices &amp; Performance → <em>Pro audio outputs</em>.</p>
+      <h3>Blackmagic key + fill</h3>
+      <p>Install Blackmagic Desktop Video (and genlock the card). In External Outputs → <em>Blackmagic key + fill</em>, pick the card, video mode and keyer (External sends fill on one SDI and key on the other; Internal keys on the card), and leave the source on <em>Overlays only</em> so only your titles and logos go out with transparency.</p>
+      <h3>16-bit mixing</h3>
+      <p>Settings → Devices &amp; Performance → <em>High-precision mixing (16-bit float)</em>, then restart. Fades, gradients and soft keys show less banding.</p>
+    </section>
+
     <section class="doc" id="new-18" aria-labelledby="h-new18">
       <h2 id="h-new18">New in 1.8</h2>
       <h3>More triggers</h3>

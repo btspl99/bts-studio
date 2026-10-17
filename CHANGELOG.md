@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.9.0 — 2026-10-17
+
+The native release — the items that need real Windows drivers and plug-in hosts.
+
+### New
+- **BTS Studio Virtual Camera** — use the show as a webcam in Zoom, Teams, Google Meet, OBS, Skype and browsers. Choose the source (Output, Clean feed, Preview, a multiview or one input) and size in External Outputs; click *Install* once (one Windows permission prompt). Functions `StartVirtualCamera`, `StopVirtualCamera`, `StartStopVirtualCamera`.
+- **Virtual microphone** — send Master or any bus into the free VB-CABLE driver ("CABLE Input"); meeting apps then use "CABLE Output" as their microphone. Set it up in Settings → Media & Guests; functions `VirtualMicOn` / `VirtualMicOff`.
+- **Audio Device (Pro) input — ASIO, WASAPI exclusive, WDM-KS and VST3.** A native audio engine opens ASIO interfaces and low-latency Windows devices, picks a stereo pair or mono channel, and runs up to 8 **VST3 effects** per input with their own editor windows; plug-in settings are saved in the preset. **Pro audio outputs** send Master or any bus to an ASIO / WASAPI output. Functions `VSTEditor`, `VSTBypass`, `VSTBypassOn`, `VSTBypassOff`.
+- **Blackmagic key + fill** — drive a DeckLink card's hardware keyer (external fill + key, or internal) with the new **Overlays only** source: just your titles and logos with real transparency. Optional embedded audio. Functions `StartBlackmagicKey` / `StopBlackmagicKey`. *Overlays only* also works for NDI outputs, which now send alpha.
+- **16-bit mixing** (Settings → Devices & Performance → *High-precision mixing*) — the Output is mixed in 16-bit floating point for smoother fades, gradients and soft keys.
+
+### Fixed
+- **NDI input could crash BTS Studio** when the source sent metadata (for example a reply to tally). Found by testing against the real NDI 6.3 runtime; NDI output now compresses frames off the main thread.
+
+### Licences
+The audio engine uses Steinberg's ASIO SDK (GPLv3) and VST3 SDK (MIT) and PortAudio; it is a separate program shipped with its licences in `resources/native/audio/licenses`. The virtual camera is based on softcam (MIT). DeckLink API headers © Blackmagic Design (redistributable licence). These native features are in the Windows installer only, not the Microsoft Store package.
+
 ## 1.8.0 — 2026-10-17
 
 The control release — last step of the vMix gap-analysis roadmap.

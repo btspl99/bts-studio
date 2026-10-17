@@ -4,7 +4,9 @@ Free, open-source live production software for students and creators — switch 
 
 Website & downloads: https://studio.btspl.tech · User guide: https://studio.btspl.tech/docs/
 
-## Features (v1.8)
+## Features (v1.9)
+
+New in 1.9 (native): **virtual camera**, **virtual microphone** (VB-CABLE), **ASIO / WASAPI exclusive inputs and outputs with VST3 effects**, **Blackmagic key + fill** with an overlays-only alpha source, and **16-bit mixing**. See CHANGELOG.md.
 
 New in 1.8 (control): 11 trigger events, several actions per shortcut, **MIDI activators** (LED feedback), Web Controller **password**, **vMix-compatible XML / XMLTEXT and function names**, input layer functions and **preset bundles** with media. See CHANGELOG.md.
 
@@ -32,7 +34,6 @@ New in 1.3 (vMix feature parity): 8 overlay channels, 8 stingers, Mix inputs, Vi
 - Dockable workspace with layouts & themes, presets (`.btsproj`), autosave & crash recovery
 - **Automatic updates** from `https://studio.btspl.tech/updates/`
 
-Not yet included: virtual webcam output, ASIO and VST3 plug-ins (need native Windows drivers).
 
 ## Develop
 
