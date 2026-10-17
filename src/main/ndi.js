@@ -61,9 +61,10 @@ function load() {
     const source = koffi.struct('NDIlib_source_t', { p_ndi_name: 'const char *', p_url_address: 'const char *' });
     const findCreate = koffi.struct('NDIlib_find_create_t', { show_local_sources: 'bool', p_groups: 'const char *', p_extra_ips: 'const char *' });
     const recvCreate = koffi.struct('NDIlib_recv_create_v3_t', { source_to_connect_to: source, color_format: 'int', bandwidth: 'int', allow_video_fields: 'bool', p_ndi_recv_name: 'const char *' });
-    const video = koffi.struct('NDIlib_video_frame_v2_t', { xres: 'int', yres: 'int', FourCC: 'uint32', frame_rate_N: 'int', frame_rate_D: 'int', picture_aspect_ratio: 'float', frame_format_type: 'int', timecode: 'int64', p_data: 'void *', line_stride_in_bytes: 'int', p_metadata: 'const char *', timestamp: 'int64' });
-    const audio = koffi.struct('NDIlib_audio_frame_v3_t', { sample_rate: 'int', no_channels: 'int', no_samples: 'int', timecode: 'int64', FourCC: 'uint32', p_data: 'void *', channel_stride_in_bytes: 'int', p_metadata: 'const char *', timestamp: 'int64' });
-    const meta = koffi.struct('NDIlib_metadata_frame_t', { length: 'int', timecode: 'int64', p_data: 'char *' });
+    const video = koffi.struct('NDIlib_video_frame_v2_t', { xres: 'int', yres: 'int', FourCC: 'uint32', frame_rate_N: 'int', frame_rate_D: 'int', picture_aspect_ratio: 'float', frame_format_type: 'int', timecode: 'int64', p_data: 'void *', line_stride_in_bytes: 'int', p_metadata: 'void *', timestamp: 'int64' });
+    const audio = koffi.struct('NDIlib_audio_frame_v3_t', { sample_rate: 'int', no_channels: 'int', no_samples: 'int', timecode: 'int64', FourCC: 'uint32', p_data: 'void *', channel_stride_in_bytes: 'int', p_metadata: 'void *', timestamp: 'int64' });
+    // pointers NDI owns stay opaque ('void *'): decoding them to JS strings and passing them back to the free functions crashes
+    const meta = koffi.struct('NDIlib_metadata_frame_t', { length: 'int', timecode: 'int64', p_data: 'void *' });
     const tally = koffi.struct('NDIlib_tally_t', { on_program: 'bool', on_preview: 'bool' });
     const sendCreate = koffi.struct('NDIlib_send_create_t', { p_ndi_name: 'const char *', p_groups: 'const char *', clock_video: 'bool', clock_audio: 'bool' });
     N = {
@@ -233,9 +234,15 @@ function startSend(id, cfg) {
 function sendVideo(id, w, h, data, fmt) {
   const st = senders.get(id);
   if (!st) return;
+  // NDI compresses the frame inside send_video (tens of ms at 1080p) — run it on a worker thread so the
+  // main process stays responsive; a frame that arrives while one is still being sent is dropped.
+  if (st.busy) { st.dropped = (st.dropped || 0) + 1; return; }
   const buf = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-  // koffi copies the struct; the pixel buffer must stay alive for the synchronous call (clock_video=false)
-  N.send_video(st.s, { xres: w, yres: h, FourCC: FCC[fmt] || FCC.BGRX, frame_rate_N: Math.round(st.fps * 1000), frame_rate_D: 1000, picture_aspect_ratio: w / h, frame_format_type: 1, timecode: 0x7fffffffffffffffn, p_data: buf, line_stride_in_bytes: w * 4, p_metadata: null, timestamp: 0n });
+  st.busy = true;
+  N.send_video.async(st.s, { xres: w, yres: h, FourCC: FCC[fmt] || FCC.BGRX, frame_rate_N: Math.round(st.fps * 1000), frame_rate_D: 1000, picture_aspect_ratio: w / h, frame_format_type: 1, timecode: 0x7fffffffffffffffn, p_data: buf, line_stride_in_bytes: w * 4, p_metadata: null, timestamp: 0n }, () => {
+    st.busy = false; void buf; // keep the pixels alive until NDI has finished with them
+    if (st.closing) { try { N.send_destroy(st.s); } catch { /* noop */ } }
+  });
   st.frames++;
   if (Date.now() - st.t > 2000) { st.t = Date.now(); try { st.connections = N.send_connections(st.s, 0); } catch { /* noop */ } }
 }
@@ -254,6 +261,7 @@ function stopSend(id) {
   const st = senders.get(id);
   if (!st) return;
   senders.delete(id);
+  if (st.busy) { st.closing = true; return; } // destroyed when the frame in flight is done
   try { N.send_destroy(st.s); } catch { /* noop */ }
 }
 
