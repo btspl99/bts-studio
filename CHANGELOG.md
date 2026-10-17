@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.9.1 — 2026-10-18
+
+Fixes found by testing the GUI on a Windows laptop.
+
+### Fixed
+- **Instant Replay layout** — at laptop screen sizes the Events list covered the LAST 5s / 10s / 20s and Instant Replay buttons, and the replay screen collapsed. The sections now keep their full height and the panel scrolls.
+- **Add Input** — the type list and the settings scroll separately, so choosing a type near the bottom (Colour, Title…) keeps its settings in view.
+- **External Outputs** — Find devices and Start/Stop no longer jump back to the top of the window, and overlapping refreshes can no longer show a section twice.
+- **Recording on laptop GPUs** — a single 1080p60 recording no longer drops frames because the GPU encoder briefly queues a few frames; the warning now gives advice that fits one encode.
+
 ## 1.9.0 — 2026-10-17
 
 The native release — the items that need real Windows drivers and plug-in hosts.
