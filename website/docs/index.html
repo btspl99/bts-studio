@@ -131,7 +131,7 @@ footer p{margin:4px auto}
       <li><a href="#inputs">Inputs</a></li>
       <li><a href="#transitions">Transitions &amp; Stingers</a></li>
       <li><a href="#overlays">Overlays</a></li>
-      <li><a href="#titles">Titles &amp; Title Designer</a></li>
+      <li><a href="#titles">Titles &amp; Title Editor</a></li>
       <li><a href="#data-sources">Data Sources</a></li>
       <li><a href="#audio">Audio mixer</a></li>
       <li><a href="#streaming">Streaming</a></li>
@@ -139,6 +139,7 @@ footer p{margin:4px auto}
       <li><a href="#outputs">External output &amp; Multiview</a></li>
       <li><a href="#shortcuts">Keyboard shortcuts</a></li>
       <li><a href="#api">Web Controller &amp; API</a></li>
+      <li><a href="#new-14">New in 1.4</a></li>
       <li><a href="#new-13">New in 1.3</a></li>
       <li><a href="#updates">Updates</a></li>
       <li><a href="#troubleshooting">Troubleshooting</a></li>
@@ -158,7 +159,7 @@ footer p{margin:4px auto}
         <li><a href="#inputs">Inputs</a></li>
         <li><a href="#transitions">Transitions &amp; Stingers</a></li>
         <li><a href="#overlays">Overlays</a></li>
-        <li><a href="#titles">Titles &amp; Title Designer</a></li>
+        <li><a href="#titles">Titles &amp; Title Editor</a></li>
         <li><a href="#data-sources">Data Sources</a></li>
         <li><a href="#audio">Audio mixer</a></li>
         <li><a href="#streaming">Streaming</a></li>
@@ -166,7 +167,8 @@ footer p{margin:4px auto}
         <li><a href="#outputs">External output &amp; Multiview</a></li>
         <li><a href="#shortcuts">Keyboard shortcuts</a></li>
         <li><a href="#api">Web Controller &amp; API</a></li>
-        <li><a href="#new-13">New in 1.3</a></li>
+        <li><a href="#new-14">New in 1.4</a></li>
+      <li><a href="#new-13">New in 1.3</a></li>
       <li><a href="#updates">Updates</a></li>
         <li><a href="#troubleshooting">Troubleshooting</a></li>
       </ol>
@@ -271,7 +273,7 @@ footer p{margin:4px auto}
 
     <!-- 5 -->
     <section class="doc" id="titles" aria-labelledby="h-ti">
-      <h2 id="h-ti">5. Titles &amp; Title Designer</h2>
+      <h2 id="h-ti">5. Titles &amp; Title Editor</h2>
       <p>Add a <strong>Title</strong> input and choose a template:</p>
       <ul>
         <li>Lower third</li>
@@ -441,6 +443,21 @@ footer p{margin:4px auto}
   -H "Content-Type: application/json" \
   -d '{"Function":"SetText","Input":"Score","SelectedName":"Score","Value":"120/3"}'</code></pre>
       <div class="note warn"><p>The API has no password. Use it only on a trusted local network, and do not forward port 8088 on your router.</p></div>
+    </section>
+
+    <!-- 14 -->
+    <section class="doc" id="new-14" aria-labelledby="h-new14">
+      <h2 id="h-new14">New in 1.4</h2>
+      <h3>Faster, higher-quality outputs</h3>
+      <p>Settings → <strong>Recording</strong> and <strong>Streaming</strong> now default to <em>GPU — shared hardware H.264</em>. The picture is encoded once on your graphics card and shared by every stream and recording that uses the same settings, so streaming to several platforms while recording costs almost nothing extra. You can also choose x264, x265, NVENC (H.264 / HEVC / AV1), Intel Quick Sync, AMD AMF, ProRes 422 HQ or DNxHR HQ. For recordings choose <em>Constant quality</em> (High, or Lossless for editing). MP4 recordings are crash-safe. Settings → <strong>Encoders</strong> shows which encoders your PC supports and has an <em>Audio offset</em> to fine-tune lip-sync.</p>
+      <h3>Multiview on any monitor</h3>
+      <p>There are four multiviews. In the Multiview module pick one, choose a layout (2+8, 2+12, 2+16, 2+24, grids…) and press ⚙ for labels, tally borders, audio meters, safe areas, status bar and resolution (up to 4K). Right-click a cell to put a specific input, Output, Preview or a clock in it. To show a multiview on another screen, open Settings → External outputs and choose <em>Multiview 1–4</em> as the source.</p>
+      <h3>Title Editor</h3>
+      <p>Right-click a title input and choose <strong>Edit title…</strong>, or open Tools → <strong>Title Editor…</strong> for a new title. Add text, shapes, lines, images, clocks, timers, tickers and credits from the toolbar; drag to move, use the handles to resize (Shift keeps the ratio, Alt resizes from the centre) and the round handle to rotate. Pink guides show when an object lines up with the centre, the safe areas or another object. In the right-hand panel set fonts, gradients, outlines, shadows and a background box. Under <em>Animation</em> give each object its own In and Out effect, then drag the blue bars in the timeline to set when each one starts and how long it takes. Press <strong>Apply</strong> to update the input.</p>
+      <h3>Health and statistics</h3>
+      <p>BTS Studio now warns you when the frame rate drops, an output can't keep up or memory runs low. <strong>Modules → Statistics</strong> shows CPU, memory, GPU, frame-time graph and each output's encoder and buffer.</p>
+      <h3>Command search</h3>
+      <p>Press <kbd>Ctrl</kbd>+<kbd>K</kbd> (or click the search box at the top) and type to run any command or put any input into Preview. Settings has a search box too.</p>
     </section>
 
     <!-- 13 -->

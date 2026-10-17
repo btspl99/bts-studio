@@ -109,7 +109,7 @@
         { label: 'Chroma / Luma Key…', onClick: () => BTS.ui.inputSettings(inp, 'key') },
         inp.channel ? { label: 'Audio Settings…', onClick: () => BTS.ui.inputSettings(inp, 'audio') } : null,
         inp.type === 'title' ? { label: 'Edit Title Text…', onClick: () => BTS.ui.inputSettings(inp, 'general') } : null,
-        inp.type === 'title' ? { label: 'Title Designer…', onClick: () => BTS.ui.titleDesigner(inp) } : null,
+        inp.type === 'title' ? { label: 'Edit title…', onClick: () => BTS.ui.titleDesigner(inp) } : null,
         inp.type === 'browser' ? { label: 'Reload Page', onClick: () => inp.reload() } : null,
         inp.type === 'browser' ? { label: 'Page Developer Tools', onClick: () => window.bts.browser.devtools(inp.id) } : null,
         ['camera', 'screen'].includes(inp.type) ? { label: 'Restart Device', onClick: () => inp.init() } : null,

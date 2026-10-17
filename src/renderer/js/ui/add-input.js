@@ -350,7 +350,7 @@
           U.el('button', { class: 'btn', text: 'Open .btstitle…', onclick: openTitle }),
           status
         ]),
-        U.el('p', { class: 'hint', text: 'After adding, edit text in Input Settings or the Title Designer. Bind fields to Excel, Google Sheets, CSV, JSON, XML or RSS via Tools → Data Sources.' }));
+        U.el('p', { class: 'hint', text: 'After adding, edit text in Input Settings or the Title Editor. Bind fields to Excel, Google Sheets, CSV, JSON, XML or RSS via Tools → Data Sources.' }));
       draw();
       return () => {
         if (imported) return [{ type: 'title', title: imported.name || 'Title', cfg: { template: imported } }];

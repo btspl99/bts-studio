@@ -291,7 +291,7 @@ function buildMenu() {
     },
     {
       label: 'Tools', submenu: [
-        { label: 'Title Designer…', click: m('title-designer') },
+        { label: 'Title Editor…', click: m('title-designer') },
         { label: 'Data Sources…', click: m('data-sources') },
         { label: 'Telestrator…', accelerator: 'CmdOrCtrl+Shift+T', click: m('telestrator') },
         { label: 'Keyboard Shortcuts…', click: m('shortcuts') },

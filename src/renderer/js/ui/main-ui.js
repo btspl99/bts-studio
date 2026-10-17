@@ -196,7 +196,7 @@
       U.$('#btnSettings').onclick = (e) => BTS.Dialog.ctxMenu(e.clientX, e.clientY - 220, [
         { label: 'Settings…', onClick: () => BTS.SettingsUI.open() },
         { label: 'Data Sources…', onClick: () => BTS.SettingsUI.dataSources() },
-        { label: 'Title Designer…', onClick: () => BTS.TitleDesigner.open() },
+        { label: 'Title Editor…', onClick: () => BTS.TitleDesigner.open() },
         { label: 'Telestrator…', onClick: () => BTS.TelestratorUI.open() },
         { label: 'Statistics', onClick: () => BTS.SettingsUI.stats() },
         { label: 'Toggle Audio Mixer', key: 'F9', onClick: () => this.toggleMixer() },

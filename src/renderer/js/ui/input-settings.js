@@ -138,7 +138,7 @@
       { label: 'In duration (ms)', key: 'inDur', type: 'number', onChange: apply },
       { label: 'Transition Out', key: 'outType', type: 'select', options: types, onChange: apply },
       { label: 'Out duration (ms)', key: 'outDur', type: 'number', onChange: apply },
-      { custom: U.el('div', { class: 'inline' }, [U.el('button', { class: 'btn primary', text: 'Open Title Designer…', onclick: () => BTS.ui.titleDesigner(inp) }), U.el('button', { class: 'btn', text: '▶ Play animation', onclick: () => r.transitionIn() })]) }
+      { custom: U.el('div', { class: 'inline' }, [U.el('button', { class: 'btn primary', text: 'Open Title Editor…', onclick: () => BTS.ui.titleDesigner(inp) }), U.el('button', { class: 'btn', text: '▶ Play animation', onclick: () => r.transitionIn() })]) }
     ], anim));
     return wrap;
   }
