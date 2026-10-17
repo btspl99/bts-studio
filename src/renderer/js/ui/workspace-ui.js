@@ -38,6 +38,7 @@
       BTS.replayUI = new BTS.ReplayUI(studio, U.$('#replayModule'));
       BTS.scopesUI = new BTS.ScopesUI(studio, U.$('#scopesModule'));
       BTS.ptzUI = new BTS.PtzUI(studio, U.$('#ptzModule'));
+      BTS.multiviewUI = new BTS.MultiviewUI(studio);
       this.layout = BTS.layout = new BTS.Layout(U.$('#workspace'), U.$('#moduleStash'), this.modules);
       this.layout.on('change', () => this.syncBar());
       this.layout.on('resize', () => BTS.ui && BTS.ui._fitSafe && BTS.ui._fitSafe());

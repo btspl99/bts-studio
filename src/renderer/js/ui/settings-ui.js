@@ -317,7 +317,7 @@
     const ui = BTS.ui, st = BTS.studio;
     const displays = await window.bts.displays();
     const box = U.el('div');
-    const srcOpts = () => [['program', 'Output (program)'], ['preview', 'Preview'], ['multiview', 'Multiview'], ...st.inputs.map(i => ['input:' + i.id, `Input ${i.number}: ${i.title}`])];
+    const srcOpts = () => [['program', 'Output (program)'], ['preview', 'Preview'], ...st.multiviews.list.map(m => ['multiview:' + m.n, `${m.cfg.name} (${BTS.Multiview.LAYOUTS[m.cfg.layout]?.name || ''})`]), ...st.inputs.map(i => ['input:' + i.id, `Input ${i.number}: ${i.title}`])];
     const draw = () => {
       box.innerHTML = '';
       const tbl = U.el('table', { class: 'tbl' });

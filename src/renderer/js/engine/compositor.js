@@ -35,6 +35,7 @@
       this.stingerEls = {};
       this.previewOverlays = false;
       this._setupCanvases();
+      this.multiviews = new BTS.MultiviewManager(this);
       this._startLoop();
       // hot-plug: when a capture device comes back, reconnect inputs that lost it
       navigator.mediaDevices.addEventListener('devicechange', BTS.U.debounce(() => {
@@ -55,11 +56,9 @@
       this.programCanvas.width = this.W; this.programCanvas.height = this.H;
       const ps = Math.min(1, 1280 / this.W);
       this.previewCanvas.width = Math.round(this.W * ps); this.previewCanvas.height = Math.round(this.H * ps);
-      this.multiviewCanvas.width = 1920; this.multiviewCanvas.height = 1080;
-      this.pctx = this.programCanvas.getContext('2d', { alpha: false, desynchronized: false });
+            this.pctx = this.programCanvas.getContext('2d', { alpha: false, desynchronized: false });
       this.vctx = this.previewCanvas.getContext('2d', { alpha: false });
-      this.mctx = this.multiviewCanvas.getContext('2d', { alpha: false });
-      this.pctx.imageSmoothingQuality = 'high'; this.vctx.imageSmoothingQuality = 'medium'; this.mctx.imageSmoothingQuality = 'low';
+      this.pctx.imageSmoothingQuality = 'high'; this.vctx.imageSmoothingQuality = 'medium';
     }
 
     setVideoFormat(w, h, fps) {
@@ -338,9 +337,15 @@
 
       this._drawProgram(this.pctx, this.W, this.H, now, tp);
       if (this.frameId % this.perf.previewEvery === 0) this._drawPreview(this.vctx, this.previewCanvas.width, this.previewCanvas.height);
-      if (this.multiviewVisible || this.multiviewPopout) { if (this.frameId % this.perf.multiviewEvery === 0) { try { this._drawMultiview(); } catch (e) { console.error(e); } } }
+      if (this.multiviews.anyActive) this.multiviews.render(this.frameId, this.perf.multiviewEvery);
       this.emit('frame', now);
     }
+
+    // multiview module visibility / pop-out refcount (kept for older callers)
+    get multiviewVisible() { return this.multiviews ? this.multiviews.moduleVisible : false; }
+    set multiviewVisible(v) { if (this.multiviews) this.multiviews.moduleVisible = !!v; }
+    get multiviewPopout() { return this.multiviews ? this.multiviews.get(1).users : 0; }
+    set multiviewPopout(v) { if (this.multiviews) this.multiviews.get(1).users = Math.max(0, v | 0); }
 
     _drawInput(ctx, inp, W, H) { if (inp) inp.draw(ctx, 0, 0, W, H); }
 
@@ -396,44 +401,6 @@
         for (const o of this.overlays) { if (o.inputId && o.state !== 'off') { const i = this.byId(o.inputId); if (i) i.draw(ctx, 0, 0, W, H); } }
       }
       for (const o of this.overlays) { if (o.preview && o.pvInputId) { const i = this.byId(o.pvInputId); if (i) i.draw(ctx, 0, 0, W, H); } }
-    }
-
-    _drawMultiview() {
-      const ctx = this.mctx, W = 1920, H = 1080;
-      ctx.fillStyle = '#0b0b0d'; ctx.fillRect(0, 0, W, H);
-      const big = { w: W / 2 - 6, h: (W / 2 - 6) * 9 / 16 };
-      const label = (x, y, w, h, text, color) => {
-        ctx.fillStyle = 'rgba(0,0,0,.75)'; ctx.fillRect(x, y + h - 30, w, 30);
-        ctx.fillStyle = '#fff'; ctx.font = '600 20px Segoe UI'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(text, x + w / 2, y + h - 15);
-        if (color) { ctx.strokeStyle = color; ctx.lineWidth = 5; ctx.strokeRect(x + 2.5, y + 2.5, w - 5, h - 5); }
-      };
-      ctx.drawImage(this.previewCanvas, 4, 4, big.w, big.h);
-      label(4, 4, big.w, big.h, 'PREVIEW — ' + (this.preview ? this.preview.title : '—'), '#2fbf62');
-      ctx.drawImage(this.programCanvas, W / 2 + 2, 4, big.w, big.h);
-      label(W / 2 + 2, 4, big.w, big.h, 'PROGRAM — ' + (this.program ? this.program.title : '—'), '#e2453c');
-      const cols = 4, rows = 2, top = big.h + 12;
-      const cw = (W - 8 - (cols - 1) * 6) / cols, chh = Math.min((H - top - 4 - (rows - 1) * 6) / rows, cw * 9 / 16);
-      const ch = chh, cww = ch * 16 / 9;
-      const offX = (W - (cww * cols + 6 * (cols - 1))) / 2;
-      for (let i = 0; i < cols * rows; i++) {
-        const inp = this.inputs[i];
-        const x = offX + (i % cols) * (cww + 6), y = top + Math.floor(i / cols) * (ch + 6);
-        ctx.fillStyle = '#000'; ctx.fillRect(x, y, cww, ch);
-        if (!inp) continue;
-        ctx.save(); ctx.beginPath(); ctx.rect(x, y, cww, ch); ctx.clip();
-        if (inp.type === 'title' && !inp.live) inp.drawStatic(ctx, x, y, cww, ch); else inp.draw(ctx, x, y, cww, ch);
-        ctx.restore();
-        const color = inp.id === this.programId || this.liveSet.has(inp) ? '#e2453c' : inp.id === this.previewId ? '#2fbf62' : null;
-        label(x, y, cww, ch, `${i + 1}  ${inp.title}`, color);
-        if (inp.channel) {
-          const pk = Math.max(...inp.channel.peak); const hgt = U.clamp((U.db(pk) + 60) / 60, 0, 1) * (ch - 36);
-          ctx.fillStyle = pk > 0.89 ? '#e2453c' : pk > 0.5 ? '#f5c344' : '#2fbf62'; ctx.fillRect(x + cww - 12, y + ch - 32 - hgt, 6, hgt);
-        }
-      }
-      // clock / status
-      ctx.fillStyle = '#f0a53a'; ctx.font = '700 22px Segoe UI'; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
-      ctx.fillText(new Date().toLocaleTimeString(), W - 14, H - 10);
     }
 
     snapshot() { return this.programCanvas.toDataURL('image/png'); }

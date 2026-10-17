@@ -250,8 +250,9 @@
     _returnStream() {
       const st = this.app;
       const src = this.cfg.returnSource;
-      const canvas = src === 'preview' ? st.previewCanvas : src === 'multiview' ? st.multiviewCanvas : st.programCanvas;
-      return (canvas || st.programCanvas).captureStream(Math.min(30, st.fps || 30));
+      if (src === 'multiview' && BTS.ui) return BTS.ui._streamFor('multiview:1');
+      const canvas = src === 'preview' ? st.previewCanvas : st.programCanvas;
+      return canvas.captureStream(Math.min(30, st.fps || 30));
     }
     _sendTally(force) {
       if (!this.guest) return;
@@ -269,7 +270,7 @@
     hangup(notify = true) {
       if (notify && this.guest) window.bts.guests.send(this.guest.sid, { type: 'bye', reason: 'The producer ended the call' });
       if (this.pc) { try { this.pc.close(); } catch { /* noop */ } this.pc = null; }
-      if (this._ret) { this._ret.getTracks().forEach(t => t.stop()); this._ret = null; }
+      if (this._ret) { if (this._ret._off) this._ret._off(); this._ret.getTracks().forEach(t => t.stop()); this._ret = null; }
       if (this._mm) { this._mm.dispose(); this._mm = null; }
       if (this.channel) this.channel.setSource(null);
       this.video.srcObject = null;

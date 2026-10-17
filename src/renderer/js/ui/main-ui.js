@@ -136,7 +136,6 @@
       });
       U.$('#previewCanvas').addEventListener('dblclick', () => st.quickPlay());
       U.$('#programCanvas').addEventListener('dblclick', () => this.toggleExternal());
-      U.$('#multiviewCanvas').addEventListener('click', (e) => this._multiviewClick(e));
       new ResizeObserver(() => this._fitSafe()).observe(U.$('#programPanel'));
       setInterval(() => this._transport(), 200);
     }
@@ -145,16 +144,6 @@
         const c = U.$(canvas), s = U.$(safe), p = c.parentElement.getBoundingClientRect(), r = c.getBoundingClientRect();
         Object.assign(s.style, { left: (r.left - p.left) + 'px', top: (r.top - p.top) + 'px', width: r.width + 'px', height: r.height + 'px' });
       }
-    }
-    _multiviewClick(e) {
-      const st = this.studio, c = e.currentTarget, r = c.getBoundingClientRect();
-      const x = (e.clientX - r.left) / r.width * 1920, y = (e.clientY - r.top) / r.height * 1080;
-      const bigH = (960 - 6) * 9 / 16;
-      if (y < bigH + 8) { if (x < 960) st.quickPlay(); return; }
-      const cols = 4, ch = Math.min((1080 - bigH - 16 - 6) / 2, ((1920 - 8 - 18) / 4) * 9 / 16), cw = ch * 16 / 9, offX = (1920 - (cw * cols + 18)) / 2;
-      const col = Math.floor((x - offX) / (cw + 6)), row = Math.floor((y - bigH - 12) / (ch + 6));
-      const inp = st.inputs[row * cols + col];
-      if (inp && col >= 0 && col < cols) st.setPreview(inp.id);
     }
     updateMonitors() {
       const st = this.studio;
@@ -255,13 +244,38 @@
       this.updateButtons();
     }
 
-    /* ---------- pop-out windows ---------- */
+    /* ---------- pop-out windows (external outputs) ---------- */
+    // Sources: 'program' | 'preview' | 'multiview:N' | 'input:<id>'. Pixels are drawn straight into the window's canvas
+    // every frame (same renderer process): ~1 frame latency, no capture/encode, scaled on the GPU to the monitor's size.
+    _normSource(src) { return src === 'multiview' ? 'multiview:1' : src || 'program'; }
+    _drawExternal(rec) {
+      const w = rec.win; if (!w || w.closed) return;
+      const c = rec.canvas || (rec.canvas = w.document && w.document.getElementById('out'));
+      if (!c) return;
+      const dpr = w.devicePixelRatio || 1;
+      const cw = Math.max(1, Math.round(w.innerWidth * dpr)), ch = Math.max(1, Math.round(w.innerHeight * dpr));
+      if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; rec.g = c.getContext('2d', { alpha: false }); rec.g.imageSmoothingQuality = 'high'; }
+      const g = rec.g || (rec.g = c.getContext('2d', { alpha: false }));
+      const st = this.studio, src = rec.source;
+      let from = null, sw = st.W, sh = st.H;
+      if (src === 'program') from = st.programCanvas;
+      else if (src === 'preview') from = st.previewCanvas;
+      else if (src.startsWith('multiview:')) { const mv = st.multiviews.get(src.slice(10)); from = mv.canvas; sw = from.width; sh = from.height; }
+      const r = U.fit(sw, sh, cw, ch, 'contain');
+      if (from) { if (rec.bars !== r.x + ',' + r.y) { g.fillStyle = '#000'; g.fillRect(0, 0, cw, ch); rec.bars = r.x + ',' + r.y; } g.drawImage(from, r.x, r.y, r.w, r.h); return; }
+      if (src.startsWith('input:')) {
+        const i = st.byId(src.slice(6));
+        g.fillStyle = '#000'; g.fillRect(0, 0, cw, ch);
+        if (i) { if (i.type === 'title' && !i.live) i.drawStatic(g, r.x, r.y, r.w, r.h); else i.draw(g, r.x, r.y, r.w, r.h); }
+      }
+    }
+    /** MediaStream of a source (used by remote-guest return feeds and other consumers that need a stream) */
     _streamFor(source) {
       const st = this.studio;
-      if (source === 'multiview') { st.multiviewPopout = (st.multiviewPopout || 0) + 1; return st.multiviewCanvas.captureStream(st.fps); }
+      source = this._normSource(source);
+      if (source.startsWith('multiview:')) { const mv = st.multiviews.get(source.slice(10)); mv.users++; const ms = mv.canvas.captureStream(st.fps); ms._off = () => { mv.users = Math.max(0, mv.users - 1); }; return ms; }
       if (source === 'preview') return st.previewCanvas.captureStream(st.fps);
-      if (source && source.startsWith('input:')) {
-        // a dedicated canvas for one input, redrawn every frame
+      if (source.startsWith('input:')) {
         const id = source.slice(6);
         const c = document.createElement('canvas'); c.width = st.W; c.height = st.H;
         const g = c.getContext('2d');
@@ -273,38 +287,41 @@
     }
     /** slot 0..5; displayId = monitor id or null for a window */
     openExternal(displayId, source = 'program', slot = null) {
+      source = this._normSource(source);
       if (slot == null) { slot = this.externals.findIndex(x => !x || !x.win || x.win.closed); if (slot < 0) slot = this.externals.length; }
       if (slot > 5) { U.toast('Maximum 6 external outputs', 'error'); return; }
       this.closeExternal(slot);
       const w = window.open(`external.html?display=${displayId || ''}&source=${encodeURIComponent(source)}`, 'external' + (slot + 1));
       if (!w) return U.toast('Could not open external window', 'error');
-      const ms = this._streamFor(source);
-      const rec = this.externals[slot] = { win: w, display: displayId, source, stream: ms };
-      const attach = () => {
-        if (w.closed) return;
-        const v = w.document.querySelector('video');
-        if (!v) return setTimeout(attach, 50);
-        if (v.srcObject !== ms) { v.srcObject = ms; v.play().catch(() => {}); }
-        w.document.title = `BTS Studio — External ${slot + 1} (${this._sourceLabel(source)})`;
-        this.updateButtons();
-      };
-      w.addEventListener('load', attach);
-      setTimeout(attach, 300);
+      const st = this.studio;
+      const rec = this.externals[slot] = { win: w, display: displayId, source };
+      if (source.startsWith('multiview:')) { rec.mv = st.multiviews.get(source.slice(10)); rec.mv.users++; }
+      rec.off = st.on('frame', () => { try { this._drawExternal(rec); } catch (e) { /* window closing */ } });
+      const title = () => { if (!w.closed && w.document) w.document.title = `BTS Studio — External ${slot + 1} (${this._sourceLabel(source)})`; };
+      w.addEventListener('load', () => { rec.canvas = null; title(); this.updateButtons(); });
+      setTimeout(title, 300);
       rec.iv = setInterval(() => { if (w.closed) this._cleanupExternal(slot); }, 500);
+      this.updateButtons();
     }
     _cleanupExternal(slot) {
       const x = this.externals[slot]; if (!x) return;
       clearInterval(x.iv);
-      if (x.stream) { if (x.stream._off) x.stream._off(); x.stream.getTracks().forEach(t => t.stop()); }
-      if (x.source === 'multiview') this.studio.multiviewPopout = Math.max(0, (this.studio.multiviewPopout || 1) - 1);
+      if (x.off) x.off();
+      if (x.mv) x.mv.users = Math.max(0, x.mv.users - 1);
       this.externals[slot] = null;
       this.updateButtons();
       BTS.SettingsUI && BTS.SettingsUI.refreshExternals && BTS.SettingsUI.refreshExternals();
     }
     closeExternal(slot) { const x = this.externals[slot]; if (x && x.win && !x.win.closed) x.win.close(); this._cleanupExternal(slot); }
-    _sourceLabel(src) { if (src === 'program') return 'Output'; if (src === 'preview') return 'Preview'; if (src === 'multiview') return 'Multiview'; if (src && src.startsWith('input:')) return this.studio.byId(src.slice(6))?.title || 'Input'; return src; }
+    _sourceLabel(src) {
+      src = this._normSource(src);
+      if (src === 'program') return 'Output'; if (src === 'preview') return 'Preview';
+      if (src.startsWith('multiview:')) return this.studio.multiviews.get(src.slice(10)).cfg.name;
+      if (src.startsWith('input:')) return this.studio.byId(src.slice(6))?.title || 'Input';
+      return src;
+    }
     toggleExternal() { BTS.SettingsUI.external(); }
-    popoutMultiview() { this.openExternal(null, 'multiview'); }
+    popoutMultiview(n = 1) { this.openExternal(null, 'multiview:' + n); }
 
     /* ---------- drag & drop files ---------- */
     _dnd() {
