@@ -86,7 +86,7 @@ const DEFAULT_SETTINGS = {
   record2: { enabled: false, format: 'mkv', mode: 'encode', encoder: 'gpu', quality: 'medium', rateControl: 'quality', videoBitrate: 12000, suffix: '-2' },
   encoding: { engine: 'v2', hardware: 'auto', migrated: 0 },
   decklink: { ffmpeg: '', outputs: [] },
-  api: { enabled: true, port: 8088, allowRemote: true, tcpEnabled: true, tcpPort: 8099 },
+  api: { enabled: true, port: 8088, allowRemote: true, tcpEnabled: true, tcpPort: 8099, user: '', password: '', tallyOpen: true },
   guests: { port: 8089, stun: 'stun:stun.l.google.com:19302', turn: '', turnUser: '', turnPass: '' },
   media: { autoConvert: true, convertQuality: 'fast' },
   updates: { autoCheck: true, url: '' },
@@ -263,6 +263,7 @@ function restartApi() {
   if (settings.api.enabled) {
     api.start({
       port: settings.api.port, allowRemote: settings.api.allowRemote, tcpPort: settings.api.tcpEnabled === false ? 0 : (settings.api.tcpPort || 8099), getWin: () => mainWin,
+      user: settings.api.user || '', password: settings.api.password || '', tallyOpen: settings.api.tallyOpen !== false,
       webRoot: path.join(ROOT, 'web')
     }).catch(err => log.error('API start failed', err));
   }
@@ -283,6 +284,7 @@ function buildMenu() {
         { type: 'separator' },
         { label: 'Save Preset', accelerator: 'CmdOrCtrl+S', click: m('save') },
         { label: 'Save Preset As…', accelerator: 'CmdOrCtrl+Shift+S', click: m('save-as') },
+        { label: 'Save Preset Bundle (with media)…', click: m('save-bundle') },
         { type: 'separator' },
         { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: m('settings') },
         { type: 'separator' },
@@ -422,7 +424,55 @@ function registerIpc() {
   ipcMain.handle('project:read', (e, file) => {
     const txt = fs.readFileSync(file, 'utf8');
     addRecent(file);
-    return { file, data: JSON.parse(txt) };
+    const data = JSON.parse(txt);
+    // bundle: media paths are stored relative to the preset folder ("media/…") — make them absolute again
+    if (data && data.bundle) {
+      const dir = path.dirname(file);
+      const walk = (v) => {
+        if (typeof v === 'string') return /^media[\\/]/.test(v) ? path.join(dir, v) : v;
+        if (Array.isArray(v)) return v.map(walk);
+        if (v && typeof v === 'object') { for (const k of Object.keys(v)) v[k] = walk(v[k]); return v; }
+        return v;
+      };
+      walk(data);
+    }
+    return { file, data };
+  });
+  /** Save a preset as a self-contained folder: the .btsproj plus every media file it uses (videos, images, LUTs, stingers…) */
+  ipcMain.handle('project:bundle', async (e, folder, name, data) => {
+    const media = path.join(folder, 'media');
+    fs.mkdirSync(media, { recursive: true });
+    const copied = new Map(); let count = 0, bytes = 0; const missing = [];
+    const copyOne = (src) => {
+      if (copied.has(src)) return copied.get(src);
+      let base = path.basename(src), n = 1;
+      while ([...copied.values()].includes('media/' + base)) base = path.basename(src, path.extname(src)) + '-' + (++n) + path.extname(src);
+      const st = fs.statSync(src);
+      if (st.isDirectory()) { // image-sequence folder
+        const dst = path.join(media, base); fs.mkdirSync(dst, { recursive: true });
+        for (const f of fs.readdirSync(src)) { const fp = path.join(src, f); if (fs.statSync(fp).isFile()) { fs.copyFileSync(fp, path.join(dst, f)); bytes += fs.statSync(fp).size; } }
+      } else { fs.copyFileSync(src, path.join(media, base)); bytes += st.size; }
+      count++;
+      const rel = 'media/' + base; copied.set(src, rel); return rel;
+    };
+    const looksLikePath = (v) => typeof v === 'string' && v.length < 1024 && (path.isAbsolute(v) || /^file:\/\//i.test(v)) && !/^[a-z]+:\/\/(?!\/)/i.test(v.replace(/^file:\/\//i, ''));
+    const walk = (v, key) => {
+      if (typeof v === 'string') {
+        if (!looksLikePath(v) || key === 'folder' || key === 'ffmpeg' || key === 'runtime') return v;
+        const p = v.replace(/^file:\/\//i, '');
+        try { if (fs.existsSync(p)) return copyOne(p); } catch { /* unreadable */ }
+        missing.push(p); return v;
+      }
+      if (Array.isArray(v)) return v.map(x => walk(x, key));
+      if (v && typeof v === 'object') { for (const k of Object.keys(v)) v[k] = walk(v[k], k); return v; }
+      return v;
+    };
+    walk(data);
+    data.bundle = true;
+    const file = path.join(folder, (name || 'Production').replace(/[\\/:*?"<>|]/g, '_') + '.btsproj');
+    writeJSON(file, data);
+    addRecent(file);
+    return { file, count, bytes, missing };
   });
   ipcMain.handle('project:write', (e, file, data) => {
     writeJSON(file, data);

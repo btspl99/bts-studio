@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('bts', {
   project: {
     read: (f) => ipcRenderer.invoke('project:read', f),
     write: (f, d) => ipcRenderer.invoke('project:write', f, d),
+    bundle: (folder, name, d) => ipcRenderer.invoke('project:bundle', folder, name, d),
     autosave: (d) => ipcRenderer.invoke('project:autosave', d),
     autosaveRead: () => ipcRenderer.invoke('project:autosave-read'),
     pending: () => ipcRenderer.invoke('project:pending')

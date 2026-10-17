@@ -1,7 +1,7 @@
 {
   "name": "bts-studio",
   "productName": "BTS Studio",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "BTS Studio — free, open-source live production, switching and streaming software for students",
   "main": "src/main/main.js",
   "author": {

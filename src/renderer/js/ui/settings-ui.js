@@ -152,7 +152,11 @@
       { label: 'Port', key: 'port', type: 'number', min: 1024, max: 65535 },
       { label: 'Allow other devices (LAN)', key: 'allowRemote', type: 'checkbox' },
       { label: 'TCP API (vMix-compatible)', key: 'tcpEnabled', type: 'checkbox' },
-      { label: 'TCP port', key: 'tcpPort', type: 'number', min: 1024, max: 65535 }
+      { label: 'TCP port', key: 'tcpPort', type: 'number', min: 1024, max: 65535 },
+      { section: 'Security' },
+      { label: 'User name', key: 'user', placeholder: 'any', hint: 'Optional. Leave empty to accept any user name.' },
+      { label: 'Password', key: 'password', type: 'password', hint: 'Phones, tablets and other PCs must log in to the Web Controller and HTTP API. Requests from this PC never need it.' },
+      { label: 'Tally pages without password', key: 'tallyOpen', type: 'checkbox', hint: 'Lets simple tally screens connect without logging in.' }
     ], s.api), U.el('div', { style: { marginTop: '12px', lineHeight: '1.8' } }, [
       U.el('div', { html: `<b>Web Controller</b> (phone/tablet): ${['127.0.0.1', ...addrs].map(a => `<span class="kbd">http://${a}:${s.api.port}/</span>`).join(' ')}` }),
       U.el('div', { html: `<b>Tally</b>: <span class="kbd">http://IP:${s.api.port}/tally/?input=1</span>` }),
@@ -236,7 +240,7 @@
     const draw = () => {
       el.innerHTML = '';
       const tbl = U.el('table', { class: 'tbl' });
-      tbl.append(U.el('tr', {}, ['Key', 'Function', 'Input', 'Value', ''].map(h => U.el('th', { text: h }))));
+      tbl.append(U.el('tr', {}, ['Key', 'Function', 'Input', 'Value', 'Delay ms', ''].map(h => U.el('th', { text: h }))));
       list.forEach((r, i) => {
         const key = U.el('input', { type: 'text', value: r.key, readonly: true, placeholder: 'Press keys…', style: { cursor: 'pointer' } });
         key.onkeydown = (e) => { e.preventDefault(); e.stopPropagation(); const k = keyName(e); if (k) { r.key = k; key.value = k; } };
@@ -248,12 +252,16 @@
         inp.onchange = () => { r.params = { ...(r.params || {}), Input: inp.value || undefined }; };
         const val = U.el('input', { type: 'text', value: r.params?.Value || '', style: { width: '90px' } });
         val.onchange = () => { r.params = { ...(r.params || {}), Value: val.value || undefined }; };
-        tbl.append(U.el('tr', {}, [U.el('td', {}, [key]), U.el('td', {}, [fn]), U.el('td', {}, [inp]), U.el('td', {}, [val]), U.el('td', {}, [U.el('button', { class: 'tbtn small', text: '✕', onclick: () => { list.splice(i, 1); draw(); } })])]));
+        const dl = U.el('input', { type: 'number', value: r.delay || 0, min: 0, step: 100, style: { width: '70px' } });
+        dl.onchange = () => { r.delay = Math.max(0, +dl.value || 0); };
+        const dup = list.filter(x => x.key && x.key === r.key).length > 1;
+        tbl.append(U.el('tr', {}, [U.el('td', {}, [key, dup ? U.el('span', { class: 'hint', text: ' +', title: 'This key runs several actions' }) : null]), U.el('td', {}, [fn]), U.el('td', {}, [inp]), U.el('td', {}, [val]), U.el('td', {}, [dl]),
+          U.el('td', {}, [U.el('button', { class: 'tbtn small', text: '⧉', title: 'Add another action on the same key', onclick: () => { list.splice(i + 1, 0, { key: r.key, fn: 'Cut', delay: 0 }); draw(); } }), U.el('button', { class: 'tbtn small', text: '✕', onclick: () => { list.splice(i, 1); draw(); } })])]));
       });
       el.append(tbl, U.el('div', { class: 'inline', style: { marginTop: '8px', gap: '6px', display: 'flex' } }, [
         U.el('button', { class: 'btn', text: '＋ Add shortcut', onclick: () => { list.push({ key: '', fn: 'Cut' }); draw(); } }),
         U.el('button', { class: 'btn', text: 'Restore defaults', onclick: () => { list.splice(0, list.length, ...U.deepClone(DEFAULT_SHORTCUTS)); draw(); } })
-      ]), U.el('p', { class: 'hint', text: 'Click the Key box and press the key combination. Shortcuts are ignored while typing in text fields.' }));
+      ]), U.el('p', { class: 'hint', text: 'Click the Key box and press the key combination. Give several rows the same key (⧉) to run several actions at once — each after its own delay. Shortcuts are ignored while typing in text fields.' }));
     };
     draw();
     return { el, value: () => list.filter(r => r.key && r.fn) };

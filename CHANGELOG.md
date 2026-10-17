@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.8.0 — 2026-10-17
+
+The control release — last step of the vMix gap-analysis roadmap.
+
+### New
+- **More triggers** — an input can now run functions when it goes to **Preview** or leaves it, is shown on or taken off an **overlay**, a video is **10 s from the end**, a title **countdown reaches 0**, or a **remote guest joins / leaves** (as well as going live, leaving Output and finishing).
+- **Several actions per shortcut** — give several rows the same key (⧉ button), each with its own delay; new `KeyPress` function runs a key's actions from the API or a script.
+- **MIDI activators** — controller buttons light up: tally of an input (on air / preview), an overlay being on, recording, streaming or fade-to-black, with configurable LED velocities per button.
+- **Web Controller & API password** (HTTP login, like vMix) for phones, tablets and other PCs; this PC never needs it, and tally pages can stay open.
+- **vMix-compatible API** — the XML state now uses vMix's `<vmix>` format and names (inputs, overlays, preview, active, recording, streaming…), `XMLTEXT` XPath queries work over TCP, and vMix function names such as `ActiveInput`, `NextTitlePreset`, `SelectTitlePreset`, `SetTextVisibleOn/Off`, `SetTextColour`, `AdjustCountdown`, `MultiViewOverlayOn/Off`, `StartStopMultiCorder` and `StartStopExternal` are accepted — so Companion, Stream Deck profiles, tally boxes and scripts made for vMix work with fewer changes.
+- **Input layer functions** `LayerOn`, `LayerOff`, `LayerToggle`.
+- **Preset bundles** — File → *Save Preset Bundle (with media)* copies the preset and every video, image, LUT, stinger and audio file it uses into one folder that opens on any PC.
+
+### Not in this release
+16-bit floating-point compositing was planned for 1.8 but needs a rewrite of the renderer on WebGPU; it stays on the roadmap.
+
 ## 1.7.0 — 2026-10-17
 
 The production release — third step of the vMix gap-analysis roadmap.

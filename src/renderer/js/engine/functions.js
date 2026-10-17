@@ -237,6 +237,26 @@
   def('OpenPreset', 'General', ['Value'], (p) => { BTS.ui.openProject(p.Value); return true; });
   def('SavePreset', 'General', ['Value?'], (p) => { BTS.ui.saveProject(p.Value); return true; });
 
+  // ---- vMix-compatible names (so Companion / Stream Deck profiles and scripts written for vMix work)
+  const alias = (name, target, map = (p) => p, desc = '') => { if (!F.has(name.toLowerCase())) def(name, 'vMix compatible', F.get(target.toLowerCase())?.params || [], (p) => call(target, map(p)), desc || `Same as ${target}`); };
+  alias('ActiveInput', 'CutDirect');
+  alias('NextTitlePreset', 'TitlePageNext'); alias('PreviousTitlePreset', 'TitlePagePrevious');
+  alias('SelectTitlePreset', 'TitlePage', (p) => ({ ...p, Value: String(num(p.Value, 0) + 1) }), 'Value 0-based like vMix');
+  def('StartStopMultiCorder', 'vMix compatible', [], () => call(O().isMultiCorder() ? 'StopMultiCorder' : 'StartMultiCorder'));
+  def('StartStopExternal', 'vMix compatible', [], () => { BTS.DisplayOutputs.toggle(); return true; });
+  const titleEl = (p) => { const i = need(inp(p)); if (i.type !== 'title') throw new Error('Not a title input'); const e = i.renderer.find(p.SelectedName || p.SelectedIndex || 'Name'); if (!e) throw new Error('Field not found'); return [i, e]; };
+  for (const [nm, v] of [['SetTextVisibleOn', false], ['SetTextVisibleOff', true], ['SetImageVisibleOn', false], ['SetImageVisibleOff', true]]) def(nm, 'Titles', ['Input', 'SelectedName'], (p) => { const [i, e] = titleEl(p); e.hidden = v; i.emit('fields'); return true; });
+  for (const nm of ['SetTextVisible', 'SetImageVisible']) def(nm, 'Titles', ['Input', 'SelectedName'], (p) => { const [i, e] = titleEl(p); e.hidden = !e.hidden; i.emit('fields'); return true; }, 'Toggle a title field');
+  def('SetTextColour', 'Titles', ['Input', 'SelectedName', 'Value'], (p) => { const [i, e] = titleEl(p); e.color = String(p.Value || '#ffffff'); i.emit('fields'); return true; }, 'Value #RRGGBB');
+  def('AdjustCountdown', 'Titles', ['Input', 'Value', 'SelectedName?'], (p) => { const i = need(inp(p)); const e = p.SelectedName ? i.renderer.find(p.SelectedName) : i.renderer.t.elements.find(x => x.type === 'countdown'); if (!e) throw new Error('No countdown'); const tm = i.renderer.timers[e.id]; const cur = i.renderer.timerValue(e); if (tm) { tm.value = Math.max(0, cur + num(p.Value, 0)); if (tm.running) tm.startedAt = performance.now(); } return true; }, 'Add Value seconds (negative to subtract)');
+  // input layers (vMix "MultiView overlays"): Value = layer number 1-10
+  const layerOf = (p) => { const i = need(inp(p)); const list = i.type === 'scene' ? i.cfg.layers : (i.props.layers || []); const l = list[num(p.Value, 1) - 1]; if (!l) throw new Error('No layer ' + p.Value); return l; };
+  def('LayerOn', 'Position', ['Input', 'Value'], (p) => { layerOf(p).visible = true; S()._updateLive(); return true; }, 'Show layer Value of an input');
+  def('LayerOff', 'Position', ['Input', 'Value'], (p) => { layerOf(p).visible = false; S()._updateLive(); return true; });
+  def('LayerToggle', 'Position', ['Input', 'Value'], (p) => { const l = layerOf(p); l.visible = l.visible === false; S()._updateLive(); return true; });
+  alias('MultiViewOverlayOn', 'LayerOn'); alias('MultiViewOverlayOff', 'LayerOff'); alias('MultiViewOverlay', 'LayerToggle');
+  def('KeyPress', 'General', ['Value'], (p) => { const k = String(p.Value || ''); const list = (BTS.ui && BTS.ui.shortcuts || []).filter(s => s.key.toLowerCase() === k.toLowerCase()); if (!list.length) throw new Error('No shortcut on ' + k); for (const sc of list) setTimeout(() => call(sc.fn, sc.params || {}), +sc.delay || 0); return true; }, 'Run the shortcut(s) on a key, e.g. Value=Ctrl+1');
+
   async function call(name, params = {}) {
     const f = F.get(String(name).toLowerCase());
     if (!f) return { ok: false, error: `Unknown function ${name}` };

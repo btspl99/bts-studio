@@ -27,9 +27,43 @@
         for (const inp of this.access.inputs.values()) { inp.onmidimessage = (m) => this._msg(inp, m); this.devices.push(inp.name); }
         this.emit('devices', this.devices);
       };
-      this.access.onstatechange = bind;
+      this.access.onstatechange = () => { bind(); this.feedback(true); };
       bind();
+      // activators: light controller buttons for tally, overlays, recording and streaming
+      const st = this.studio, kick = () => this.feedback();
+      st.on('bus', kick); st.on('overlays', kick); st.on('transition', kick);
+      if (st.outputs) st.outputs.on('change', kick);
+      setInterval(kick, 1000);
+      this.feedback(true);
       return true;
+    }
+
+    /** current state of a mapping's light: 'on' (red / program), 'pvw' (green / preview) or 'off' */
+    _state(m) {
+      const st = this.studio, fb = m.feedback;
+      const inp = m.params && m.params.Input ? st.resolve(m.params.Input) : null;
+      switch (fb) {
+        case 'tally': return inp ? (inp.live ? 'on' : st.previewId === inp.id ? 'pvw' : 'off') : 'off';
+        case 'overlay': { const n = +(m.params && m.params.Value) || +(String(m.fn || '').match(/Overlay\D*(\d)/) || [])[1] || 1; const o = st.overlays[n - 1]; return o && o.inputId && o.state !== 'off' && o.state !== 'out' ? 'on' : 'off'; }
+        case 'recording': return st.outputs && st.outputs.isRecording() ? 'on' : 'off';
+        case 'streaming': return st.outputs && st.outputs.isStreaming() ? 'on' : 'off';
+        case 'ftb': return st.ftb && st.ftb.on ? 'on' : 'off';
+        default: return null;
+      }
+    }
+    feedback(force) {
+      if (!this.access || !this.access.outputs.size) return;
+      this._sent = this._sent || new Map();
+      for (const m of this.mappings) {
+        if (!m.feedback || m.feedback === 'none' || m.kind === 'pitch') continue;
+        const s = this._state(m); if (s == null) continue;
+        const key = `${m.kind}|${m.ch}|${m.num}`;
+        const vel = s === 'on' ? (m.onVel ?? 127) : s === 'pvw' ? (m.pvwVel ?? 1) : (m.offVel ?? 0);
+        if (!force && this._sent.get(key) === vel) continue;
+        this._sent.set(key, vel);
+        const msg = m.kind === 'cc' ? [0xb0 | (m.ch - 1), m.num, vel] : [0x90 | (m.ch - 1), m.num, vel];
+        for (const out of this.access.outputs.values()) { if (m.device && out.name !== m.device && !String(out.name).startsWith(String(m.device).slice(0, 12))) continue; try { out.send(msg); } catch { /* unplugged */ } }
+      }
     }
 
     learn(cb) { this.learnCb = cb; }

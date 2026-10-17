@@ -43,6 +43,37 @@ const API = new Proxy({ Function: (fn, p) => __rpc('call', fn, p || {}), state: 
       this.studio = studio;
       this.list = [];      // [{id, name, steps:[{fn, params, delay}], loop:false}]
       this.running = new Map(); // id -> {cancel}
+      this._watch();
+    }
+    /** event sources for input triggers beyond in / out / completion */
+    _watch() {
+      const st = this.studio;
+      let pvw = st.previewId, ovl = new Map();
+      st.on('bus', () => {
+        if (st.previewId !== pvw) { const a = st.byId(pvw), b = st.byId(st.previewId); pvw = st.previewId; if (a) this.fire(a, 'PreviewOut'); if (b) this.fire(b, 'PreviewIn'); }
+      });
+      st.on('overlays', () => {
+        const now = new Map(st.overlays.map((o, i) => [i, o.inputId && (o.state === 'in' || o.state === 'on') ? o.inputId : null]));
+        for (const [i, id] of now) { const was = ovl.get(i) || null; if (id === was) continue; if (was && st.byId(was)) this.fire(st.byId(was), 'OverlayOut'); if (id && st.byId(id)) this.fire(st.byId(id), 'OverlayIn'); }
+        ovl = now;
+      });
+      // timers reaching zero and media about to end (checked twice a second)
+      setInterval(() => {
+        for (const i of st.inputs) {
+          if (!i.props.triggers || !i.props.triggers.length) continue;
+          if (i.type === 'title' && i.renderer) {
+            for (const e of i.renderer.t.elements) {
+              if (e.type !== 'countdown' || e.countUp) continue;
+              const tm = i.renderer.timers[e.id]; if (!tm || !tm.running) { if (tm) tm._fired = false; continue; }
+              if (i.renderer.timerValue(e) <= 0 && !tm._fired) { tm._fired = true; this.fire(i, 'TimerEnd'); }
+            }
+          }
+          if (i.isMedia && i.playing && i.duration > 0) {
+            const left = i.duration - i.currentTime, near = left <= (i.props.nearEndSec || 10);
+            if (near && !i._nearFired) { i._nearFired = true; this.fire(i, 'NearEnd'); } else if (!near) i._nearFired = false;
+          }
+        }
+      }, 500);
     }
     get(ref) { const r = String(ref).toLowerCase(); return this.list.find(m => m.id === ref || m.name.toLowerCase() === r) || null; }
     add(name = 'New Macro', kind = 'steps') { const m = { id: U.uid('mc'), name, kind, steps: [], loop: false, code: kind === 'js' ? SCRIPT_HELP : '' }; this.list.push(m); this.emit('change'); return m; }

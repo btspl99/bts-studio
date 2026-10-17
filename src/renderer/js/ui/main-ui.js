@@ -401,8 +401,12 @@
         if (e.key === 'F8') { e.preventDefault(); return this.toggleMultiview(); }
         if (e.key === 'F9') { e.preventDefault(); return this.toggleMixer(); }
         const k = BTS.SettingsUI.keyName(e);
-        const sc = this.shortcuts.find(s => s.key === k);
-        if (sc) { e.preventDefault(); BTS.Functions.call(sc.fn, sc.params || {}).then(r => { if (!r.ok) U.toast(`${sc.fn}: ${r.error}`, 'error', 2500); }); }
+        // every row with this key runs, in order, each after its own delay (several actions per key, like vMix)
+        const list = this.shortcuts.filter(s => s.key === k);
+        if (list.length) {
+          e.preventDefault();
+          for (const sc of list) setTimeout(() => BTS.Functions.call(sc.fn, sc.params || {}).then(r => { if (!r.ok) U.toast(`${sc.fn}: ${r.error}`, 'error', 2500); }), Math.max(0, +sc.delay || 0));
+        }
       });
     }
 
@@ -431,6 +435,19 @@
       this.currentFile = file; this._title();
       U.toast('Saved ' + U.baseName(file), 'ok');
     }
+    /** a folder with the preset and copies of all its media — move it to another PC and open it there */
+    async saveBundle() {
+      const folder = await window.bts.dialog.folder();
+      if (!folder) return;
+      const name = await BTS.Dialog.prompt('Preset name', this.currentFile ? U.baseName(this.currentFile).replace(/\.btsproj$/i, '') : 'Production');
+      if (name == null) return;
+      U.toast('Copying media…');
+      try {
+        const r = await window.bts.project.bundle(folder, name, this.studio.serialize());
+        this.currentFile = r.file; this._title();
+        U.toast(`Bundle saved: ${r.count} media file(s), ${(r.bytes / 1048576).toFixed(1)} MB${r.missing.length ? ` — ${r.missing.length} missing file(s) not included` : ''}`, r.missing.length ? 'error' : 'ok', 9000);
+      } catch (e) { U.toast('Bundle failed: ' + e.message, 'error', 9000); }
+    }
     async saveAutosave() { try { await window.bts.project.autosave(this.studio.serialize()); } catch (e) { console.warn('autosave', e); } }
     _title() { document.title = `BTS Studio${this.currentFile ? ' — ' + U.baseName(this.currentFile) : ''}`; }
 
@@ -445,6 +462,7 @@
         case 'open-file': return this.openProject(m.file);
         case 'save': return this.saveProject();
         case 'save-as': return this.saveProject(null, true);
+        case 'save-bundle': return this.saveBundle();
         case 'settings': return BTS.SettingsUI.open();
         case 'add-input': return BTS.AddInput.open(m.type);
         case 'stream-settings': return BTS.SettingsUI.open('stream');

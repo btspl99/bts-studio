@@ -221,7 +221,7 @@
       };
       pc.onconnectionstatechange = () => {
         const s = pc.connectionState;
-        if (s === 'connected') { this.setStatus('ok'); this._sendTally(true); }
+        if (s === 'connected') { this.setStatus('ok'); this._sendTally(true); if (this.app.macros) this.app.macros.fire(this, 'GuestJoined'); }
         else if (s === 'failed') this.setStatus('error', 'Connection failed — guest may be behind a strict firewall (configure a TURN server in Settings → Remote Guests)');
         else if (s === 'disconnected') this.setStatus('loading', 'Reconnecting…');
         this.emit('state');
@@ -268,6 +268,7 @@
       return window.bts.guests.send(this.guest.sid, { type: 'chat', from: 'Producer', text });
     }
     hangup(notify = true) {
+      if (this.pc && this.app.macros) this.app.macros.fire(this, 'GuestLeft');
       if (notify && this.guest) window.bts.guests.send(this.guest.sid, { type: 'bye', reason: 'The producer ended the call' });
       if (this.pc) { try { this.pc.close(); } catch { /* noop */ } this.pc = null; }
       if (this._ret) { if (this._ret._off) this._ret._off(); this._ret.getTracks().forEach(t => t.stop()); this._ret = null; }

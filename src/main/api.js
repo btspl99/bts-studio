@@ -45,11 +45,72 @@ function callRenderer(fn, params) {
   });
 }
 
+/** vMix-compatible state document (<vmix> root, same element / attribute names) so vMix tools, Companion,
+ *  tally boxes and scripts written for vMix can read BTS Studio. */
+const VMIX_TYPE = { camera: 'Capture', capture: 'Capture', ndi: 'NDI', stream: 'Stream', screen: 'Capture', video: 'Video', 'audio-file': 'AudioFile', image: 'Image', playlist: 'VideoList', color: 'Colour', browser: 'Browser', title: 'GT', scene: 'Virtual', audio: 'Audio', mix: 'Mix', delay: 'VideoDelay', replay: 'Replay', guest: 'VideoCall', slides: 'PowerPoint' };
+function stateTree(s) {
+  const E = (name, attrs = {}, kids = [], text) => ({ name, attrs, kids, text });
+  const ms = (v) => Math.round((v || 0) * 1000);
+  const inputs = s.inputs.map(i => E('input', {
+    key: i.id, number: i.number, type: VMIX_TYPE[i.type] || i.type, title: i.title, shortTitle: i.title, state: i.state || 'Paused',
+    position: ms(i.position), duration: ms(i.duration), loop: i.loop ? 'True' : 'False',
+    ...(i.volume != null ? { muted: i.muted ? 'True' : 'False', volume: i.volume, balance: 0, solo: 'False', audiobusses: 'M' } : {}),
+    ...(i.index != null ? { selectedIndex: i.index + 1 } : {})
+  }, (i.fields || []).map((f, k) => E(f.type === 'image' ? 'image' : 'text', { index: k, name: f.name + (f.type === 'image' ? '.Source' : '.Text') }, [], f.value)), i.title));
+  const overlays = (s.overlays || []).map((o, n) => E('overlay', { number: n + 1 }, [], o ? String(o) : ''));
+  const trans = (s.transitions || []).map((t, n) => E('transition', { number: n + 1, effect: t.type, duration: t.duration }));
+  return E('vmix', {}, [
+    E('version', {}, [], '27.0.0.49'), E('edition', {}, [], 'BTS Studio ' + (s.version || '')),
+    E('inputs', {}, inputs), E('overlays', {}, overlays),
+    E('preview', {}, [], String(s.preview || 0)), E('active', {}, [], String(s.active || 0)),
+    E('fadeToBlack', {}, [], s.ftb ? 'True' : 'False'), E('transitions', {}, trans),
+    E('recording', {}, [], s.recording ? 'True' : 'False'), E('external', {}, [], 'False'), E('streaming', {}, [], s.streaming ? 'True' : 'False'),
+    E('playList', {}, [], 'False'), E('multiCorder', {}, [], 'False'), E('fullscreen', {}, [], 'False'),
+    E('audio', {}, [E('master', { volume: s.master ? s.master.volume : 100, muted: s.master && s.master.muted ? 'True' : 'False', headphonesVolume: 74 })])
+  ]);
+}
 function toXml(s) {
   const esc = v => String(v ?? '').replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
-  const inputs = s.inputs.map(i => `<input key="${esc(i.id)}" number="${i.number}" type="${esc(i.type)}" title="${esc(i.title)}" state="${esc(i.state || 'Paused')}" muted="${i.muted ? 'True' : 'False'}" volume="${i.volume}" loop="${i.loop ? 'True' : 'False'}">${esc(i.title)}</input>`).join('');
-  const overlays = (s.overlays || []).map((o, n) => `<overlay number="${n + 1}">${o || ''}</overlay>`).join('');
-  return `<?xml version="1.0" encoding="utf-8"?><bts version="${esc(s.version)}"><inputs>${inputs}</inputs><overlays>${overlays}</overlays><preview>${s.preview || 0}</preview><active>${s.active || 0}</active><fadeToBlack>${s.ftb ? 'True' : 'False'}</fadeToBlack><recording>${s.recording ? 'True' : 'False'}</recording><streaming>${s.streaming ? 'True' : 'False'}</streaming></bts>`;
+  const ser = (n) => `<${n.name}${Object.entries(n.attrs).map(([k, v]) => ` ${k}="${esc(v)}"`).join('')}>${n.kids.map(ser).join('')}${n.text != null && !n.kids.length ? esc(n.text) : ''}</${n.name}>`;
+  return `<?xml version="1.0" encoding="utf-8"?>` + ser(stateTree(s));
+}
+/** XMLTEXT: the XPath subset vMix users rely on, e.g. vmix/inputs/input[@number='2']/@title,
+ *  vmix/inputs/input[2]/text[@name='Name.Text'], vmix/active, vmix/overlays/overlay[1] */
+function xpath(s, expr) {
+  const parts = String(expr || '').trim().replace(/^\/+/, '').split('/').filter(Boolean);
+  let nodes = [stateTree(s)];
+  if (!parts.length) return null;
+  const first = parts.shift();
+  if (first !== 'vmix' && first !== 'bts') return null;
+  for (const part of parts) {
+    if (part.startsWith('@')) { const v = nodes[0] && nodes[0].attrs[part.slice(1)]; return v == null ? null : String(v); }
+    const m = /^([\w-]+)(?:\[(.+)\])?$/.exec(part); if (!m) return null;
+    let next = nodes.flatMap(n => n.kids.filter(k => k.name === m[1]));
+    if (m[2]) {
+      const pr = m[2].trim(), a = /^@([\w-]+)\s*=\s*['"](.*)['"]$/.exec(pr);
+      if (a) next = next.filter(n => String(n.attrs[a[1]]) === a[2]);
+      else if (/^\d+$/.test(pr)) next = next[+pr - 1] ? [next[+pr - 1]] : [];
+      else return null;
+    }
+    nodes = next;
+    if (!nodes.length) return null;
+  }
+  const n = nodes[0];
+  return n.kids.length ? null : String(n.text ?? '');
+}
+
+/* optional password for the web controller / HTTP API (HTTP Basic, like vMix). Requests from this PC are always allowed. */
+function authorized(req) {
+  const pw = opts && opts.password;
+  if (!pw) return true;
+  const ip = req.socket.remoteAddress || '';
+  if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') return true;
+  const h = req.headers.authorization || '';
+  const m = /^Basic\s+(.+)$/i.exec(h); if (!m) return false;
+  const dec = Buffer.from(m[1], 'base64').toString('utf8');
+  const given = dec.slice(dec.indexOf(':') + 1), user = dec.slice(0, dec.indexOf(':'));
+  const a = Buffer.from(given), b = Buffer.from(pw);
+  return (!opts.user || user === opts.user) && a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
 function cors(res) {
@@ -63,6 +124,10 @@ async function handle(req, res) {
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   const url = new URL(req.url, 'http://localhost');
   const p = url.pathname.replace(/\/+$/, '') || '/';
+  if (!authorized(req) && !(opts.tallyOpen && p.startsWith('/tally'))) {
+    res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="BTS Studio", charset="UTF-8"', 'Content-Type': 'text/plain' });
+    return res.end('Password required');
+  }
 
   if (p === '/api' || p === '/api/') {
     let params = Object.fromEntries(url.searchParams.entries());
@@ -195,7 +260,8 @@ function startTcp(port, host) {
             const x = Buffer.from(toXml(state), 'utf8');
             send(`XML ${x.length}`); sock.write(x);
           } else if (cmd === 'XMLTEXT') {
-            send(`XMLTEXT ER XPath queries are not supported; use XML`);
+            const v = xpath(state, arg);
+            send(v == null ? 'XMLTEXT ER Not found' : `XMLTEXT OK ${v}`);
           } else if (cmd === 'TALLY') send(`TALLY OK ${tallyString(state)}`);
           else if (cmd === 'SUBSCRIBE') {
             const what = arg.toUpperCase();

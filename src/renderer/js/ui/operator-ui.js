@@ -238,7 +238,7 @@
         const tbl = U.el('table', { class: 'tbl' });
         tbl.append(U.el('tr', {}, ['When', 'Function', 'Input', 'Value', 'Delay ms', ''].map(h => U.el('th', { text: h }))));
         inp.props.triggers.forEach((t, i) => {
-          const ev = U.el('select'); for (const [v, l] of [['TransitionIn', 'Goes live (in)'], ['TransitionOut', 'Leaves output (out)'], ['Completion', 'Video/list finishes']]) ev.append(U.el('option', { value: v, text: l, selected: v === t.event }));
+          const ev = U.el('select'); for (const [v, l] of [['TransitionIn', 'Goes live (in)'], ['TransitionOut', 'Leaves output (out)'], ['PreviewIn', 'Goes to Preview'], ['PreviewOut', 'Leaves Preview'], ['OverlayIn', 'Shown on an overlay'], ['OverlayOut', 'Overlay taken off'], ['Completion', 'Video/list finishes'], ['NearEnd', 'Video 10 s before the end'], ['TimerEnd', 'Countdown reaches 0'], ['GuestJoined', 'Remote guest connects'], ['GuestLeft', 'Remote guest leaves']]) ev.append(U.el('option', { value: v, text: l, selected: v === t.event }));
           ev.onchange = () => { t.event = ev.value; };
           tbl.append(U.el('tr', {}, [U.el('td', {}, [ev]), U.el('td', {}, [fnSelect(t.fn, (v) => { t.fn = v; })]),
             U.el('td', {}, [txt(t.params?.Input, '{self} / #', (v) => { t.params = { ...(t.params || {}), Input: v || undefined }; }, '80px')]),
@@ -267,18 +267,25 @@
         box.append(U.el('div', { class: 'rp-row' }, [U.el('label', {}, [en, ' Enable MIDI control']), U.el('span', { class: 'hint', text: 'Devices: ' + (midi.devices.length ? midi.devices.join(', ') : 'none detected (plug in and reopen Settings)') })]),
           U.el('div', { class: 'rp-row' }, [U.el('span', { class: 'hint', text: 'Last message:' }), lastEl]));
         const tbl = U.el('table', { class: 'tbl' });
-        tbl.append(U.el('tr', {}, ['Control', 'Action', 'Function / Input', 'Value', ''].map(h => U.el('th', { text: h }))));
+        tbl.append(U.el('tr', {}, ['Control', 'Action', 'Function / Input', 'Value', 'Light', ''].map(h => U.el('th', { text: h }))));
         cfg.mappings.forEach((m, i) => {
           const act = U.el('select'); for (const [v, l] of [['fn', 'Run function'], ['tbar', 'T-Bar (fader)'], ['master', 'Master volume (fader)'], ['volume', 'Input volume (fader)']]) act.append(U.el('option', { value: v, text: l, selected: (m.action || 'fn') === v }));
           act.onchange = () => { m.action = act.value === 'fn' ? undefined : act.value; draw(); };
           const fnCell = !m.action ? fnSelect(m.fn || 'Cut', (v) => { m.fn = v; }) : m.action === 'volume' ? txt(m.params?.Input, 'Input #/name', (v) => { m.params = { Input: v }; }, '120px') : U.el('span', { class: 'hint', text: '—' });
           tbl.append(U.el('tr', {}, [U.el('td', { text: `${m.kind} ch${m.ch} #${m.num}` }), U.el('td', {}, [act]), U.el('td', {}, [fnCell]),
             U.el('td', {}, [!m.action ? txt(m.params?.Input || m.params?.Value, 'Input', (v) => { m.params = { ...(m.params || {}), Input: v || undefined }; }, '80px') : '']),
+            U.el('td', {}, [(() => { // activator: LED feedback sent back to the controller
+              const fb = U.el('select', { title: 'Light this button: red/on when live, green/dim when in preview (velocities: on 127, preview 1, off 0 — change with right-click)' });
+              for (const [v, l] of [['none', '—'], ['tally', 'Tally of Input'], ['overlay', 'Overlay on'], ['recording', 'Recording'], ['streaming', 'Streaming'], ['ftb', 'Fade to black']]) fb.append(U.el('option', { value: v, text: l, selected: (m.feedback || 'none') === v }));
+              fb.onchange = () => { m.feedback = fb.value; midi.feedback(true); };
+              fb.oncontextmenu = async (e) => { e.preventDefault(); const v = await BTS.Dialog.prompt('LED velocities: on, preview, off', `${m.onVel ?? 127}, ${m.pvwVel ?? 1}, ${m.offVel ?? 0}`); if (v == null) return; const [a, b, c] = v.split(',').map(x => Math.max(0, Math.min(127, parseInt(x, 10) || 0))); Object.assign(m, { onVel: a, pvwVel: b, offVel: c }); midi.feedback(true); };
+              return fb;
+            })()]),
             U.el('td', {}, [U.el('button', { class: 'tbtn small', text: '✕', onclick: () => { cfg.mappings.splice(i, 1); draw(); } })])]));
         });
         const learn = U.el('button', { class: 'btn primary', text: '🎹 Learn: press a button or move a fader…', onclick: () => {
           learn.textContent = 'Waiting for MIDI…'; learn.disabled = true;
-          midi.learn((ev) => { cfg.mappings.push({ kind: ev.kind, ch: ev.ch, num: ev.num, fn: ev.kind === 'note' ? 'Cut' : undefined, action: ev.kind === 'cc' || ev.kind === 'pitch' ? 'tbar' : undefined, params: {} }); draw(); });
+          midi.learn((ev) => { cfg.mappings.push({ device: ev.device, kind: ev.kind, ch: ev.ch, num: ev.num, fn: ev.kind === 'note' ? 'Cut' : undefined, action: ev.kind === 'cc' || ev.kind === 'pitch' ? 'tbar' : undefined, params: {} }); draw(); });
         } });
         box.append(tbl, U.el('div', { class: 'rp-row' }, [learn]), U.el('p', { class: 'hint', text: 'Works with any class-compliant MIDI controller (Behringer X-Touch, Akai APC/MIDImix, Korg nanoKONTROL, Novation Launch Control…). Saved with Settings.' }));
       };
