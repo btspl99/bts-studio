@@ -22,6 +22,7 @@
     BTS.ui = new BTS.MainUI(st);
     BTS.inputsUI = new BTS.InputsUI(st);
     BTS.mixerUI = new BTS.MixerUI(st);
+    BTS.health = new BTS.Health(st);
     BTS.operatorUI = new BTS.OperatorUI(st);
     BTS.workspaceUI = new BTS.WorkspaceUI(st);
     BTS.operatorUI.mountModules();

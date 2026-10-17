@@ -31,7 +31,7 @@
       this.perf = { level: 0, previewEvery: 1, thumbEvery: 3, multiviewEvery: 2, healthy: 0 };
       this.liveSet = new Set();
       this.audio = new BTS.AudioEngine(settings.audio.sampleRate || 48000);
-      this.gl = new BTS.GLProcessor(Math.max(1920, this.W), Math.max(1080, this.H));
+      this.gl = new BTS.GLProcessor(Math.max(3840, this.W), Math.max(2160, this.H)); // GPU effects surface sized for UHD sources
       this.stingerEls = {};
       this.previewOverlays = false;
       this._setupCanvases();

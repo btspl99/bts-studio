@@ -137,23 +137,51 @@
 
     _statsModule() {
       this.statsEl = U.el('div', { class: 'stat-grid' });
-      this.outsEl = U.el('div', { class: 'list', style: { margin: '0 10px 10px' } });
-      U.$('#statsModule').append(this.statsEl, this.outsEl);
+      this.graph = U.el('canvas', { class: 'stat-graph', width: 600, height: 90 });
+      this.encEl = U.el('div', { class: 'list', style: { margin: '0 10px 8px' } });
+      this.outsEl = U.el('div', { class: 'list', style: { margin: '0 10px 8px' } });
+      this.procEl = U.el('div', { class: 'list', style: { margin: '0 10px 10px' } });
+      const h = (t) => U.el('div', { class: 'stat-h', text: t });
+      U.$('#statsModule').append(this.statsEl, h('FRAME RATE (last 2 min)'), this.graph, h('ENCODERS'), this.encEl, h('OUTPUTS'), this.outsEl, h('PROCESSES'), this.procEl);
+      if (BTS.health) BTS.health.on('sample', () => { if (this.statsOn) this.renderStats(); });
     }
     renderStats() {
-      const st = this.studio, s = st.stats;
+      const st = this.studio, s = st.stats, H = BTS.health && BTS.health.last;
       const card = (k, v, cls = '') => `<div class="stat"><div class="k">${k}</div><div class="v ${cls}">${v}</div></div>`;
+      const gpuEnc = H && H.gpuStatus ? H.gpuStatus.video_encode : '';
       this.statsEl.innerHTML = [
-        card('Format', `${st.H}p${Math.round(st.fps)}`),
+        card('Format', `${st.W}×${st.H} ${Math.round(st.fps)}p`),
         card('Render FPS', s.fps.toFixed(1), s.fps < st.fps * 0.9 ? 'bad' : 'good'),
-        card('Render time', s.renderMs.toFixed(1) + ' ms', s.renderMs > 1000 / st.fps * 0.8 ? 'bad' : ''),
+        card('Frame time', s.renderMs.toFixed(1) + ' ms', s.renderMs > 1000 / st.fps * 0.8 ? 'bad' : ''),
         card('Dropped', s.dropped, s.dropped ? 'bad' : ''),
         card('Load level', ['Normal', 'Light', 'Medium', 'Heavy'][s.perfLevel || 0], s.perfLevel >= 2 ? 'bad' : 'good'),
-        card('Inputs', st.inputs.length), card('Live sources', st.liveSet.size),
-        card('GPU effects', st.gl.ok ? 'On' : 'Off', st.gl.ok ? 'good' : 'bad')
+        card('CPU', H ? H.cpu.toFixed(0) + ' %' : '—', H && H.cpu > 85 ? 'bad' : ''),
+        card('App memory', H ? (H.memMB / 1024).toFixed(2) + ' GB' : '—'),
+        card('Free RAM', H && H.totalMB ? (H.freeMB / 1024).toFixed(1) + ' GB' : '—', H && H.freeMB / H.totalMB < 0.1 ? 'bad' : ''),
+        card('GPU memory', H ? Math.round(H.gpuMB) + ' MB' : '—'),
+        card('GPU encode', gpuEnc ? (/enabled/.test(gpuEnc) ? 'Available' : gpuEnc) : '—', /enabled/.test(gpuEnc || '') ? 'good' : ''),
+        card('GPU effects', st.gl.ok ? 'On' : 'Off', st.gl.ok ? 'good' : 'bad'),
+        card('Inputs', `${st.inputs.length} (${st.liveSet.size} live)`)
       ].join('');
-      const outs = st.outputs.summary();
-      this.outsEl.innerHTML = outs.length ? outs.map(o => `<div class="li"><b style="min-width:90px">${U.esc(o.id)}</b><span class="grow">${U.esc(o.state)}</span><span>${o.kbps ? Math.round(o.kbps) + ' kbps' : ''}</span><span style="min-width:70px;text-align:right">${U.esc(o.time || '')}</span></div>`).join('') : '<div class="li hint">No active outputs</div>';
+      // fps graph
+      const g = this.graph.getContext('2d'), W = this.graph.width, Hh = this.graph.height;
+      g.clearRect(0, 0, W, Hh);
+      const smp = BTS.health ? BTS.health.samples.slice(-60) : [];
+      g.strokeStyle = 'rgba(255,255,255,.12)'; g.beginPath(); g.moveTo(0, Hh * 0.1); g.lineTo(W, Hh * 0.1); g.stroke();
+      if (smp.length > 1) {
+        g.lineWidth = 2; g.strokeStyle = '#22c55e'; g.beginPath();
+        smp.forEach((x, i) => { const px = i / 59 * W, py = Hh - (Math.min(x.fps, x.target) / x.target) * Hh * 0.9; i ? g.lineTo(px, py) : g.moveTo(px, py); });
+        g.stroke();
+        g.strokeStyle = '#f5a524'; g.beginPath();
+        smp.forEach((x, i) => { const px = i / 59 * W, py = Hh - Math.min(1, x.renderMs / (1000 / x.target)) * Hh * 0.9; i ? g.lineTo(px, py) : g.moveTo(px, py); });
+        g.stroke();
+      }
+      const enc = st.outputs.encoder ? st.outputs.encoder.stats() : [];
+      this.encEl.innerHTML = enc.length ? enc.map(e => `<div class="li"><b style="min-width:110px">${e.w}×${e.h} ${e.fps}p</b><span class="grow">${e.hardware ? 'GPU' : 'CPU'} H.264 · ${U.esc(e.mode || '')} · ${e.users} output${e.users > 1 ? 's' : ''}</span><span>${e.mbps.toFixed(1)} Mb/s</span><span style="min-width:90px;text-align:right" class="${e.dropped ? 'bad' : ''}">${e.dropped} dropped</span></div>`).join('') : '<div class="li hint">No encoders running</div>';
+      const outs = H ? H.outs : [];
+      this.outsEl.innerHTML = outs.length ? outs.map(o => `<div class="li"><b style="min-width:90px">${U.esc(o.id)}</b><span class="grow">${U.esc(o.state)}${o.speed ? ' · ' + o.speed + '×' : ''}</span><span>${o.kbps ? Math.round(o.kbps) + ' kbps' : ''}</span><span style="min-width:80px;text-align:right">${o.buffered > 1e6 ? (o.buffered / 1e6).toFixed(1) + ' MB queued' : U.esc(o.time || '')}</span></div>`).join('') : '<div class="li hint">No active outputs</div>';
+      const procs = H && BTS.health.lastProcs ? BTS.health.lastProcs : [];
+      this.procEl.innerHTML = procs.length ? procs.map(p => `<div class="li"><b style="min-width:90px">${U.esc(p.type)}</b><span class="grow">${U.esc(p.name || '')}</span><span>${p.cpu.toFixed(1)} % CPU</span><span style="min-width:80px;text-align:right">${p.memMB} MB</span></div>`).join('') : '<div class="li hint">—</div>';
     }
   }
 

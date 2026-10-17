@@ -1,8 +1,14 @@
 'use strict';
 /**
- * Output manager — each output (stream destination, programme recording, ISO recording)
- * receives a media container stream (WebM/MP4 from MediaRecorder) from the renderer over IPC
- * and pipes it into its own FFmpeg process which encodes/remuxes to RTMP(S)/SRT/UDP or a file.
+ * Output manager — every output (stream destination, programme recording, ISO recording) is an FFmpeg process.
+ *
+ * Engine v2 (default): the renderer encodes the programme ONCE per profile on the GPU (WebCodecs H.264) and sends
+ * encoded packets plus lossless 48 kHz PCM audio. Each output subscribes to a session; this module wraps the packets
+ * in FLV on stdin (video) and raw s16le on fd 3 (audio), starting every output on a keyframe with its own timeline.
+ * FFmpeg then either copies the GPU stream (single generation, no quality loss) or transcodes it with
+ * x264 / x265 / NVENC / Quick Sync / AMF from a near-lossless mezzanine.
+ *
+ * Classic engine: a MediaRecorder container stream per output (kept as a fallback).
  */
 const { spawn, execFile } = require('child_process');
 const path = require('path');
@@ -32,7 +38,7 @@ function ffmpegPath() {
 function emit(id, extra) {
   const p = procs.get(id);
   const win = ctx.getWin();
-  const payload = { id, state: p ? p.state : 'stopped', ...(p ? p.lastStats : {}), ...extra };
+  const payload = { id, state: p ? p.state : 'stopped', ...(p ? p.lastStats : {}), dropped: p ? p.dropped : 0, ...extra };
   if (win && !win.isDestroyed()) win.webContents.send('output:status', payload);
 }
 
@@ -61,6 +67,18 @@ function videoEncoderArgs(enc, { bitrate, fps, keyint, preset, crf, cbr }) {
       return ['-c:v', 'h264_amf', '-quality', 'balanced', ...(cbr ? ['-rc', 'cbr', ...rate] : ['-rc', 'cqp', '-qp_i', String(crf || 20), '-qp_p', String((crf || 20) + 2)]), ...common];
     case 'h264_videotoolbox':
       return ['-c:v', 'h264_videotoolbox', ...(rate || ['-b:v', `${bitrate}k`]), ...common];
+    case 'av1_nvenc':
+      return ['-c:v', 'av1_nvenc', '-preset', 'p5', ...(cbr ? ['-rc', 'cbr', ...rate] : ['-rc', 'vbr', '-cq', String(crf || 24), '-b:v', '0']), ...common];
+    case 'hevc_qsv':
+      return ['-c:v', 'hevc_qsv', '-preset', 'faster', ...(cbr ? rate : ['-global_quality', String(crf || 22)]), ...common];
+    case 'hevc_amf':
+      return ['-c:v', 'hevc_amf', '-quality', 'balanced', ...(cbr ? ['-rc', 'cbr', ...rate] : ['-rc', 'cqp', '-qp_i', String(crf || 22), '-qp_p', String((crf || 22) + 2)]), ...common];
+    case 'hevc_videotoolbox':
+      return ['-c:v', 'hevc_videotoolbox', ...(rate || ['-b:v', `${bitrate}k`]), ...common];
+    case 'prores_ks': // editing intermediate: ProRes 422 HQ, 10-bit 4:2:2
+      return ['-c:v', 'prores_ks', '-profile:v', '3', '-vendor', 'apl0', '-pix_fmt', 'yuv422p10le'];
+    case 'dnxhd': // editing intermediate: DNxHR HQ 4:2:2
+      return ['-c:v', 'dnxhd', '-profile:v', 'dnxhr_hq', '-pix_fmt', 'yuv422p'];
     case 'libx265':
       return ['-c:v', 'libx265', '-preset', preset || 'fast', ...(cbr ? rate : ['-crf', String(crf || 22)]), ...common];
     case 'libx264':
@@ -72,35 +90,48 @@ function videoEncoderArgs(enc, { bitrate, fps, keyint, preset, crf, cbr }) {
 function buildArgs(cfg) {
   const s = ctx.getSettings();
   const fps = cfg.fps || s.video.fps;
-  const input = ['-hide_banner', '-loglevel', 'info', '-stats_period', '1', '-fflags', '+genpts+discardcorrupt', '-thread_queue_size', '2048', '-probesize', '1M', '-analyzeduration', '1500000', '-i', 'pipe:0'];
   const audioOnly = !!cfg.audioOnly;
+  const input = cfg.v2
+    ? ['-hide_banner', '-loglevel', 'info', '-stats_period', '1', '-thread_queue_size', '4096', '-probesize', '32', '-analyzeduration', '0', '-f', 'flv', '-i', 'pipe:0',
+      '-thread_queue_size', '4096', '-f', 's16le', '-ar', '48000', '-ac', '2', '-i', 'pipe:3']
+    : ['-hide_banner', '-loglevel', 'info', '-stats_period', '1', '-fflags', '+genpts+discardcorrupt', '-thread_queue_size', '2048', '-probesize', '1M', '-analyzeduration', '1500000', '-i', 'pipe:0'];
+  const map = cfg.v2 ? ['-map', '0:v:0', '-map', '1:a:0'] : ['-map', '0:v?', '-map', '0:a?'];
 
   if (cfg.kind === 'stream') {
     const st = s.stream;
     const url = cfg.url;
     const fmt = containerFor(url);
-    const v = audioOnly ? ['-vn'] : ['-fps_mode', 'cfr', '-r', String(fps), ...videoEncoderArgs(cfg.encoder || st.encoder, { bitrate: cfg.videoBitrate || st.videoBitrate, fps, keyint: st.keyint, preset: st.preset, cbr: true })];
+    const v = audioOnly ? ['-vn'] : cfg.videoCopy ? ['-c:v', 'copy']
+      : ['-fps_mode', 'cfr', '-r', String(fps), ...videoEncoderArgs(cfg.encoder || st.encoder, { bitrate: cfg.videoBitrate || st.videoBitrate, fps, keyint: st.keyint, preset: st.preset, cbr: true }), ...scaleArgs(cfg)];
     const a = ['-c:a', 'aac', '-b:a', `${cfg.audioBitrate || st.audioBitrate}k`, '-ar', '48000', '-ac', '2'];
     const out = fmt === 'flv' ? ['-flvflags', 'no_duration_filesize', '-f', 'flv', url]
       : fmt === 'mpegts' ? ['-f', 'mpegts', url]
         : fmt === 'rtsp' ? ['-f', 'rtsp', '-rtsp_transport', 'tcp', url]
           : ['-f', 'hls', '-hls_time', '2', '-hls_list_size', '6', '-hls_flags', 'delete_segments', url];
-    return [...input, '-map', '0:v?', '-map', '0:a?', ...v, ...a, ...out];
+    return [...input, ...map, ...v, ...a, ...out];
   }
 
   // record / iso
   const r = s.record;
   const file = cfg.file;
   const ext = path.extname(file).slice(1).toLowerCase();
-  const canCopy = cfg.passthrough && !audioOnly && (cfg.inputCodec === 'h264' || ext === 'mkv' || ext === 'webm');
+  const canCopy = cfg.videoCopy || (cfg.passthrough && !audioOnly && (cfg.inputCodec === 'h264' || ext === 'mkv' || ext === 'webm'));
   const q = cfg.quality || r.quality;
   const crf = q === 'lossless-ish' ? 14 : q === 'high' ? 18 : q === 'medium' ? 22 : 26;
   const v = audioOnly ? ['-vn']
     : canCopy ? ['-c:v', 'copy']
-      : ['-fps_mode', 'cfr', '-r', String(fps), ...videoEncoderArgs(cfg.encoder || r.encoder, { bitrate: r.videoBitrate, fps, keyint: 2, preset: 'veryfast', crf, cbr: false })];
-  const a = ext === 'webm' ? ['-c:a', 'libopus', '-b:a', '192k'] : ext === 'wav' ? ['-c:a', 'pcm_s16le'] : ext === 'mp3' ? ['-c:a', 'libmp3lame', '-b:a', '320k'] : ['-c:a', 'aac', '-b:a', '256k', '-ar', '48000'];
-  const extra = ext === 'mp4' || ext === 'mov' ? ['-movflags', '+faststart'] : [];
-  return [...input, '-map', '0:v?', '-map', '0:a?', ...v, ...a, ...extra, '-y', file];
+      : ['-fps_mode', 'cfr', '-r', String(fps), ...videoEncoderArgs(cfg.encoder || r.encoder, { bitrate: cfg.videoBitrate || r.videoBitrate, fps, keyint: 2, preset: cfg.preset || 'veryfast', crf, cbr: false }), ...scaleArgs(cfg)];
+  const pcm = cfg.audioCodec === 'pcm' && ['mov', 'mkv', 'wav'].includes(ext);
+  const a = pcm ? ['-c:a', 'pcm_s24le'] : ext === 'webm' ? ['-c:a', 'libopus', '-b:a', '192k'] : ext === 'wav' ? ['-c:a', 'pcm_s16le'] : ext === 'mp3' ? ['-c:a', 'libmp3lame', '-b:a', '320k'] : ['-c:a', 'aac', '-b:a', `${cfg.audioBitrate || 320}k`, '-ar', '48000'];
+  // fragmented MP4 survives a crash or power cut; it is still a normal MP4 for editors and players
+  const extra = ext === 'mp4' || ext === 'mov' ? ['-movflags', cfg.v2 && !pcm ? '+frag_keyframe+empty_moov+default_base_moof' : '+faststart'] : [];
+  return [...input, ...map, ...v, ...a, ...extra, '-y', file];
+}
+
+function scaleArgs(cfg) {
+  if (!cfg.scaleTo) return [];
+  const [w, h] = cfg.scaleTo;
+  return ['-vf', `scale=${w}:${h}:flags=lanczos`];
 }
 
 function parseStats(line, p) {
@@ -122,14 +153,19 @@ function start(id, cfg) {
   log.info(`[output ${id}] ${bin} ${args.map(a => (cfg.key && a.includes(cfg.key) ? a.replace(cfg.key, '****') : a)).join(' ')}`);
   let proc;
   try {
-    proc = spawn(bin, args, { windowsHide: true, stdio: ['pipe', 'ignore', 'pipe'] });
+    proc = spawn(bin, args, { windowsHide: true, stdio: cfg.v2 ? ['pipe', 'ignore', 'pipe', 'pipe'] : ['pipe', 'ignore', 'pipe'] });
   } catch (err) {
     return { ok: false, error: err.message };
   }
-  const p = { proc, cfg, state: 'starting', stopping: false, bytes: 0, buffered: 0, startedAt: Date.now(), lastStats: {}, tail: [] };
+  const p = { proc, cfg, state: 'starting', stopping: false, bytes: 0, buffered: 0, startedAt: Date.now(), lastStats: {}, tail: [], dropped: 0 };
   procs.set(id, p);
 
   proc.stdin.on('error', (err) => { if (!p.stopping) log.warn(`[output ${id}] stdin error`, err.message); });
+  if (cfg.v2) {
+    p.audio = proc.stdio[3];
+    p.audio.on('error', (err) => { if (!p.stopping) log.warn(`[output ${id}] audio pipe error`, err.message); });
+    attach(id, p, cfg.session);
+  }
   let partial = '';
   proc.stderr.on('data', (d) => {
     partial += d.toString();
@@ -154,6 +190,7 @@ function start(id, cfg) {
   proc.on('exit', (code, signal) => {
     const wasStopping = p.stopping;
     if (procs.get(id) === p) procs.delete(id);
+    detach(id, p);
     log.info(`[output ${id}] exited code=${code} signal=${signal}`);
     if (wasStopping) { emit(id, { state: 'stopped', file: cfg.file }); return; }
     const msg = p.tail.slice(-4).join(' | ');
@@ -183,10 +220,95 @@ function stop(id, immediate) {
   p.stopping = true;
   p.state = 'stopping';
   emit(id);
+  detach(id, p);
   try { p.proc.stdin.end(); } catch { /* noop */ }
+  try { if (p.audio) p.audio.end(); } catch { /* noop */ }
   const killAfter = immediate ? 1500 : 15000;
   setTimeout(() => { try { if (p.proc.exitCode === null) p.proc.kill('SIGKILL'); } catch { /* noop */ } }, killAfter);
   return true;
+}
+
+/* ---------------- Engine v2: shared encode sessions -> FLV video + PCM audio per output ---------------- */
+const sessions = new Map(); // sid -> { avcC, consumers: Map<id, p> }
+function session(sid) { let s = sessions.get(sid); if (!s) { s = { avcC: null, consumers: new Map() }; sessions.set(sid, s); } return s; }
+function attach(id, p, sid) {
+  const s = session(sid);
+  p.v2 = { sid, started: false, basePts: 0, nextSample: 0, wantKey: true };
+  s.consumers.set(id, p);
+  const win = ctx.getWin();
+  if (win && !win.isDestroyed()) win.webContents.send('enc:need-key', sid);
+}
+function detach(id, p) {
+  if (!p.v2) return;
+  const s = sessions.get(p.v2.sid);
+  if (s && s.consumers.get(id) === p) { s.consumers.delete(id); }
+}
+
+const u24 = (b, o, v) => { b[o] = (v >>> 16) & 255; b[o + 1] = (v >>> 8) & 255; b[o + 2] = v & 255; };
+function flvTag(type, ts, payload) {
+  const n = payload.length;
+  const b = Buffer.allocUnsafe(11 + n + 4);
+  b[0] = type; u24(b, 1, n); u24(b, 4, ts & 0xffffff); b[7] = (ts >>> 24) & 255; u24(b, 8, 0);
+  payload.copy(b, 11);
+  b.writeUInt32BE(11 + n, 11 + n);
+  return b;
+}
+const FLV_HEADER = Buffer.from([0x46, 0x4c, 0x56, 0x01, 0x01, 0, 0, 0, 9, 0, 0, 0, 0]); // video-only FLV (audio travels as PCM)
+function avcSeqTag(avcC) { return flvTag(9, 0, Buffer.concat([Buffer.from([0x17, 0, 0, 0, 0]), avcC])); }
+function avcFrameTag(ts, key, data) { return flvTag(9, ts, Buffer.concat([Buffer.from([key ? 0x17 : 0x27, 1, 0, 0, 0]), data])); }
+
+function pipeWrite(p, stream, buf, counts) {
+  if (!stream || !stream.writable) return;
+  if (counts) { p.bytes += buf.length; p.buffered += buf.length; stream.write(buf, () => { p.buffered -= buf.length; }); } else stream.write(buf);
+}
+
+function onConfig(sid, avcC) {
+  const s = session(sid);
+  s.avcC = Buffer.from(avcC);
+  // a new encoder configuration (resolution change, encoder restart): every output re-syncs on the next keyframe
+  for (const p of s.consumers.values()) if (p.v2.started) { p.v2.resync = true; }
+}
+
+function onVideo(sid, pts, key, data) {
+  const s = sessions.get(sid);
+  if (!s || !s.avcC) return;
+  const buf = Buffer.from(data);
+  for (const p of s.consumers.values()) {
+    if (p.stopping) continue;
+    const c = p.v2;
+    const limit = p.cfg.kind === 'stream' ? 24e6 : 256e6;
+    if (!c.started) {
+      if (!key) continue;
+      c.started = true; c.basePts = pts; c.nextSample = Math.round(pts * 48);
+      pipeWrite(p, p.proc.stdin, FLV_HEADER, true);
+      pipeWrite(p, p.proc.stdin, avcSeqTag(s.avcC), true);
+    } else if (c.resync && key) { c.resync = false; pipeWrite(p, p.proc.stdin, avcSeqTag(s.avcC), true); }
+    // back-pressure: a slow network or disk drops whole GOPs instead of building an ever-growing queue
+    if (c.dropping) { if (!key || p.buffered > limit / 4) { p.dropped++; continue; } c.dropping = false; }
+    if (p.buffered > limit) { c.dropping = true; p.dropped++; log.warn(`[output] ${p.cfg.name || p.cfg.kind}: output is behind (${Math.round(p.buffered / 1e6)} MB queued) — dropping frames until the next keyframe`); continue; }
+    pipeWrite(p, p.proc.stdin, avcFrameTag(Math.max(0, Math.round(pts - c.basePts)), key, buf), true);
+  }
+}
+
+const SILENCE = Buffer.alloc(48000 * 4 * 2);
+function onAudio(sid, sample, data) {
+  const s = sessions.get(sid);
+  if (!s) return;
+  const buf = Buffer.from(data);
+  const frames = buf.length >> 2; // s16 stereo
+  for (const p of s.consumers.values()) {
+    const c = p.v2;
+    if (p.stopping || !c.started || !p.audio) continue;
+    let start = sample, off = 0;
+    if (start + frames <= c.nextSample) continue; // entirely before this output's start
+    if (start < c.nextSample) { off = (c.nextSample - start) * 4; start = c.nextSample; }
+    if (start > c.nextSample) { // gap (e.g. audio glitch): fill with silence to keep lip-sync
+      let gap = Math.min(start - c.nextSample, 96000) * 4;
+      while (gap > 0) { const n = Math.min(gap, SILENCE.length); pipeWrite(p, p.audio, SILENCE.subarray(0, n), false); gap -= n; }
+    }
+    pipeWrite(p, p.audio, off ? buf.subarray(off) : buf, false);
+    c.nextSample = sample + frames;
+  }
 }
 
 function stopAll() { for (const id of [...procs.keys()]) stop(id, true); }
@@ -195,14 +317,14 @@ function anyActive() { return [...procs.values()].some(p => !p.stopping); }
 function probeEncoders() {
   if (encoderCache) return encoderCache;
   const bin = ffmpegPath();
-  const candidates = ['libx264', 'libx265', 'h264_nvenc', 'hevc_nvenc', 'h264_qsv', 'h264_amf', 'h264_videotoolbox'];
+  const candidates = ['libx264', 'libx265', 'h264_nvenc', 'hevc_nvenc', 'av1_nvenc', 'h264_qsv', 'hevc_qsv', 'h264_amf', 'hevc_amf', 'h264_videotoolbox', 'hevc_videotoolbox', 'prores_ks', 'dnxhd'];
   encoderCache = new Promise((resolve) => {
     execFile(bin, ['-hide_banner', '-encoders'], { windowsHide: true, timeout: 15000 }, async (err, stdout) => {
       if (err) return resolve({ ffmpeg: false, list: [], error: err.message });
       const compiled = candidates.filter(c => new RegExp(`\\s${c}\\s`).test(stdout));
       const ok = [];
       for (const c of compiled) {
-        if (c.startsWith('lib')) { ok.push(c); continue; }
+        if (c.startsWith('lib') || c === 'prores_ks' || c === 'dnxhd') { ok.push(c); continue; }
         // hardware encoders: verify a GPU is actually present
         const works = await new Promise(res => execFile(bin, ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=black:s=640x360:r=30', '-frames:v', '3', '-c:v', c, '-f', 'null', '-'],
           { windowsHide: true, timeout: 8000 }, (e) => res(!e)));
@@ -221,10 +343,14 @@ function ffmpegVersion() {
 function registerIpc(ipcMain) {
   ipcMain.handle('output:start', (e, id, cfg) => start(id, cfg));
   ipcMain.on('output:chunk', (e, id, buf) => write(id, buf));
+  ipcMain.on('enc:config', (e, sid, avcC) => onConfig(sid, avcC));
+  ipcMain.on('enc:video', (e, sid, pts, key, data) => onVideo(sid, pts, key, data));
+  ipcMain.on('enc:audio', (e, sid, sample, data) => onAudio(sid, sample, data));
+  ipcMain.handle('enc:sessions', () => [...sessions.entries()].map(([sid, s]) => ({ sid, consumers: [...s.consumers.keys()] })));
   ipcMain.handle('output:stop', (e, id) => stop(id, false));
   ipcMain.handle('output:encoders', () => probeEncoders());
   ipcMain.handle('output:ffmpeg-version', () => ffmpegVersion());
-  ipcMain.handle('output:list', () => [...procs.entries()].map(([id, p]) => ({ id, state: p.state, kind: p.cfg.kind, ...p.lastStats })));
+  ipcMain.handle('output:list', () => [...procs.entries()].map(([id, p]) => ({ id, state: p.state, kind: p.cfg.kind, dropped: p.dropped, buffered: p.buffered, ...p.lastStats })));
 }
 
 module.exports = { init, registerIpc, start, stop, stopAll, anyActive, ffmpegPath, buildArgs };

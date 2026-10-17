@@ -85,7 +85,9 @@
       const f = this.getFrame();
       if (!f || !f.w || !f.h) return (this._fxResult = null);
       if (!f.processed && this.fxActive() && this.app.gl.ok) {
-        const out = this.app.gl.process(f.src, f.w, f.h, this.props.effects, this.fxCanvas);
+        // never process above what can be seen: output size × this input's zoom (keeps 4K sharp, saves GPU at 1080p)
+        const z = Math.max(1, (this.props.position && this.props.position.zoom) || 1);
+        const out = this.app.gl.process(f.src, f.w, f.h, this.props.effects, this.fxCanvas, [Math.ceil(this.app.W * z), Math.ceil(this.app.H * z)]);
         if (out) return (this._fxResult = { src: out, w: out.width, h: out.height, scaleBack: f.w / out.width });
       }
       return (this._fxResult = f);
@@ -481,6 +483,8 @@
       if (at) { const ch = this.ensureChannel(); ch.setSource(this.app.audio.ctx.createMediaStreamSource(new MediaStream([at]))); }
       else if (this.channel) this.channel.setSource(null);
       const vt = this.stream.getVideoTracks()[0];
+      // "Auto" format: Chrome would open the device at 640×480. Pick the largest native mode that still runs at the show's frame rate.
+      if (vt && !(c.width && c.height) && !this.formatFallback) await this._bestMode(vt);
       if (vt) {
         vt.addEventListener('ended', () => { this._grabLast(); this.setStatus('error', 'Signal lost / device disconnected'); this._scheduleReconnect(); });
         const s = vt.getSettings();
@@ -490,6 +494,23 @@
       this.hint = cardHint(vdev && vdev.label);
       this._retries = 0;
       this.setStatus('ok');
+    }
+    async _bestMode(vt) {
+      const cap = vt.getCapabilities ? vt.getCapabilities() : {};
+      const maxW = (cap.width && cap.width.max) || 1920, maxH = (cap.height && cap.height.max) || 1080;
+      const fpsMax = (cap.frameRate && cap.frameRate.max) || 30;
+      const want = Math.min(this.app.fps || 30, fpsMax);
+      const sizes = [[4096, 2160], [3840, 2160], [2560, 1440], [1920, 1200], [1920, 1080], [1600, 900], [1280, 720], [960, 540], [640, 360]]
+        .filter(([w, h]) => w <= maxW && h <= maxH);
+      for (const [w, h] of sizes) {
+        try {
+          await vt.applyConstraints({ width: { exact: w }, height: { exact: h }, frameRate: { min: Math.floor(want * 0.9), ideal: want }, resizeMode: 'none' });
+          const got = vt.getSettings();
+          if (!got.frameRate || got.frameRate >= want * 0.9) return true; // some drivers accept the mode but deliver fewer frames
+        } catch { /* mode not offered at this frame rate — try the next size down */ }
+      }
+      try { await vt.applyConstraints({ width: { ideal: Math.min(maxW, 1920) }, height: { ideal: Math.min(maxH, 1080) }, frameRate: { ideal: want } }); } catch { /* keep device default */ }
+      return false;
     }
     _scheduleReconnect() {
       if (this.destroyed || this.cfg.autoReconnect === false) return;

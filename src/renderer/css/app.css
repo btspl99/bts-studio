@@ -554,3 +554,6 @@ table.tbl tr.sel { background: color-mix(in srgb, var(--accent) 14%, transparent
 .ptz-pre.set{border-color:var(--accent)}.ptz-pre:hover{filter:brightness(1.2)}
 .ptz-off .ptz-pad,.ptz-off .ptz-zoom{opacity:.45}
 .vs-shots{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.stat-h{font:700 10px/1 var(--mono,monospace);letter-spacing:.1em;color:var(--fg3);margin:10px 12px 6px}
+.stat-graph{display:block;width:calc(100% - 20px);height:90px;margin:0 10px;background:var(--bg0);border:1px solid var(--line);border-radius:6px}
+#statsModule .bad{color:var(--pgm)}

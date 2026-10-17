@@ -6,6 +6,7 @@
  */
 const { app, BrowserWindow, ipcMain, dialog, Menu, shell, screen, desktopCapturer, session, nativeTheme, powerSaveBlocker } = require('electron');
 const path = require('path');
+const os = require('os');
 const fs = require('fs');
 const log = require('electron-log/main');
 
@@ -69,14 +70,15 @@ const DEFAULT_SETTINGS = {
       { enabled: false, name: 'Destination 4', service: 'custom', url: '', key: '' },
       { enabled: false, name: 'Destination 5', service: 'custom', url: '', key: '' }
     ],
-    encoder: 'libx264', preset: 'veryfast', videoBitrate: 6000, audioBitrate: 160, keyint: 2,
+    encoder: 'gpu', preset: 'veryfast', videoBitrate: 6000, audioBitrate: 160, keyint: 2, resolution: 'program',
     autoReconnect: true
   },
   record: {
-    folder: '', format: 'mp4', mode: 'passthrough', encoder: 'libx264', quality: 'high', videoBitrate: 20000,
+    folder: '', format: 'mp4', mode: 'passthrough', encoder: 'gpu', quality: 'high', rateControl: 'quality', videoBitrate: 40000, audioCodec: 'aac',
     filenamePattern: 'BTS-Studio-{date}-{time}'
   },
-  record2: { enabled: false, format: 'mkv', mode: 'encode', encoder: 'libx264', quality: 'medium', videoBitrate: 12000, suffix: '-2' },
+  record2: { enabled: false, format: 'mkv', mode: 'encode', encoder: 'gpu', quality: 'medium', rateControl: 'quality', videoBitrate: 12000, suffix: '-2' },
+  encoding: { engine: 'v2', hardware: 'auto', migrated: 0 },
   api: { enabled: true, port: 8088, allowRemote: true, tcpEnabled: true, tcpPort: 8099 },
   guests: { port: 8089, stun: 'stun:stun.l.google.com:19302', turn: '', turnUser: '', turnPass: '' },
   media: { autoConvert: true, convertQuality: 'fast' },
@@ -108,6 +110,14 @@ function writeJSON(file, data) {
 
 let settings = deepMerge(DEFAULT_SETTINGS, readJSON(SETTINGS_FILE, {}));
 // older settings files had 3 stream destinations — pad to 5
+// 1.4 migration: switch the default software encoder to the shared GPU engine (choices of a hardware encoder are kept)
+if (!settings.encoding.migrated) {
+  if (settings.stream.encoder === 'libx264') settings.stream.encoder = 'gpu';
+  if (settings.record.encoder === 'libx264') settings.record.encoder = 'gpu';
+  if (settings.record2.encoder === 'libx264') settings.record2.encoder = 'gpu';
+  if ((settings.record.videoBitrate || 0) < 40000) settings.record.videoBitrate = 40000;
+  settings.encoding.migrated = 1;
+}
 while (settings.stream.destinations.length < 5) settings.stream.destinations.push({ enabled: false, name: 'Destination ' + (settings.stream.destinations.length + 1), service: 'custom', url: '', key: '' });
 if (!settings.record.folder) settings.record.folder = path.join(app.getPath('videos'), 'BTS Studio');
 
@@ -326,6 +336,13 @@ function registerIpc() {
     return settings;
   });
 
+  // process health for the Statistics module / watchdog
+  ipcMain.handle('app:metrics', () => {
+    const procs = app.getAppMetrics().map(m => ({ type: m.type, name: m.name || m.serviceName || '', cpu: Math.round(m.cpu.percentCPUUsage * 10) / 10, memMB: Math.round((m.memory.workingSetSize || 0) / 1024) }));
+    const sys = { freeMB: Math.round(os.freemem() / 1048576), totalMB: Math.round(os.totalmem() / 1048576), cpus: os.cpus().length, load: os.loadavg()[0] };
+    let gpu = {}; try { gpu = app.getGPUFeatureStatus(); } catch { /* noop */ }
+    return { procs, sys, gpu: { video_encode: gpu.video_encode, video_decode: gpu.video_decode, gpu_compositing: gpu.gpu_compositing, webgl: gpu.webgl } };
+  });
   ipcMain.handle('displays:list', () => screen.getAllDisplays().map((d, i) => ({
     id: d.id, label: `Display ${i + 1} — ${d.size.width}×${d.size.height}${d.id === screen.getPrimaryDisplay().id ? ' (primary)' : ''}`, bounds: d.bounds
   })));

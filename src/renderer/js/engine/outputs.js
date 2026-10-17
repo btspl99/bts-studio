@@ -12,8 +12,13 @@
       this.studio = studio;
       this.outs = new Map(); // id -> {state, recorder, cfg, queue, want, attempts, startedAt, stats}
       this.mime = this.pickMime();
+      this.encoder = typeof VideoEncoder !== 'undefined' ? new BTS.EncodeEngine(studio) : null;
       window.bts.output.onStatus((s) => this._onStatus(s));
     }
+    /** Output engine v2 (shared GPU encode) unless the user chose the classic engine or WebCodecs is missing. */
+    get v2() { return !!this.encoder && ((BTS.settings.encoding || {}).engine || 'v2') !== 'classic'; }
+    static isGpu(enc) { return !enc || enc === 'gpu'; }
+    static parseRes(r, W, H) { if (!r || r === 'program') return [W, H]; const m = /^(\d+)x(\d+)$/.exec(r); return m ? [+m[1], +m[2]] : [W, H]; }
 
     pickMime() {
       const c = [
@@ -47,11 +52,22 @@
     async startStreaming() {
       const dests = (this.settings.stream.destinations || []).map((d, i) => ({ ...d, n: i + 1 })).filter(d => d.enabled && d.url);
       if (!dests.length) { U.toast('No stream destination configured. Open Stream Settings.', 'error'); this.emit('need-stream-settings'); return false; }
+      const st = this.settings.stream;
       for (const d of dests) {
         const base = d.url.trim();
         const url = d.key ? (base.endsWith('/') || base.endsWith('=') ? base + d.key.trim() : base + '/' + d.key.trim()) : base;
-        await this._start(`stream-${d.n}`, { kind: 'stream', url, key: d.key, name: d.name, videoBitrate: d.videoBitrate || undefined, encoder: d.encoder || undefined }, this.programStream(d.audioBus), 250,
-          Math.max(8000, (d.videoBitrate || this.settings.stream.videoBitrate) * 1.6));
+        const cfg = { kind: 'stream', url, key: d.key, name: d.name || `Destination ${d.n}`, videoBitrate: d.videoBitrate || undefined, encoder: d.encoder || st.encoder || 'gpu' };
+        if (this.v2) {
+          const [w, h] = OutputManager.parseRes(d.resolution || st.resolution, this.studio.W, this.studio.H);
+          const kbps = d.videoBitrate || st.videoBitrate;
+          const gpu = OutputManager.isGpu(cfg.encoder);
+          await this._startV2(`stream-${d.n}`, cfg, gpu
+            ? { w, h, mode: 'cbr', bitrate: kbps, keyint: st.keyint || 2, bus: d.audioBus || 'M' }
+            : { mode: 'quality', quality: 'mezzanine', keyint: 1, bus: d.audioBus || 'M' }, { videoCopy: gpu, scaleTo: !gpu && (w !== this.studio.W || h !== this.studio.H) ? [w, h] : null });
+        } else {
+          if (OutputManager.isGpu(cfg.encoder)) cfg.encoder = 'libx264';
+          await this._start(`stream-${d.n}`, cfg, this.programStream(d.audioBus), 250, Math.max(8000, (d.videoBitrate || st.videoBitrate) * 1.6));
+        }
       }
       window.bts.power(true);
       return true;
@@ -71,12 +87,22 @@
     async startRecording() {
       const r = this.settings.record;
       const file = this.recordFile('', r.format || 'mp4');
-      const ok = await this._start('record', { kind: 'record', file, passthrough: r.mode === 'passthrough', encoder: r.encoder }, this.programStream(), 1000, r.videoBitrate || 20000);
+      const rec = (id, rr, f, name) => {
+        const enc = rr.encoder || 'gpu';
+        const cfg = { kind: 'record', file: f, encoder: enc, quality: rr.quality, name, audioCodec: rr.audioCodec, preset: rr.preset, passthrough: rr.mode === 'passthrough' };
+        if (!this.v2) { if (OutputManager.isGpu(enc)) cfg.encoder = 'libx264'; return this._start(id, cfg, this.programStream(rr.audioBus), 1000, rr.videoBitrate || 20000); }
+        const gpu = OutputManager.isGpu(enc);
+        const bitrateMode = rr.rateControl === 'bitrate';
+        return this._startV2(id, cfg, gpu
+          ? (bitrateMode ? { mode: 'vbr', bitrate: rr.videoBitrate || 40000, keyint: 1, bus: rr.audioBus || 'M' } : { mode: 'quality', quality: rr.quality || 'high', keyint: 1, bus: rr.audioBus || 'M' })
+          : { mode: 'quality', quality: 'mezzanine', keyint: 1, bus: rr.audioBus || 'M' }, { videoCopy: gpu });
+      };
+      const ok = await rec('record', r, file, 'Recorder');
       // Recorder 2: a second, independently formatted recording of the same programme (e.g. MP4 for editing + MKV safety copy)
       const r2 = this.settings.record2;
       if (ok && r2 && r2.enabled) {
         const f2 = file.replace(/\.[^.]+$/, '') + (r2.suffix || '-2') + '.' + (r2.format || 'mkv');
-        await this._start('record2', { kind: 'record', file: f2, passthrough: r2.mode === 'passthrough', encoder: r2.encoder, quality: r2.quality, name: 'Recorder 2' }, this.programStream(r2.audioBus), 1000, r2.videoBitrate || 12000);
+        await rec('record2', r2, f2, 'Recorder 2');
       }
       if (ok) window.bts.power(true);
       return ok;
@@ -107,7 +133,30 @@
 
     _power() { if (!this.isStreaming() && !this.isRecording()) window.bts.power(false); }
 
-    /* ---------- internals ---------- */
+    /* ---------- internals: engine v2 ---------- */
+    async _startV2(id, cfg, prof, extra = {}) {
+      const prev = this.outs.get(id);
+      if (prev && prev.want && prev.session) return true;
+      const o = prev || { attempts: 0 };
+      Object.assign(o, { cfg, prof, extra, want: true, state: 'starting', stats: {}, v2: true });
+      if (!o.startedAt) o.startedAt = Date.now();
+      this.outs.set(id, o);
+      try {
+        if (!o.session) o.session = await this.encoder.acquire(prof);
+      } catch (e) {
+        this.outs.delete(id); U.toast(`${cfg.name || id}: ${e.message}`, 'error', 9000); this.emit('change'); return false;
+      }
+      if (o.session.prof.w > 1920 && !o.session.hardware && !this._swWarned) { this._swWarned = true; U.toast('No GPU video encoder found — 4K encoding on the CPU may not keep up. Update your graphics driver or lower the output resolution.', 'error', 12000); }
+      const full = { ...cfg, ...extra, v2: true, session: o.session.sid, fps: this.studio.fps };
+      const r = await window.bts.output.start(id, full);
+      if (!r.ok) { this.encoder.release(o.session); o.session = null; o.want = false; this.outs.delete(id); U.toast(`Output failed: ${r.error}`, 'error'); this.emit('change'); return false; }
+      o.file = r.file;
+      this.emit('change');
+      return true;
+    }
+    _releaseV2(o) { if (o && o.session) { this.encoder.release(o.session); o.session = null; } }
+
+    /* ---------- internals: classic engine ---------- */
     async _start(id, cfg, stream, timeslice, kbps) {
       const prev = this.outs.get(id);
       if (prev && prev.recorder && prev.recorder.state !== 'inactive') return true;
@@ -141,6 +190,7 @@
       const o = this.outs.get(id); if (!o) return;
       o.want = false;
       clearTimeout(o.retry);
+      if (o.v2) { await window.bts.output.stop(id); this._releaseV2(o); o.state = 'stopping'; this.emit('change'); return; }
       if (o.recorder && o.recorder.state !== 'inactive') {
         await new Promise(res => { o.recorder.addEventListener('stop', res, { once: true }); try { o.recorder.stop(); } catch { res(); } });
       }
@@ -154,10 +204,18 @@
       const o = this.outs.get(s.id);
       if (!o) return;
       o.state = s.state;
-      o.stats = { fps: s.fps, kbps: s.kbps, time: s.time, speed: s.speed, buffered: s.buffered };
+      o.stats = { fps: s.fps, kbps: s.kbps, time: s.time, speed: s.speed, buffered: s.buffered, dropped: s.dropped };
       if (s.state === 'stopped') {
         this.outs.delete(s.id);
+        this._releaseV2(o);
         if (s.file && (s.id === 'record' || s.id === 'record2')) U.toast(`Recording saved: ${s.file}`, 'ok', 6000);
+      } else if (s.state === 'reconnecting' && o.want && o.v2) {
+        o.attempts++;
+        const delay = Math.min(15000, 2000 * o.attempts);
+        U.toast(`${o.cfg.name || s.id}: connection lost — reconnecting in ${Math.round(delay / 1000)}s (attempt ${o.attempts})`, 'error');
+        clearTimeout(o.retry);
+        // the shared encoder keeps running; only the FFmpeg process for this destination restarts
+        o.retry = setTimeout(() => { if (o.want) window.bts.output.start(s.id, { ...o.cfg, ...o.extra, v2: true, session: o.session.sid, fps: this.studio.fps }); }, delay);
       } else if (s.state === 'reconnecting' && o.want) {
         if (o.recorder && o.recorder.state !== 'inactive') { try { o.recorder.stop(); } catch { /* noop */ } }
         o.recorder = null;
@@ -172,6 +230,7 @@
         o.want = false;
         if (o.recorder && o.recorder.state !== 'inactive') { try { o.recorder.stop(); } catch { /* noop */ } }
         this.outs.delete(s.id);
+        this._releaseV2(o);
         U.toast(`${o.cfg.name || s.id} stopped: ${s.message || 'FFmpeg error'}`, 'error', 9000);
         this._power();
       }

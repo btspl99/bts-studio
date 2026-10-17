@@ -31,8 +31,12 @@
   async function open(tab = 'general') {
     const s = BTS.settings, st = BTS.studio;
     const enc = await window.bts.output.encoders();
-    const encLabels = { libx264: 'x264 (CPU)', libx265: 'x265 HEVC (CPU)', h264_nvenc: 'NVIDIA NVENC H.264', hevc_nvenc: 'NVIDIA NVENC HEVC', h264_qsv: 'Intel Quick Sync H.264', h264_amf: 'AMD AMF H.264', h264_videotoolbox: 'Apple VideoToolbox' };
-    const encOpts = (enc.list && enc.list.length ? enc.list : ['libx264']).map(e => [e, encLabels[e] || e]);
+    const encLabels = { gpu: 'GPU — shared hardware H.264 (recommended)', libx264: 'x264 (CPU)', libx265: 'x265 HEVC (CPU)', h264_nvenc: 'NVIDIA NVENC H.264', hevc_nvenc: 'NVIDIA NVENC HEVC', av1_nvenc: 'NVIDIA NVENC AV1', h264_qsv: 'Intel Quick Sync H.264', hevc_qsv: 'Intel Quick Sync HEVC', h264_amf: 'AMD AMF H.264', hevc_amf: 'AMD AMF HEVC', h264_videotoolbox: 'Apple VideoToolbox H.264', hevc_videotoolbox: 'Apple VideoToolbox HEVC', prores_ks: 'Apple ProRes 422 HQ (editing)', dnxhd: 'Avid DNxHR HQ (editing)' };
+    const v2 = st.outputs.v2;
+    const ff = (enc.list && enc.list.length ? enc.list : ['libx264']);
+    const streamEncOpts = [...(v2 ? ['gpu'] : []), ...ff.filter(e => !['prores_ks', 'dnxhd'].includes(e))].map(e => [e, encLabels[e] || e]);
+    const encOpts = [...(v2 ? ['gpu'] : []), ...ff].map(e => [e, encLabels[e] || e]);
+    const resOpts = [['program', 'Same as output'], ['3840x2160', '2160p (4K)'], ['2560x1440', '1440p'], ['1920x1080', '1080p'], ['1280x720', '720p'], ['854x480', '480p'], ['1080x1920', '1080×1920 vertical']];
 
     const gen = { res: `${s.video.width}x${s.video.height}`, fps: s.video.fps, previewOverlays: st.previewOverlays, tbarReverse: !!s.ui.tbarReverse };
     const general = U.el('div', {}, [F([
@@ -54,16 +58,19 @@
         { label: 'Service', key: 'service', type: 'select', options: Object.entries(SERVICES).map(([k, v]) => [k, v.name]), onChange: (v) => { d.url = SERVICES[v].url; urlInput.value = d.url; } },
         { label: 'Server URL', key: 'url' },
         { label: 'Stream key', key: 'key', type: 'password', placeholder: 'Paste your stream key' },
-        { label: 'Bitrate override (kbps)', key: 'videoBitrate', type: 'number', hint: 'Leave blank to use the global bitrate below.' },
+        { label: 'Encoder override', key: 'encoder', type: 'select', options: [['', 'Same as below'], ...streamEncOpts] },
+        { label: 'Resolution override', key: 'resolution', type: 'select', options: [['', 'Same as below'], ...resOpts] },
+        { label: 'Bitrate override (kbps)', key: 'videoBitrate', type: 'number', hint: 'Leave blank to use the global bitrate below. Destinations with the same encoder, resolution and bitrate share one encode.' },
         { label: 'Audio', key: 'audioBus', type: 'select', options: [['M', 'Master'], ...['A', 'B', 'C', 'D', 'E', 'F', 'G'].map(b => [b, 'Bus ' + b])], hint: 'e.g. a second destination with a different-language commentary on Bus B.' }
       ], d));
       const urlInput = destBox.querySelectorAll('.form')[i].querySelectorAll('input[type=text]')[1];
     });
     const stream = U.el('div', {}, [destBox, F([
       { section: 'Encoding (applies to all destinations)' },
-      { label: 'Encoder', key: 'encoder', type: 'select', options: encOpts, hint: enc.ffmpeg ? `Detected: ${encOpts.map(e => e[1]).join(', ')}` : 'FFmpeg not found!' },
-      { label: 'x264 preset', key: 'preset', type: 'select', options: ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium'] },
-      { label: 'Video bitrate (kbps)', key: 'videoBitrate', type: 'number', min: 300, max: 50000, hint: '1080p30: 4500–6000 • 1080p60: 6000–9000 • 720p30: 2500–4000' },
+      { label: 'Encoder', key: 'encoder', type: 'select', options: streamEncOpts, hint: enc.ffmpeg ? 'GPU: encoded once on the graphics card and sent as-is — lowest CPU, no second compression. Other encoders re-encode a near-lossless copy.' : 'FFmpeg not found!' },
+      { label: 'Resolution', key: 'resolution', type: 'select', options: resOpts, hint: 'Stream at a lower resolution than you produce (e.g. produce 4K, stream 1080p).' },
+      { label: 'x264 preset', key: 'preset', type: 'select', options: ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow'] },
+      { label: 'Video bitrate (kbps)', key: 'videoBitrate', type: 'number', min: 300, max: 80000, hint: '720p30: 3000 • 1080p30: 6000 • 1080p60: 9000 • 1440p60: 16000 • 4K30: 20000 • 4K60: 35000 (YouTube)' },
       { label: 'Audio bitrate (kbps)', key: 'audioBitrate', type: 'select', number: true, options: [[96, '96'], [128, '128'], [160, '160'], [192, '192'], [256, '256'], [320, '320']] },
       { label: 'Keyframe interval (s)', key: 'keyint', type: 'select', number: true, options: [[1, '1'], [2, '2 (recommended)'], [4, '4']] },
       { label: 'Auto reconnect', key: 'autoReconnect', type: 'checkbox' }
@@ -71,22 +78,40 @@
 
     const record = U.el('div', {}, [F([
       { label: 'Folder', key: 'folder', type: 'file', folder: true },
-      { label: 'Format', key: 'format', type: 'select', options: [['mp4', 'MP4 (H.264/AAC)'], ['mkv', 'MKV (crash-safe)'], ['mov', 'MOV'], ['webm', 'WebM']] },
-      { label: 'Mode', key: 'mode', type: 'select', options: [['passthrough', 'High quality pass-through (low CPU)'], ['encode', 'Re-encode with FFmpeg']] },
-      { label: 'Encoder (re-encode)', key: 'encoder', type: 'select', options: encOpts },
-      { label: 'Quality', key: 'quality', type: 'select', options: [['lossless-ish', 'Near lossless (huge files)'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low (small files)']] },
-      { label: 'Capture bitrate (kbps)', key: 'videoBitrate', type: 'number', hint: 'Quality of the internal capture. 20000 = excellent 1080p.' },
+      { label: 'Format', key: 'format', type: 'select', options: [['mp4', 'MP4 (crash-safe fragmented)'], ['mkv', 'MKV (crash-safe)'], ['mov', 'MOV'], ['webm', 'WebM']] },
+      { label: 'Encoder', key: 'encoder', type: 'select', options: encOpts, hint: 'GPU writes the encoded picture directly (no second compression). ProRes / DNxHR create large editing files (use MOV or MKV).' },
+      { label: 'Rate control', key: 'rateControl', type: 'select', options: [['quality', 'Constant quality (recommended)'], ['bitrate', 'Fixed bitrate']] },
+      { label: 'Quality', key: 'quality', type: 'select', options: [['lossless', 'Visually lossless (very large)'], ['lossless-ish', 'Near lossless'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low (small files)']] },
+      { label: 'Bitrate (kbps)', key: 'videoBitrate', type: 'number', min: 1000, max: 400000, hint: 'Used with Fixed bitrate. 1080p: 20000–40000 • 4K: 60000–120000.' },
+      { label: 'Audio', key: 'audioCodec', type: 'select', options: [['aac', 'AAC 320 kbps'], ['pcm', 'PCM 24-bit lossless (MOV / MKV)']] },
       { label: 'File name', key: 'filenamePattern', hint: '{date} {time} placeholders' }
     ], s.record), U.el('div', { style: { height: '10px' } }), F([
       { section: 'Recorder 2 (second recording of the same output)' },
       { label: 'Enable Recorder 2', key: 'enabled', type: 'checkbox', hint: 'Starts and stops with Record. Example: MP4 for editing plus an MKV safety copy.' },
       { label: 'Format', key: 'format', type: 'select', options: [['mkv', 'MKV (crash-safe)'], ['mp4', 'MP4'], ['mov', 'MOV'], ['webm', 'WebM']] },
-      { label: 'Mode', key: 'mode', type: 'select', options: [['encode', 'Re-encode with FFmpeg'], ['passthrough', 'Pass-through (low CPU)']] },
       { label: 'Encoder', key: 'encoder', type: 'select', options: encOpts },
-      { label: 'Quality', key: 'quality', type: 'select', options: [['high', 'High'], ['medium', 'Medium'], ['low', 'Low (proxy)']] },
+      { label: 'Quality', key: 'quality', type: 'select', options: [['lossless-ish', 'Near lossless'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low (proxy)']] },
       { label: 'File name suffix', key: 'suffix' },
       { label: 'Audio', key: 'audioBus', type: 'select', options: [['M', 'Master'], ...['A', 'B', 'C', 'D', 'E', 'F', 'G'].map(b => [b, 'Bus ' + b])] }
     ], s.record2 || (s.record2 = { enabled: false, format: 'mkv', mode: 'encode', encoder: 'libx264', quality: 'medium', suffix: '-2' }))]);
+
+    // encoders tab
+    s.encoding = s.encoding || { engine: 'v2', hardware: 'auto' };
+    const capBox = U.el('div', { class: 'hint', text: 'Checking this PC…' });
+    const encTab = U.el('div', {}, [F([
+      { section: 'Output engine' },
+      { label: 'Engine', key: 'engine', type: 'select', options: [['v2', 'Shared GPU encode (recommended)'], ['classic', 'Classic (one capture per output)']], hint: 'The shared engine encodes the programme once and feeds every stream and recording — far lower load and no double compression.' },
+      { label: 'Video encoder hardware', key: 'hardware', type: 'select', options: [['auto', 'Automatic — GPU when available'], ['hardware', 'GPU only'], ['software', 'CPU only']] },
+      { label: 'Audio offset (ms)', key: 'audioOffsetMs', type: 'number', min: -500, max: 500, step: 5, hint: 'Fine-tune lip-sync of streams and recordings. Positive delays the sound.' }
+    ], s.encoding), U.el('h4', { text: 'This PC', style: { margin: '14px 0 6px' } }), capBox]);
+    if (st.outputs.encoder) st.outputs.encoder.capabilities().then((c) => {
+      capBox.innerHTML = '';
+      if (!c.webcodecs) { capBox.textContent = 'WebCodecs is not available — the classic engine will be used.'; return; }
+      const t = U.el('table', { class: 'tbl' });
+      t.append(U.el('tr', {}, ['Format', 'GPU H.264', 'CPU H.264'].map(h => U.el('th', { text: h }))));
+      for (const r of c.rows) t.append(U.el('tr', {}, [U.el('td', { text: r.label }), U.el('td', { text: r.gpu ? '✔ yes' : '—', class: r.gpu ? 'good' : '' }), U.el('td', { text: r.cpu ? '✔ yes' : '—' })]));
+      capBox.append(t, U.el('p', { class: 'hint', text: `Constant-quality recording: ${c.quantizer ? 'supported' : 'not supported by this encoder (variable bitrate is used instead)'}. FFmpeg encoders found: ${ff.map(e => encLabels[e] || e).join(', ')}.` }));
+    });
 
     // transitions
     const tr = st.transitions;
@@ -151,7 +176,7 @@
     const t = BTS.Dialog.tabs([
       { id: 'general', label: 'General', el: general }, { id: 'stream', label: 'Streaming', el: stream }, { id: 'record', label: 'Recording', el: record },
       { id: 'transitions', label: 'Transitions', el: trans }, { id: 'shortcuts', label: 'Shortcuts', el: sc.el }, { id: 'midi', label: 'MIDI', el: midiEl },
-      { id: 'devices', label: 'Devices & Performance', el: devEl }, { id: 'api', label: 'Web Controller / API', el: api }, { id: 'guests', label: 'Media & Guests', el: guestsEl }, { id: 'updates', label: 'Updates', el: upd }
+      { id: 'devices', label: 'Devices & Performance', el: devEl }, { id: 'api', label: 'Web Controller / API', el: api }, { id: 'guests', label: 'Media & Guests', el: guestsEl }, { id: 'encoders', label: 'Encoders', el: encTab }, { id: 'updates', label: 'Updates', el: upd }
     ]);
     BTS.Dialog.open({
       title: 'Settings', body: t.el, width: 820, onClose: () => { if (midiEl._cleanup) midiEl._cleanup(); },

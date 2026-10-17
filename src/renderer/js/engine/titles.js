@@ -453,5 +453,6 @@
     }
   }
 
-  BTS.Titles = { TEMPLATES, TEMPLATE_LIST, TitleRenderer, loadImage, formatClock, newElement: E, BASE_TEXT };
+  const clearImageCache = () => imgCache.clear();
+  BTS.Titles = { TEMPLATES, TEMPLATE_LIST, TitleRenderer, loadImage, clearImageCache, formatClock, newElement: E, BASE_TEXT };
 })(window.BTS);

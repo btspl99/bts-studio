@@ -176,16 +176,19 @@ void main(){
       return out;
     }
 
-    _target(sw, sh) {
-      const s = Math.min(1, this.W / sw, this.H / sh);
+    /** Process at the source's native size, limited by the GPU surface and by what the output can actually show (cap). */
+    _target(sw, sh, cap) {
+      let mw = this.W, mh = this.H;
+      if (cap) { mw = Math.min(mw, Math.max(cap[0], 64)); mh = Math.min(mh, Math.max(cap[1], 64)); }
+      const s = Math.min(1, mw / sw, mh / sh);
       return [Math.max(1, Math.round(sw * s)), Math.max(1, Math.round(sh * s))];
     }
 
     /** Apply effects to a drawable (video/img/canvas) — returns `out` canvas */
-    process(source, sw, sh, fx, out) {
+    process(source, sw, sh, fx, out, cap) {
       if (!this.ok || !sw || !sh) return null;
       const gl = this.gl;
-      const [w, h] = this._target(sw, sh);
+      const [w, h] = this._target(sw, sh, cap);
       gl.viewport(0, 0, w, h);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.bindTexture(gl.TEXTURE_2D, this.tex);

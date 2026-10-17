@@ -9,6 +9,7 @@ const listen = (channel) => (cb) => {
 
 contextBridge.exposeInMainWorld('bts', {
   info: () => ipcRenderer.invoke('app:info'),
+  metrics: () => ipcRenderer.invoke('app:metrics'),
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     set: (s) => ipcRenderer.invoke('settings:set', s)
@@ -47,7 +48,15 @@ contextBridge.exposeInMainWorld('bts', {
     stop: (id) => ipcRenderer.invoke('output:stop', id),
     encoders: () => ipcRenderer.invoke('output:encoders'),
     ffmpegVersion: () => ipcRenderer.invoke('output:ffmpeg-version'),
-    onStatus: listen('output:status')
+    onStatus: listen('output:status'),
+    list: () => ipcRenderer.invoke('output:list')
+  },
+  enc: {
+    config: (sid, avcC) => ipcRenderer.send('enc:config', sid, avcC),
+    video: (sid, pts, key, data) => ipcRenderer.send('enc:video', sid, pts, key, data),
+    audio: (sid, sample, data) => ipcRenderer.send('enc:audio', sid, sample, data),
+    onNeedKey: listen('enc:need-key'),
+    sessions: () => ipcRenderer.invoke('enc:sessions')
   },
   browser: {
     create: (id, cfg) => ipcRenderer.invoke('browser:create', id, cfg),
