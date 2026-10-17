@@ -103,7 +103,7 @@ static int listDevices() {
           const char* id = modeName(dm->GetDisplayMode());
           if (id) {
             BMDTimeValue dur = 0; BMDTimeScale scale = 0; dm->GetFrameRate(&dur, &scale);
-            BOOL ok = FALSE; BMDDisplayMode actual = 0;
+            BOOL ok = FALSE; BMDDisplayMode actual = (BMDDisplayMode)0;
             o->DoesSupportVideoMode(bmdVideoConnectionUnspecified, dm->GetDisplayMode(), bmdFormat8BitBGRA, bmdNoVideoOutputConversion, bmdSupportedVideoModeDefault, &actual, &ok);
             BSTR mn = nullptr; dm->GetName(&mn);
             char buf[160]; snprintf(buf, sizeof buf, "\"width\":%ld,\"height\":%ld,\"fps\":%.3f,\"bgra\":%s", dm->GetWidth(), dm->GetHeight(), dur ? (double)scale / dur : 0.0, ok ? "true" : "false");
@@ -190,7 +190,7 @@ static bool readExact(int fd, unsigned char* p, size_t n) {
 }
 
 static int playOut(const std::string& devArg, const std::string& modeArg, const std::string& key, int level, bool audio, bool premul) {
-  BMDDisplayMode mode = 0;
+  BMDDisplayMode mode = (BMDDisplayMode)0;
   for (auto& x : MODES) if (modeArg == x.name) mode = x.mode;
   if (!mode) fail("Unknown video mode " + modeArg);
 
@@ -209,7 +209,7 @@ static int playOut(const std::string& devArg, const std::string& modeArg, const 
 
   IDeckLinkOutput* out = nullptr;
   if (FAILED(pick->QueryInterface(IID_IDeckLinkOutput, (void**)&out))) fail("This DeckLink device has no output.");
-  BOOL supported = FALSE; BMDDisplayMode actual = 0;
+  BOOL supported = FALSE; BMDDisplayMode actual = (BMDDisplayMode)0;
   out->DoesSupportVideoMode(bmdVideoConnectionUnspecified, mode, bmdFormat8BitBGRA, bmdNoVideoOutputConversion, bmdSupportedVideoModeDefault, &actual, &supported);
   if (!supported) fail("The card does not support " + modeArg + " in 8-bit BGRA.", 5);
   IDeckLinkDisplayMode* dm = nullptr;
