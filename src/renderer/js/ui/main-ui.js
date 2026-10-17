@@ -189,7 +189,8 @@
       };
       U.$('#btnRecordCfg').onclick = () => BTS.SettingsUI.open('record');
       U.$('#btnStreamCfg').onclick = () => BTS.SettingsUI.open('stream');
-      U.$('#btnExternal').onclick = () => this.toggleExternal();
+      U.$('#btnExternal').onclick = () => BTS.DisplayOutputs.toggle();
+      U.$('#btnExternalCfg').onclick = () => BTS.SettingsUI.external();
       U.$('#btnMultiCorder').onclick = () => out.toggleMultiCorder();
       U.$('#btnMultiview').onclick = () => this.toggleMultiview();
       U.$('#btnTelestrator').onclick = () => BTS.TelestratorUI.open();
@@ -248,26 +249,52 @@
     // Sources: 'program' | 'preview' | 'multiview:N' | 'input:<id>'. Pixels are drawn straight into the window's canvas
     // every frame (same renderer process): ~1 frame latency, no capture/encode, scaled on the GPU to the monitor's size.
     _normSource(src) { return src === 'multiview' ? 'multiview:1' : src || 'program'; }
+    /** change fit / rotation / mirror / region of a running output */
+    setExternalOpts(slot, opts) { const rec = this.externals[slot]; if (rec) { rec.opts = { ...(rec.opts || {}), ...opts }; rec.bars = null; } }
     _drawExternal(rec) {
       const w = rec.win; if (!w || w.closed) return;
       const c = rec.canvas || (rec.canvas = w.document && w.document.getElementById('out'));
       if (!c) return;
       const dpr = w.devicePixelRatio || 1;
       const cw = Math.max(1, Math.round(w.innerWidth * dpr)), ch = Math.max(1, Math.round(w.innerHeight * dpr));
-      if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; rec.g = c.getContext('2d', { alpha: false }); rec.g.imageSmoothingQuality = 'high'; }
+      if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; rec.g = c.getContext('2d', { alpha: false }); rec.g.imageSmoothingQuality = 'high'; rec.bars = null; }
       const g = rec.g || (rec.g = c.getContext('2d', { alpha: false }));
-      const st = this.studio, src = rec.source;
+      const st = this.studio, src = rec.source, o = rec.opts || {};
+      // 1) the source picture
       let from = null, sw = st.W, sh = st.H;
       if (src === 'program') from = st.programCanvas;
+      else if (src === 'clean') from = st.cleanCanvas || st.programCanvas;
       else if (src === 'preview') from = st.previewCanvas;
-      else if (src.startsWith('multiview:')) { const mv = st.multiviews.get(src.slice(10)); from = mv.canvas; sw = from.width; sh = from.height; }
-      const r = U.fit(sw, sh, cw, ch, 'contain');
-      if (from) { if (rec.bars !== r.x + ',' + r.y) { g.fillStyle = '#000'; g.fillRect(0, 0, cw, ch); rec.bars = r.x + ',' + r.y; } g.drawImage(from, r.x, r.y, r.w, r.h); return; }
-      if (src.startsWith('input:')) {
+      else if (src.startsWith('multiview:')) { const mv = st.multiviews.get(src.slice(10)); from = mv.canvas; }
+      else if (src.startsWith('input:')) {
+        // single input: draw it into a scratch canvas at project size (keeps scaling/rotation identical for all sources)
+        const sc = rec.scratch || (rec.scratch = document.createElement('canvas'));
+        if (sc.width !== st.W || sc.height !== st.H) { sc.width = st.W; sc.height = st.H; rec.sg = sc.getContext('2d', { alpha: false }); }
+        const sg = rec.sg; sg.fillStyle = '#000'; sg.fillRect(0, 0, sc.width, sc.height);
         const i = st.byId(src.slice(6));
-        g.fillStyle = '#000'; g.fillRect(0, 0, cw, ch);
-        if (i) { if (i.type === 'title' && !i.live) i.drawStatic(g, r.x, r.y, r.w, r.h); else i.draw(g, r.x, r.y, r.w, r.h); }
+        if (i) { if (i.type === 'title' && !i.live) i.drawStatic(sg, 0, 0, sc.width, sc.height); else i.draw(sg, 0, 0, sc.width, sc.height); }
+        from = sc;
       }
+      if (!from) return;
+      sw = from.width; sh = from.height;
+      // 2) region of the source (video walls: each screen shows its slice of the picture)
+      const R = o.region || { x: 0, y: 0, w: 1, h: 1 };
+      const rx = R.x * sw, ry = R.y * sh, rw = Math.max(1, R.w * sw), rh = Math.max(1, R.h * sh);
+      // 3) rotation (portrait screens) and mirroring (teleprompters)
+      const rot = ((o.rotate || 0) % 360 + 360) % 360, side = rot === 90 || rot === 270;
+      const tw = side ? ch : cw, th = side ? cw : ch; // target size in the rotated frame
+      const r = U.fit(rw, rh, tw, th, o.fit === 'stretch' ? 'stretch' : o.fit === 'cover' ? 'cover' : 'contain');
+      const key = [cw, ch, rot, r.x, r.y, r.w, r.h, !!o.mirror].join(',');
+      g.save();
+      if (rec.bars !== key || o.fit === 'cover') { g.fillStyle = '#000'; g.fillRect(0, 0, cw, ch); rec.bars = key; }
+      g.translate(cw / 2, ch / 2);
+      if (rot) g.rotate(rot * Math.PI / 180);
+      if (o.mirror) g.scale(-1, 1);
+      g.translate(-tw / 2, -th / 2);
+      if (o.fit === 'cover') { g.beginPath(); g.rect(0, 0, tw, th); g.clip(); }
+      g.drawImage(from, rx, ry, rw, rh, r.x, r.y, r.w, r.h);
+      g.restore();
+      if (o.identify) { g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(0, 0, cw, 70 * dpr); g.fillStyle = '#f5a524'; g.font = `700 ${40 * dpr}px Segoe UI, Arial`; g.fillText(`Output ${rec.slot + 1} · ${this._sourceLabel(src)}`, 20 * dpr, 50 * dpr); }
     }
     /** MediaStream of a source (used by remote-guest return feeds and other consumers that need a stream) */
     _streamFor(source) {
@@ -286,7 +313,7 @@
       return st.programCanvas.captureStream(st.fps);
     }
     /** slot 0..5; displayId = monitor id or null for a window */
-    openExternal(displayId, source = 'program', slot = null) {
+    openExternal(displayId, source = 'program', slot = null, opts = null) {
       source = this._normSource(source);
       if (slot == null) { slot = this.externals.findIndex(x => !x || !x.win || x.win.closed); if (slot < 0) slot = this.externals.length; }
       if (slot > 5) { U.toast('Maximum 6 external outputs', 'error'); return; }
@@ -294,8 +321,9 @@
       const w = window.open(`external.html?display=${displayId || ''}&source=${encodeURIComponent(source)}`, 'external' + (slot + 1));
       if (!w) return U.toast('Could not open external window', 'error');
       const st = this.studio;
-      const rec = this.externals[slot] = { win: w, display: displayId, source };
+      const rec = this.externals[slot] = { win: w, display: displayId, source, slot, opts: opts || {} };
       if (source.startsWith('multiview:')) { rec.mv = st.multiviews.get(source.slice(10)); rec.mv.users++; }
+      if (source === 'clean') { st.cleanUsers = (st.cleanUsers || 0) + 1; rec.clean = true; }
       rec.off = st.on('frame', () => { try { this._drawExternal(rec); } catch (e) { /* window closing */ } });
       const title = () => { if (!w.closed && w.document) w.document.title = `BTS Studio — External ${slot + 1} (${this._sourceLabel(source)})`; };
       w.addEventListener('load', () => { rec.canvas = null; title(); this.updateButtons(); });
@@ -310,6 +338,8 @@
       if (rec.mv) rec.mv.users = Math.max(0, rec.mv.users - 1);
       rec.mv = source.startsWith('multiview:') ? this.studio.multiviews.get(source.slice(10)) : null;
       if (rec.mv) rec.mv.users++;
+      if (rec.clean) this.studio.cleanUsers = Math.max(0, (this.studio.cleanUsers || 1) - 1);
+      rec.clean = source === 'clean'; if (rec.clean) this.studio.cleanUsers = (this.studio.cleanUsers || 0) + 1;
       rec.source = source; rec.bars = null;
       try { rec.win.document.title = `BTS Studio — External ${slot + 1} (${this._sourceLabel(source)})`; } catch { /* closing */ }
     }
@@ -318,6 +348,7 @@
       clearInterval(x.iv);
       if (x.off) x.off();
       if (x.mv) x.mv.users = Math.max(0, x.mv.users - 1);
+      if (x.clean) this.studio.cleanUsers = Math.max(0, (this.studio.cleanUsers || 1) - 1);
       this.externals[slot] = null;
       this.updateButtons();
       BTS.SettingsUI && BTS.SettingsUI.refreshExternals && BTS.SettingsUI.refreshExternals();
@@ -325,7 +356,7 @@
     closeExternal(slot) { const x = this.externals[slot]; if (x && x.win && !x.win.closed) x.win.close(); this._cleanupExternal(slot); }
     _sourceLabel(src) {
       src = this._normSource(src);
-      if (src === 'program') return 'Output'; if (src === 'preview') return 'Preview';
+      if (src === 'program') return 'Output'; if (src === 'preview') return 'Preview'; if (src === 'clean') return 'Clean feed';
       if (src.startsWith('multiview:')) return this.studio.multiviews.get(src.slice(10)).cfg.name;
       if (src.startsWith('input:')) return this.studio.byId(src.slice(6))?.title || 'Input';
       return src;
@@ -365,6 +396,7 @@
         const t = e.target;
         if (t && (/INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable)) return;
         if (U.$('#modalRoot').children.length) { if (e.key === 'Escape' && BTS.Dialog.top) BTS.Dialog.top.close(); return; }
+        if (e.key === 'F7') { e.preventDefault(); return BTS.DisplayOutputs.toggle(); }
         if (e.key === 'F8') { e.preventDefault(); return this.toggleMultiview(); }
         if (e.key === 'F9') { e.preventDefault(); return this.toggleMixer(); }
         const k = BTS.SettingsUI.keyName(e);

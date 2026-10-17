@@ -145,7 +145,7 @@
   def('StopMultiCorder', 'Output', [], () => (O().isMultiCorder() ? O().toggleMultiCorder().then(() => true) : true));
   def('Snapshot', 'Output', [], async () => { const f = await window.bts.snapshot(S().snapshot()); return { ok: true, data: f }; });
   def('SnapshotInput', 'Output', ['Input'], async (p) => { const f = await window.bts.snapshot(S().thumbOf(need(inp(p)).id).replace('image/jpeg', 'image/png')); return { ok: true, data: f }; });
-  def('Fullscreen', 'Output', [], () => { BTS.ui && BTS.ui.toggleExternal(); return true; });
+  def('Fullscreen', 'Output', [], () => { BTS.DisplayOutputs.toggle(); return true; }, 'Turn the saved external outputs on / off (like the External button)');
   def('StartExternal', 'Output', ['Value?', 'Input?'], async (p) => {
     // output N goes full screen on the Nth screen that is not the control screen (or a window if there is none)
     const slot = p.Value ? num(p.Value, 1) - 1 : 0;

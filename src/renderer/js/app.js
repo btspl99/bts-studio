@@ -26,6 +26,7 @@
     BTS.operatorUI = new BTS.OperatorUI(st);
     BTS.workspaceUI = new BTS.WorkspaceUI(st);
     BTS.operatorUI.mountModules();
+    BTS.DisplayOutputs.init();
     if (localStorage.getItem('bts.density') === 'compact') document.body.classList.add('compact');
 
     // main-process bridges

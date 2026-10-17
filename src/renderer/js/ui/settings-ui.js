@@ -316,44 +316,63 @@
   async function external() {
     const ui = BTS.ui, st = BTS.studio, out = st.outputs;
     const box = U.el('div', { class: 'ext-dlg' });
-    const srcOpts = () => [['program', 'Output (program)'], ['preview', 'Preview'], ...st.multiviews.list.map(m => ['multiview:' + m.n, `${m.cfg.name} (${BTS.Multiview.LAYOUTS[m.cfg.layout]?.name || ''})`]), ...st.inputs.map(i => ['input:' + i.id, `Input ${i.number}: ${i.title}`])];
+    const srcOpts = () => [['program', 'Output (program)'], ['clean', 'Clean feed (Output without overlays)'], ['preview', 'Preview'], ...st.multiviews.list.map(m => ['multiview:' + m.n, `${m.cfg.name} (${BTS.Multiview.LAYOUTS[m.cfg.layout]?.name || ''})`]), ...st.inputs.map(i => ['input:' + i.id, `Input ${i.number}: ${i.title}`])];
     let displays = [], deck = null, deckBusy = false;
     const DL = () => { const st2 = BTS.settings; st2.decklink = st2.decklink || { ffmpeg: '', outputs: [] }; st2.decklink.outputs = st2.decklink.outputs || []; return st2.decklink; };
     const draw = async () => {
       displays = await window.bts.displays();
       box.innerHTML = '';
-      /* ----- monitors / HDMI / DisplayPort / projectors ----- */
-      const outsScreens = displays.filter(d => !d.control);
+      /* ----- monitors / HDMI / DisplayPort / projectors (saved, vMix-style) ----- */
+      const DO = BTS.DisplayOutputs, dcfg = DO.cfg();
+      const outsScreens = displays.filter(d => !d.control).sort((p, q) => p.bounds.x - q.bounds.x || p.bounds.y - q.bounds.y);
+      const live = (i) => DO.isLive(i);
       box.append(U.el('div', { class: 'ext-head' }, [
-        U.el('h4', { text: 'Monitors, projectors & HDMI / DisplayPort outputs' }),
+        U.el('h4', { text: 'Screens — projectors, TVs, LED walls, HDMI / DisplayPort / capture devices' }),
         U.el('button', { class: 'btn', text: '🔢 Identify screens', title: 'Show each screen’s number on it for 3 seconds', onclick: () => window.bts.displaysIdentify() }),
-        U.el('button', { class: 'btn', text: '⟳ Refresh', onclick: () => draw() })
+        U.el('button', { class: 'btn', text: '▦ Video wall…', title: 'Spread one picture over several screens', onclick: () => wallWizard() }),
+        U.el('button', { class: 'btn', text: '⟳', title: 'Refresh screens', onclick: () => draw() })
       ]));
       if (!outsScreens.length) {
-        box.append(U.el('div', { class: 'ext-warn', html: '<b>Only one screen is available.</b> If a TV, projector or capture device is plugged into an HDMI / DisplayPort port, Windows is probably <i>duplicating</i> your screen — that is why the output shows your whole desktop. Press <kbd>Win</kbd>+<kbd>P</kbd> and choose <b>Extend</b>, then click Refresh. (Or use Windows Settings → System → Display → “Extend these displays”.)' }));
+        box.append(U.el('div', { class: 'ext-warn', html: '<b>Only one screen is available.</b> If a TV, projector or capture device is plugged into an HDMI / DisplayPort port, Windows is probably <i>duplicating</i> your screen — that is why the output shows your whole desktop. Press <kbd>Win</kbd>+<kbd>P</kbd> and choose <b>Extend</b>, then click ⟳. (Or Windows Settings → System → Display → “Extend these displays”.)' }));
       }
-      const tbl = U.el('table', { class: 'tbl' });
-      tbl.append(U.el('tr', {}, ['#', 'Screen', 'Source', 'Status', ''].map(h => U.el('th', { text: h }))));
-      for (let slot = 0; slot < 6; slot++) {
-        const x = ui.externals[slot];
-        const live = x && x.win && !x.win.closed;
-        const defScreen = outsScreens[slot] ? String(outsScreens[slot].id) : '';
-        const disp = U.el('select');
-        for (const d of displays) disp.append(U.el('option', { value: String(d.id), text: d.label, selected: live ? String(x.display || '') === String(d.id) : String(d.id) === defScreen }));
-        disp.append(U.el('option', { value: '', text: 'Window (resizable, for testing or capture)', selected: live ? !x.display : !defScreen }));
-        const src = U.el('select'); for (const [v, l] of srcOpts()) src.append(U.el('option', { value: v, text: l, selected: live ? x.source === v : v === 'program' }));
-        const start = async () => {
-          const d = displays.find(z => String(z.id) === disp.value);
-          if (d && d.control && !(await BTS.Dialog.confirm(`Screen ${d.n} is the screen BTS Studio is running on. A full-screen output there will cover the whole control screen (press Esc on it to close).\n\nIf you meant an HDMI / projector output, set Windows to Extend (Win+P) and pick the other screen.`, { ok: 'Use this screen anyway' }))) return;
-          ui.openExternal(disp.value || null, src.value, slot); setTimeout(draw, 500);
-        };
-        const btn = live ? U.el('button', { class: 'btn danger', text: 'Stop', onclick: () => { ui.closeExternal(slot); draw(); } })
-          : U.el('button', { class: 'btn primary', text: 'Start', onclick: start });
-        if (live) { disp.disabled = true; src.onchange = () => ui.setExternalSource(slot, src.value); }
-        tbl.append(U.el('tr', {}, [U.el('td', { text: String(slot + 1) }), U.el('td', {}, [disp]), U.el('td', {}, [src]),
-          U.el('td', { html: live ? '<b style="color:var(--pvw)">● Live</b>' : '<span class="hint">Off</span>' }), U.el('td', {}, [btn])]));
+      const tbl = U.el('table', { class: 'tbl ext-tbl' });
+      tbl.append(U.el('tr', {}, ['On', '#', 'Screen', 'Source', 'Fit', 'Rotate', 'Mirror', 'Area', ''].map(h => U.el('th', { text: h }))));
+      const sel = (opts, val, onch) => { const e = U.el('select'); for (const [v, l] of opts) e.append(U.el('option', { value: v, text: l, selected: String(v) === String(val) })); e.onchange = () => onch(e.value); return e; };
+      for (let slot = 0; slot < DO.SLOTS; slot++) {
+        const c = dcfg.list[slot], isLive = live(slot);
+        const cur = c.screen ? DO.resolve(c.screen, displays) : null;
+        const scrOpts = [['', 'Window (resizable — for testing / capture)'], ...displays.map(d => [String(d.id), d.label])];
+        if (c.screen && !cur) scrOpts.push(['saved', `${c.screen.name} — not connected`]);
+        const set = (k, v, restart) => { c[k] = v; DO.save(); if (isLive && restart) { DO.stop(slot); DO.start(slot).then(() => setTimeout(draw, 400)); } else if (isLive) DO.apply(slot); };
+        const scr = sel(scrOpts, cur ? String(cur.id) : c.screen ? 'saved' : '', (v) => {
+          if (v === 'saved') return;
+          const d = displays.find(z => String(z.id) === v);
+          if (d && d.control) BTS.Dialog.confirm(`Screen ${d.n} is the screen BTS Studio is running on — a full-screen output there covers the whole control screen (press Esc on it to close).\n\nFor an HDMI / projector output, set Windows to Extend (Win+P) and pick the other screen.`, { ok: 'Use this screen' }).then(ok => { if (ok) set('screen', DO.screenRef(d), true); else draw(); });
+          else set('screen', DO.screenRef(d), true);
+        });
+        const src = sel(srcOpts(), c.source, (v) => set('source', v));
+        const fit = sel([['contain', 'Fit'], ['cover', 'Fill (crop)'], ['stretch', 'Stretch']], c.fit, (v) => set('fit', v));
+        const rot = sel([[0, '0°'], [90, '90°'], [180, '180°'], [270, '270°']], c.rotate || 0, (v) => set('rotate', +v));
+        const mir = U.el('input', { type: 'checkbox', title: 'Mirror left–right (teleprompter)' }); mir.checked = !!c.mirror; mir.onchange = () => set('mirror', mir.checked);
+        const en = U.el('input', { type: 'checkbox', title: 'Included when you press External' }); en.checked = !!c.enabled; en.onchange = () => { c.enabled = en.checked; DO.save(); };
+        const R = c.region || { x: 0, y: 0, w: 1, h: 1 }, full = R.x === 0 && R.y === 0 && R.w === 1 && R.h === 1;
+        const area = U.el('button', { class: 'btn small', text: full ? 'Full' : 'Part', title: full ? 'Whole picture — click to show only part of it (video walls)' : `Shows ${Math.round(R.w * 100)}% × ${Math.round(R.h * 100)}% from left ${Math.round(R.x * 100)}%, top ${Math.round(R.y * 100)}%`, onclick: () => areaDialog(slot) });
+        const btn = isLive ? U.el('button', { class: 'btn danger', text: 'Stop', onclick: () => { DO.stop(slot); setTimeout(draw, 300); } })
+          : U.el('button', { class: 'btn primary', text: 'Start', onclick: async () => { if (!(await DO.start(slot))) U.toast(`${c.screen.name} is not connected`, 'error'); setTimeout(draw, 500); } });
+        tbl.append(U.el('tr', { class: isLive ? 'live' : '' }, [U.el('td', {}, [en]), U.el('td', { html: `${slot + 1}${isLive ? ' <b style="color:var(--pvw)">●</b>' : ''}` }), U.el('td', {}, [scr]), U.el('td', {}, [src]), U.el('td', {}, [fit]), U.el('td', {}, [rot]), U.el('td', {}, [mir]), U.el('td', {}, [area]), U.el('td', {}, [btn])]));
       }
-      box.append(tbl, U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'Each output is a clean, full-screen feed (no menus or borders) for a projector, LED wall, confidence monitor, HDMI capture / recorder or an ATEM / Web Presenter input. Set the screen’s resolution and refresh rate in Windows display settings (e.g. 1920×1080 at 50 or 60 Hz). Press Esc on an output to close it.' }));
+      box.append(tbl);
+      const opt = { autoStart: !!dcfg.autoStart, reconnect: dcfg.reconnect !== false };
+      box.append(U.el('div', { class: 'ext-row' }, [
+        U.el('button', { class: 'btn primary', text: '▶ Start all ticked', onclick: async () => { await DO.startAll(); setTimeout(draw, 500); } }),
+        U.el('button', { class: 'btn', text: '■ Stop all', onclick: () => { DO.stopAll(); setTimeout(draw, 300); } }),
+        U.el('span', { class: 'spacer' }),
+        BTS.Dialog.form([
+          { label: 'Start with BTS Studio', key: 'autoStart', type: 'checkbox', onChange: (v) => { dcfg.autoStart = v; DO.save(); } },
+          { label: 'Restart when a screen is reconnected', key: 'reconnect', type: 'checkbox', onChange: (v) => { dcfg.reconnect = v; DO.save(); } }
+        ], opt, () => {})
+      ]));
+      box.append(U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'Like vMix: set up each output once, tick it, then press External (or F7) to turn them all on or off. Each output is a clean, full-screen feed. Sources: Output, Clean feed (Output without overlays / titles — for IMAG and recorders), Preview, Multiview 1–4 or any input. Rotate for portrait screens, Mirror for teleprompters, Area or Video wall to spread one picture over several screens. Set each screen’s resolution and refresh rate in Windows display settings. Press Esc on an output to close it.' }));
 
       /* ----- Blackmagic DeckLink / UltraStudio ----- */
       box.append(U.el('div', { class: 'ext-head' }, [
@@ -391,10 +410,53 @@
       ], DL(), () => {}));
       box.append(U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'Blackmagic output sends the program (near-lossless) with embedded audio to the card’s SDI / HDMI connector. The video mode must be one your card supports at the project frame rate. AJA, Magewell and other cards that appear as a Windows display can be used as a screen above.' }));
     };
+    // region of the picture shown by one output (percent of the source)
+    const areaDialog = (slot) => {
+      const DO = BTS.DisplayOutputs, c = DO.cfg().list[slot];
+      const R = { ...(c.region || { x: 0, y: 0, w: 1, h: 1 }) };
+      const pct = { x: Math.round(R.x * 1000) / 10, y: Math.round(R.y * 1000) / 10, w: Math.round(R.w * 1000) / 10, h: Math.round(R.h * 1000) / 10 };
+      BTS.Dialog.open({ title: `Output ${slot + 1} — area of the picture`, width: 460, body: BTS.Dialog.form([
+        { label: 'Left (%)', key: 'x', type: 'number', min: 0, max: 99, step: 0.1 }, { label: 'Top (%)', key: 'y', type: 'number', min: 0, max: 99, step: 0.1 },
+        { label: 'Width (%)', key: 'w', type: 'number', min: 1, max: 100, step: 0.1 }, { label: 'Height (%)', key: 'h', type: 'number', min: 1, max: 100, step: 0.1 },
+        { custom: U.el('p', { class: 'hint', text: 'Example: two projectors side by side → output 1: Left 0, Width 50; output 2: Left 50, Width 50. Or use Video wall… to fill this in automatically.' }) }
+      ], pct, () => {}), buttons: [{ label: 'Full picture', onClick: () => { c.region = { x: 0, y: 0, w: 1, h: 1 }; DO.save(); DO.apply(slot); draw(); return true; } }, { label: 'Apply', primary: true, onClick: () => {
+        c.region = { x: U.clamp(pct.x / 100, 0, 0.99), y: U.clamp(pct.y / 100, 0, 0.99), w: U.clamp(pct.w / 100, 0.01, 1), h: U.clamp(pct.h / 100, 0.01, 1) };
+        DO.save(); DO.apply(slot); draw(); return true; } }] });
+    };
+    // video wall: one source over cols x rows screens
+    const wallWizard = async () => {
+      const DO = BTS.DisplayOutputs, ds = (await window.bts.displays()).filter(d => !d.control).sort((p, q) => p.bounds.y - q.bounds.y || p.bounds.x - q.bounds.x);
+      if (ds.length < 2) return U.toast('Connect at least two extra screens (Windows display mode: Extend) to make a video wall.', 'error', 8000);
+      const w = { source: 'program', cols: Math.min(ds.length, 2), rows: 1, fit: 'stretch', first: 1 };
+      const body = U.el('div');
+      const grid = U.el('div', { class: 'wall-grid' });
+      const picks = [];
+      const drawGrid = () => {
+        grid.innerHTML = ''; picks.length = 0;
+        grid.style.gridTemplateColumns = `repeat(${w.cols}, 1fr)`;
+        for (let i = 0; i < w.cols * w.rows; i++) {
+          const s2 = U.el('select'); ds.forEach((d, k) => s2.append(U.el('option', { value: k, text: d.label, selected: k === i })));
+          picks.push(s2); grid.append(U.el('div', { class: 'wall-cell' }, [U.el('div', { class: 'hint', text: `Row ${Math.floor(i / w.cols) + 1}, column ${i % w.cols + 1}` }), s2]));
+        }
+      };
+      body.append(BTS.Dialog.form([
+        { label: 'Source', key: 'source', type: 'select', options: srcOpts() },
+        { label: 'Columns', key: 'cols', type: 'number', min: 1, max: 6, onChange: () => drawGrid() }, { label: 'Rows', key: 'rows', type: 'number', min: 1, max: 6, onChange: () => drawGrid() },
+        { label: 'Scaling', key: 'fit', type: 'select', options: [['stretch', 'Stretch each slice to its screen'], ['contain', 'Keep shape (black bars)'], ['cover', 'Keep shape (crop)']] },
+        { label: 'Use outputs from', key: 'first', type: 'number', min: 1, max: 6, hint: 'The wall uses this output and the ones after it.' }
+      ], w, () => {}), grid);
+      drawGrid();
+      BTS.Dialog.open({ title: 'Video wall', width: 620, body, buttons: [{ label: 'Cancel' }, { label: 'Create', primary: true, onClick: () => {
+        const n = w.cols * w.rows;
+        if (n > DO.SLOTS - (w.first - 1)) { U.toast(`Not enough outputs: ${n} screens need ${n} outputs`, 'error'); return false; }
+        DO.makeWall({ source: w.source, cols: +w.cols, rows: +w.rows, fit: w.fit, startSlot: w.first - 1, screens: picks.map(p => ds[+p.value]) });
+        U.toast(`Video wall ready on outputs ${w.first}–${w.first + n - 1}. Press External to start.`, 'ok', 7000);
+        draw(); return true; } }] });
+    };
     await draw();
     if (extDlg) extDlg.close();
     extRefresh = draw;
-    extDlg = BTS.Dialog.open({ title: 'External Outputs', body: box, width: 860, onClose: () => { extDlg = null; extRefresh = null; } });
+    extDlg = BTS.Dialog.open({ title: 'External Outputs', body: box, width: 940, onClose: () => { extDlg = null; extRefresh = null; } });
   }
   window.bts.onDisplaysChanged && window.bts.onDisplaysChanged((why) => { if (extRefresh) extRefresh(); if (why === 'added') U.toast('A screen was connected — open External Outputs to use it', 'info', 5000); });
   function refreshExternals() { if (extRefresh) extRefresh(); }

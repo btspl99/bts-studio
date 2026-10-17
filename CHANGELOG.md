@@ -8,6 +8,9 @@
 - The `StartExternal` function opens on a second screen when one is connected, instead of in a window.
 
 ### New
+- **External outputs like vMix** — set up to 6 outputs once (screen, source, fit, rotation, mirror, area), tick them, then press **External** (or **F7**) to turn them all on or off. Settings are saved; outputs can **start with BTS Studio** and **come back automatically when a screen is reconnected**. New ⚙ button next to External opens the setup.
+- **Clean feed** source — the Output without overlays / titles, for IMAG screens and ISO recorders (only rendered while in use).
+- **Video wall** — spread one picture over several screens (columns × rows) in a few clicks, or set each output's area by hand. **Rotate** 90/180/270° for portrait screens, **Mirror** for teleprompters, **Fit / Fill / Stretch** per output.
 - **Identify screens** — shows each monitor's number on it for 3 seconds. Screens are listed with their names, real resolution and refresh rate.
 - **Change the source of a running external output** (Output, Preview, any multiview or input) without closing it.
 - **Blackmagic DeckLink / UltraStudio output (SDI & HDMI)** — 2 playout outputs with the program picture (near-lossless) and embedded audio from Master or any bus, in 1080p, 1080i, 720p, 2160p or the project format. Needs Blackmagic Desktop Video and an FFmpeg built with DeckLink support (Blackmagic's licence does not allow it to be bundled); set its path in External Outputs. New functions `StartBlackmagic` / `StopBlackmagic`.

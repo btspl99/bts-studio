@@ -656,3 +656,12 @@ table.tbl tr.sel { background: color-mix(in srgb, var(--accent) 14%, transparent
 .ext-dlg .tbl select { max-width: 330px; }
 .ext-warn { background: color-mix(in srgb, var(--warn) 14%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); border-radius: 8px; padding: 10px 12px; margin: 6px 0 10px; line-height: 1.55; }
 .ext-warn kbd { font: 11px/1 inherit; padding: 2px 5px; border-radius: 4px; background: var(--bg3); border: 1px solid var(--line2); }
+.ext-tbl td, .ext-tbl th { padding: 4px 5px; }
+.ext-tbl select { max-width: 250px; }
+.ext-tbl tr.live td { background: color-mix(in srgb, var(--pvw) 8%, transparent); }
+.ext-row { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; flex-wrap: wrap; }
+.ext-row .spacer { flex: 1; }
+.ext-row .form { grid-template-columns: auto auto; gap: 4px 10px; }
+.wall-grid { display: grid; gap: 8px; margin-top: 12px; }
+.wall-cell { border: 1px dashed var(--line2); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.wall-cell select { width: 100%; }

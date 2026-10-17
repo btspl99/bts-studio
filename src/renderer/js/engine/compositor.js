@@ -346,6 +346,12 @@
       if (f.value !== target) { const p = U.clamp((now - f.t0) / f.duration, 0, 1); f.value = U.lerp(f.from, target, p); }
 
       this._drawProgram(this.pctx, this.W, this.H, now, tp);
+      // Clean feed (Output without overlays / titles) — only rendered while something shows it
+      if (this.cleanUsers > 0) {
+        const cc = this.cleanCanvas || (this.cleanCanvas = document.createElement('canvas'));
+        if (cc.width !== this.W || cc.height !== this.H) { cc.width = this.W; cc.height = this.H; this.cctx = cc.getContext('2d', { alpha: false }); this.cctx.imageSmoothingQuality = 'high'; }
+        this._drawProgram(this.cctx, this.W, this.H, now, tp, true);
+      }
       if (this.frameId % this.perf.previewEvery === 0) this._drawPreview(this.vctx, this.previewCanvas.width, this.previewCanvas.height);
       if (this.multiviews.anyActive) this.multiviews.render(this.frameId, this.perf.multiviewEvery);
       this.emit('frame', now);
@@ -359,7 +365,7 @@
 
     _drawInput(ctx, inp, W, H) { if (inp) inp.draw(ctx, 0, 0, W, H); }
 
-    _drawProgram(ctx, W, H, now, tp) {
+    _drawProgram(ctx, W, H, now, tp, clean = false) {
       ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
       const a = this.active;
       if (a) {
@@ -373,7 +379,7 @@
         }
       } else this._drawInput(ctx, this.program, W, H);
 
-      for (const o of this.overlays) {
+      for (const o of clean ? [] : this.overlays) {
         if (!o.inputId || o.state === 'off') continue;
         const inp = this.byId(o.inputId); if (!inp) continue;
         let p = 1;
