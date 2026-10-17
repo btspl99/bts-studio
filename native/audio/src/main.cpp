@@ -15,7 +15,9 @@
 #include "portaudio.h"
 #if defined(_WIN32)
 #include "pa_win_wasapi.h"
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #include <fcntl.h>
 #include <io.h>

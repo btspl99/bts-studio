@@ -27,6 +27,8 @@
     BTS.workspaceUI = new BTS.WorkspaceUI(st);
     BTS.operatorUI.mountModules();
     BTS.DisplayOutputs.init();
+    BTS.proAudioOut = new BTS.ProAudioOut(st);
+    setTimeout(() => { try { if (BTS.proAudioOut.cfg().autoStart) BTS.proAudioOut.startAll(); } catch (e) { console.warn('pro audio autostart', e); } }, 3000);
     setTimeout(() => { try { const n = BTS.studio.outputs.ndi; if (n && n.cfg().autoStart) n.startAll(); } catch (e) { console.warn('ndi autostart', e); } }, 2500);
     if (localStorage.getItem('bts.density') === 'compact') document.body.classList.add('compact');
 

@@ -20,6 +20,7 @@
       tabs.push({ id: 'key', label: 'Keying', el: keying(inp) });
       tabs.push({ id: 'effects', label: 'Effects', el: effectsTab(inp) });
     }
+    if (inp.type === 'proaudio') tabs.push({ id: 'proaudio', label: 'Device & VST3', el: BTS.ProAudioUI.inputTab(inp) });
     if (inp.channel) tabs.push({ id: 'audio', label: 'Audio', el: audio(inp, st) });
     tabs.push({ id: 'triggers', label: 'Triggers', el: BTS.operatorUI.triggersTab(inp) });
     const t = BTS.Dialog.tabs(tabs);

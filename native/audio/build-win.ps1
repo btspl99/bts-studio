@@ -41,6 +41,7 @@ Copy-Item (Join-Path $deps 'portaudio/LICENSE.txt') (Join-Path $lic 'PortAudio-L
 Copy-Item (Join-Path $deps 'vst3sdk/LICENSE.txt') (Join-Path $lic 'VST3-SDK-LICENSE.txt')
 Copy-Item (Join-Path $asio 'common/LICENSE.txt') (Join-Path $lic 'ASIO-SDK-LICENSE.txt')
 Copy-Item (Join-Path $here 'README.md') $OutDir
+try { Invoke-WebRequest -UseBasicParsing -Uri 'https://www.gnu.org/licenses/gpl-3.0.txt' -OutFile (Join-Path $lic 'GPL-3.0.txt') } catch { Write-Host "::warning::GPL text not downloaded: $_" }
 Set-Content -Path (Join-Path $lic 'NOTICE.txt') -Value @"
 bts-audio.exe is part of BTS Studio (MIT). It contains:
  - PortAudio v19.7.0 (MIT-style licence) — https://github.com/PortAudio/portaudio

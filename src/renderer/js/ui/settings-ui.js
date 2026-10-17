@@ -204,6 +204,7 @@
     const midiEl = BTS.operatorUI.midiTab();
     const capBefore = JSON.stringify(s.capture || {}) + JSON.stringify((s.performance || {}).disableGpu);
     const devEl = BTS.operatorUI.devicesTab();
+    if (BTS.ProAudioUI && BTS.proAudioOut) devEl.append(BTS.ProAudioUI.outputsSection());
     const t = BTS.Dialog.tabs([
       { id: 'general', icon: '⚙', label: 'General', el: general }, { id: 'stream', icon: '📡', label: 'Streaming', el: stream }, { id: 'record', icon: '⏺', label: 'Recording', el: record },
       { id: 'transitions', icon: '⇄', label: 'Transitions', el: trans }, { id: 'shortcuts', icon: '⌨', label: 'Shortcuts', el: sc.el }, { id: 'midi', icon: '🎹', label: 'MIDI', el: midiEl },

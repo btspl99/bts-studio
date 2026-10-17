@@ -22,6 +22,7 @@
     title: { label: 'Title', icon: '🅃' },
     scene: { label: 'Scene', icon: '🧩' },
     audio: { label: 'Audio Input', icon: '🎙️' },
+    proaudio: { label: 'Audio Device (Pro)', icon: '🎚️' },
     mix: { label: 'Mix', icon: '🔀' },
     delay: { label: 'Video Delay', icon: '⏱️' }
   };
@@ -835,6 +836,59 @@
     getMediaStream() { return this.stream; }
   }
 
+  /* ---------------- Audio Device (Pro): ASIO / WASAPI exclusive / WDM-KS with VST3 effects ---------------- */
+  // Runs in the native bts-audio helper; its 48 kHz stereo PCM arrives through the same path as stream audio.
+  class ProAudioInput extends Input {
+    get hasVideo() { return false; }
+    async init() {
+      this.setStatus('loading', 'Opening audio device…');
+      this.cfg.vst = this.cfg.vst || [];
+      await window.bts.proAudio.stop(this.id);
+      if (this.cfg.device == null || this.cfg.device === '') { this.setStatus('error', 'Choose an audio device'); return; }
+      const ch = this.ensureChannel();
+      const ok = await this.app.audio.workletReady;
+      if (ok && !this.pcm) { this.pcm = new AudioWorkletNode(this.app.audio.ctx, 'bts-pcm', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] }); ch.setSource(this.pcm); }
+      if (!this._offEv) this._offEv = window.bts.proAudio.onEvent((ev) => { if (ev.id === this.id) this._event(ev); });
+      const r = await window.bts.proAudio.start(this.id, { device: this.cfg.device, pair: this.cfg.pair || 0, mono: this.cfg.mono ?? -1, channels: this.cfg.channels || 0, exclusive: !!this.cfg.exclusive, vst: this.cfg.vst.map(v => ({ path: v.path })) });
+      if (!r.ok) { this.setStatus('error', r.error); return; }
+      this.vis = this.vis || document.createElement('canvas'); this.vis.width = 640; this.vis.height = 360;
+      clearInterval(this._stateTimer);
+      this._stateTimer = setInterval(() => this.saveStates(), 15000); // keep plug-in settings in the preset
+    }
+    _event(ev) {
+      if (ev.event === 'plugin') { // restore saved settings and bypass for each loaded plug-in
+        const v = this.cfg.vst[ev.index]; if (!v) return;
+        v.name = ev.name; v.loaded = true;
+        if (v.state) window.bts.proAudio.control(this.id, { cmd: 'setState', index: ev.index, state: v.state });
+        if (v.bypass) window.bts.proAudio.control(this.id, { cmd: 'bypass', index: ev.index, value: true });
+        this.emit('vst');
+      } else if (ev.event === 'state') { const v = this.cfg.vst[ev.index]; if (v) v.state = ev.state; }
+      else if (ev.event === 'editor' && !ev.open) this.saveStates();
+      else if (ev.event === 'error') { U.toast(`${this.title}: ${ev.message}`, 'error', 7000); if (this.status !== 'ok') this.setStatus('error', ev.message); }
+    }
+    onStreamStatus(s) {
+      if (s.state === 'live') { this.deviceInfo = `${s.device} · ${s.channels} ch · ${s.latencyMs} ms`; this.setStatus('ok'); }
+      else if (s.state === 'reconnecting') this.setStatus('error', s.message || 'Reconnecting…');
+      else if (s.state === 'error') this.setStatus('error', s.message || 'Audio device error');
+    }
+    onAudio(buf) { if (this.pcm) this.pcm.port.postMessage(buf, [buf.buffer]); }
+    saveStates() { this.cfg.vst.forEach((v, i) => { if (v.loaded) window.bts.proAudio.control(this.id, { cmd: 'getState', index: i }); }); }
+    vstEditor(i) { return window.bts.proAudio.control(this.id, { cmd: 'editor', index: i }); }
+    vstBypass(i, on) { const v = this.cfg.vst[i]; if (!v) return false; v.bypass = on == null ? !v.bypass : !!on; window.bts.proAudio.control(this.id, { cmd: 'bypass', index: i, value: v.bypass }); this.emit('vst'); return true; }
+    getFrame() {
+      const c = this.vis; if (!c) return null;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#101216'; ctx.fillRect(0, 0, 640, 360);
+      const [l, r] = this.channel ? this.channel.peak : [0, 0];
+      const bar = (x, v) => { const h = U.clamp((U.db(v) + 60) / 60, 0, 1) * 240; const g = ctx.createLinearGradient(0, 300, 0, 60); g.addColorStop(0, '#2fbf62'); g.addColorStop(0.75, '#f5c344'); g.addColorStop(1, '#e2453c'); ctx.fillStyle = g; ctx.fillRect(x, 300 - h, 60, h); };
+      bar(250, l); bar(330, r);
+      ctx.fillStyle = '#ddd'; ctx.font = '600 22px Segoe UI'; ctx.textAlign = 'center'; ctx.fillText('🎚 ' + this.title, 320, 340);
+      return { src: c, w: 640, h: 360, processed: true };
+    }
+    serialize() { return super.serialize(); }
+    destroy() { clearInterval(this._stateTimer); if (this._offEv) this._offEv(); window.bts.proAudio.stop(this.id); super.destroy(); }
+  }
+
   /* ---------------- Web browser / HTML overlay ---------------- */
   class BrowserInput extends Input {
     constructor(app, data) {
@@ -1067,7 +1121,7 @@
     destroy() { if (this._offFrame) this._offFrame(); for (const f of this.ring) try { f.bmp.close(); } catch { /* noop */ } this.ring = []; super.destroy(); }
   }
 
-  const CLASSES = { mix: MixInput, delay: DelayInput, stream: StreamInput, capture: CaptureInput, ndi: NdiInput, replay: VideoInput, color: ColorInput, image: ImageInput, video: VideoInput, 'audio-file': VideoInput, playlist: PlaylistInput, camera: CameraInput, screen: ScreenInput, audio: AudioDeviceInput, browser: BrowserInput, title: TitleInput, scene: SceneInput };
+  const CLASSES = { mix: MixInput, delay: DelayInput, stream: StreamInput, capture: CaptureInput, ndi: NdiInput, replay: VideoInput, color: ColorInput, image: ImageInput, video: VideoInput, 'audio-file': VideoInput, playlist: PlaylistInput, camera: CameraInput, screen: ScreenInput, audio: AudioDeviceInput, proaudio: ProAudioInput, browser: BrowserInput, title: TitleInput, scene: SceneInput };
 
   function register(type, Cls, info) { CLASSES[type] = Cls; if (info) TYPE_INFO[type] = info; }
   function create(app, data) {
