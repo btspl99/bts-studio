@@ -5,19 +5,20 @@
 //       internalKeying, externalKeying, modes: [ { id, name, width, height, fps, bgra } ] } ] }
 //
 //   bts-decklink --out <index|name> --mode 1080p25 [--key external|internal|none] [--level 0-255] [--audio]
-//       Reads raw BGRA frames (premultiplied alpha, width*height*4 bytes, the size of the mode) from stdin and
+//       Reads raw BGRA frames (straight alpha, width*height*4 bytes, the size of the mode) from stdin and
 //       plays them out with scheduled playback locked to the card's clock: the newest frame received is shown
 //       at every output frame (frames are repeated when input is slow and skipped when it is fast).
 //       With --key external the card outputs fill and key on two connectors (e.g. SDI A / SDI B) for a
 //       downstream vision mixer; with --key internal the card keys over its own input.
+//       --premultiply: send a shaped (premultiplied) fill, which most hardware keyers expect.
 //       --audio: interleaved stereo s16le 48 kHz on file descriptor 3 is embedded in the output.
 //       Status / errors are JSON lines on stderr.
 //
 // Build: native/decklink/build-win.ps1 (MIDL + MSVC). The DeckLink API IDL files in sdk/ are
 // Copyright (c) Blackmagic Design and redistributed under their permissive licence (see sdk/*.idl headers).
 
-#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <objbase.h>
 #include <io.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -188,7 +189,7 @@ static bool readExact(int fd, unsigned char* p, size_t n) {
   return true;
 }
 
-static int playOut(const std::string& devArg, const std::string& modeArg, const std::string& key, int level, bool audio) {
+static int playOut(const std::string& devArg, const std::string& modeArg, const std::string& key, int level, bool audio, bool premul) {
   BMDDisplayMode mode = 0;
   for (auto& x : MODES) if (modeArg == x.name) mode = x.mode;
   if (!mode) fail("Unknown video mode " + modeArg);
@@ -282,6 +283,10 @@ static int playOut(const std::string& devArg, const std::string& modeArg, const 
   // main loop: read frames from stdin, keep the newest
   std::vector<unsigned char> buf(frameBytes);
   while (readExact(0, buf.data(), frameBytes)) {
+    if (premul) { // shaped fill: colour * alpha
+      unsigned char* q = buf.data();
+      for (size_t i = 0; i < frameBytes; i += 4) { unsigned a = q[i + 3]; if (a != 255) { q[i] = (unsigned char)((q[i] * a + 127) / 255); q[i + 1] = (unsigned char)((q[i + 1] * a + 127) / 255); q[i + 2] = (unsigned char)((q[i + 2] * a + 127) / 255); } }
+    }
     { std::lock_guard<std::mutex> l(shared.m); shared.latest.swap(buf); }
     shared.received++;
   }
@@ -304,7 +309,7 @@ int main(int argc, char** argv) {
   _setmode(0, _O_BINARY);
   if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) fail("COM initialisation failed");
   std::string mode = "", dev = "0", modeArg = "1080p25", key = "external";
-  int level = 255; bool audio = false;
+  int level = 255; bool audio = false, premul = false;
   for (int i = 1; i < argc; i++) {
     std::string a = argv[i];
     auto next = [&]() -> std::string { return i + 1 < argc ? argv[++i] : ""; };
@@ -314,12 +319,13 @@ int main(int argc, char** argv) {
     else if (a == "--key") key = next();
     else if (a == "--level") level = atoi(next().c_str());
     else if (a == "--audio") audio = true;
+    else if (a == "--premultiply") premul = true;
     else if (a == "--version") { printf("bts-decklink 1.0 (DeckLink API %s)\n", BLACKMAGIC_DECKLINK_API_VERSION_STRING); return 0; }
   }
   int rc;
   if (mode == "list") rc = listDevices();
-  else if (mode == "out") rc = playOut(dev, modeArg, key, level, audio);
-  else { fprintf(stderr, "usage: bts-decklink --list | --out <index|name> --mode 1080p25 [--key external|internal|none] [--level 0-255] [--audio]\n"); rc = 1; }
+  else if (mode == "out") rc = playOut(dev, modeArg, key, level, audio, premul);
+  else { fprintf(stderr, "usage: bts-decklink --list | --out <index|name> --mode 1080p25 [--key external|internal|none] [--level 0-255] [--audio] [--premultiply]\n"); rc = 1; }
   CoUninitialize();
   return rc;
 }
