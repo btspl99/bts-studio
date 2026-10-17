@@ -185,7 +185,8 @@
         { label: 'NDI groups', key: 'groups', placeholder: 'public', hint: 'Only see / send in these NDI groups (comma separated). Empty = public.' },
         { label: 'NDI runtime (optional)', key: 'runtime', type: 'file', hint: 'Only if NDI Tools is installed somewhere unusual: path to Processing.NDI.Lib.x64.dll.' }
       ], s.ndi),
-      U.el('p', { class: 'hint', text: 'Port changes apply the next time BTS Studio starts.' })
+      U.el('p', { class: 'hint', text: 'Port changes apply the next time BTS Studio starts.' }),
+      vmicBox()
     ]);
 
     const sc = shortcutsEditor();
@@ -274,6 +275,22 @@
     if (e.altKey) k = 'Alt+' + k;
     if (e.ctrlKey || e.metaKey) k = 'Ctrl+' + k;
     return k;
+  }
+
+  /* ---------------- virtual microphone (VB-CABLE) ---------------- */
+  function vmicBox() {
+    const s = BTS.settings; s.virtualMic = s.virtualMic || { bus: '' };
+    const box = U.el('div');
+    const status = U.el('div', { class: 'hint', text: 'Looking for a virtual audio cable…' });
+    BTS.studio.audio.virtualMicDevice().then(d => { status.innerHTML = d ? `<b style="color:var(--pvw)">●</b> Found: ${U.esc(d.label)}` : '<b style="color:var(--pgm)">●</b> No virtual audio cable installed'; });
+    box.append(BTS.Dialog.form([
+      { section: 'Virtual microphone (Zoom, Teams, Meet, Discord)' },
+      { custom: status },
+      { label: 'Send to virtual mic', key: 'bus', type: 'select', options: [['', 'Off'], ['M', 'Master'], ...'ABCDEFG'.split('').map(b => [b, 'Bus ' + b])], onChange: async (v) => { const r = await BTS.studio.audio.setVirtualMic(v); if (!r.ok) { U.toast(r.error, 'error', 9000); s.virtualMic.bus = ''; } else if (v) U.toast(`Virtual mic: ${r.device}`, 'ok'); } },
+      { custom: U.el('div', { class: 'inline' }, [U.el('button', { class: 'btn', text: 'Get VB-CABLE (free driver)…', onclick: () => window.bts.shell.open('https://vb-audio.com/Cable/') })]) },
+      { custom: U.el('div', { class: 'hint', text: 'Windows needs a signed audio driver for a virtual microphone. Install the free VB-CABLE driver once (run its setup as administrator, then restart the PC). BTS Studio then plays the chosen bus into “CABLE Input”, and meeting apps pick “CABLE Output” as their microphone. Use the BTS Studio Virtual Camera for the picture.' }) }
+    ], s.virtualMic));
+    return box;
   }
 
   /* ---------------- data sources ---------------- */

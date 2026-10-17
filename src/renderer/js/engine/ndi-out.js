@@ -91,7 +91,7 @@
       if (rec.busy) { rec.dropped++; return; }
       let src = this._source(rec); if (!src) return;
       rec.last = now;
-      if (src.width !== rec.w || src.height !== rec.h) { // scale to the output size
+      if (src.width !== rec.w || src.height !== rec.h || this.studio.colorType === 'float16') { // scale to the output size (and to 8-bit when mixing in 16-bit)
         const c = rec.canvas || (rec.canvas = document.createElement('canvas'));
         if (c.width !== rec.w || c.height !== rec.h) { c.width = rec.w; c.height = rec.h; rec.g = c.getContext('2d', { alpha: false }); rec.g.imageSmoothingQuality = 'high'; }
         rec.g.drawImage(src, 0, 0, rec.w, rec.h); src = c;

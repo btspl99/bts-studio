@@ -76,7 +76,11 @@
       this.programCanvas.width = this.W; this.programCanvas.height = this.H;
       const ps = Math.min(1, 1280 / this.W);
       this.previewCanvas.width = Math.round(this.W * ps); this.previewCanvas.height = Math.round(this.H * ps);
-            this.pctx = this.programCanvas.getContext('2d', { alpha: false, desynchronized: false });
+      // optional 16-bit float mixing (less banding in fades, gradients and soft keys); chosen at start-up
+      this.colorType = BTS.settings && BTS.settings.performance && BTS.settings.performance.float16 ? 'float16' : 'unorm8';
+      try { this.pctx = this.programCanvas.getContext('2d', { alpha: false, desynchronized: false, colorType: this.colorType }); } catch { this.pctx = null; }
+      if (!this.pctx) { this.colorType = 'unorm8'; this.pctx = this.programCanvas.getContext('2d', { alpha: false, desynchronized: false }); }
+      if (this.colorType === 'float16' && !(this.pctx.getContextAttributes && this.pctx.getContextAttributes().colorType === 'float16')) this.colorType = 'unorm8';
       this.vctx = this.previewCanvas.getContext('2d', { alpha: false });
       this.pctx.imageSmoothingQuality = 'high'; this.vctx.imageSmoothingQuality = 'medium';
     }
@@ -371,7 +375,7 @@
       // Clean feed (Output without overlays / titles) — only rendered while something shows it
       if (this.cleanUsers > 0) {
         const cc = this.cleanCanvas || (this.cleanCanvas = document.createElement('canvas'));
-        if (cc.width !== this.W || cc.height !== this.H) { cc.width = this.W; cc.height = this.H; this.cctx = cc.getContext('2d', { alpha: false }); this.cctx.imageSmoothingQuality = 'high'; }
+        if (cc.width !== this.W || cc.height !== this.H) { cc.width = this.W; cc.height = this.H; this.cctx = cc.getContext('2d', { alpha: false, colorType: this.colorType }); this.cctx.imageSmoothingQuality = 'high'; }
         this._drawProgram(this.cctx, this.W, this.H, now, tp, true);
       }
       if (this.frameId % this.perf.previewEvery === 0) this._drawPreview(this.vctx, this.previewCanvas.width, this.previewCanvas.height);

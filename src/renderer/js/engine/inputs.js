@@ -924,7 +924,7 @@
       this.cfg.background = this.cfg.background || 'transparent';
       this.canvas = this.canvas || document.createElement('canvas');
       this.canvas.width = this.app.W; this.canvas.height = this.app.H;
-      this.ctx2 = this.canvas.getContext('2d'); this.ctx2.imageSmoothingQuality = 'high';
+      this.ctx2 = this.canvas.getContext('2d', { colorType: this.app.colorType || 'unorm8' }); this.ctx2.imageSmoothingQuality = 'high';
       this._rf = -1;
       this.setStatus('ok');
     }

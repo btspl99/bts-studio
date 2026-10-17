@@ -314,7 +314,8 @@
         { section: 'Performance' },
         { label: 'Adaptive load governor', key: 'performance.governor', type: 'checkbox', hint: 'Under heavy load, previews/thumbnails/multiview slow down first so Output stays smooth.' },
         { label: 'Thumbnail rate (fps)', key: 'performance.thumbnailFps', type: 'select', number: true, options: [[2, '2'], [5, '5'], [10, '10'], [15, '15'], [30, '30']] },
-        { label: 'Software rendering (no GPU)', key: 'performance.disableGpu', type: 'checkbox', hint: 'Only for broken graphics drivers — much slower. Restart required.' }
+        { label: 'Software rendering (no GPU)', key: 'performance.disableGpu', type: 'checkbox', hint: 'Only for broken graphics drivers — much slower. Restart required.' },
+        { label: 'High-precision mixing (16-bit float)', key: 'performance.float16', type: 'checkbox', hint: 'Mixes the Output in 16-bit floating point instead of 8-bit: smoother fades, gradients and soft keys with less banding. Uses more GPU memory. Restart required.' }
       ], s));
       return box;
     }

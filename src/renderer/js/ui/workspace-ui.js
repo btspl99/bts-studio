@@ -153,7 +153,7 @@
       const card = (k, v, cls = '') => `<div class="stat"><div class="k">${k}</div><div class="v ${cls}">${v}</div></div>`;
       const gpuEnc = H && H.gpuStatus ? H.gpuStatus.video_encode : '';
       this.statsEl.innerHTML = [
-        card('Format', `${st.W}×${st.H} ${Math.round(st.fps)}p`),
+        card('Format', `${st.W}×${st.H} ${Math.round(st.fps)}p${st.colorType === 'float16' ? ' · 16-bit' : ''}`),
         card('Render FPS', s.fps.toFixed(1), s.fps < st.fps * 0.9 ? 'bad' : 'good'),
         card('Frame time', s.renderMs.toFixed(1) + ' ms', s.renderMs > 1000 / st.fps * 0.8 ? 'bad' : ''),
         card('Dropped', s.dropped, s.dropped ? 'bad' : ''),

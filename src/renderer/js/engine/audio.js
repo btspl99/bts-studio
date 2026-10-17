@@ -110,12 +110,28 @@ registerProcessor('bts-pcm', BtsPcm);`;
       b.outEl.srcObject = b.dest.stream;
       try { await b.outEl.setSinkId(deviceId); await b.outEl.play(); return true; } catch (e) { console.warn('Bus output', e); b.device = ''; return false; }
     }
+    /** Virtual microphone: feed a bus into a virtual audio cable (VB-CABLE "CABLE Input") so Zoom / Teams / Discord hear the show */
+    async virtualMicDevice() {
+      const outs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audiooutput');
+      return outs.find(d => /CABLE Input|VB-Audio Virtual Cable|VoiceMeeter Input/i.test(d.label)) || null;
+    }
+    async setVirtualMic(bus) {
+      const prev = this._vmicBus; this._vmicBus = null;
+      if (prev && prev !== bus && this.buses[prev] && this.buses[prev].device === (this._vmicDev || '')) await this.setBusDevice(prev, '');
+      if (!bus) return { ok: true };
+      const d = await this.virtualMicDevice();
+      if (!d) return { ok: false, error: 'No virtual audio cable found — install VB-CABLE (free) and restart BTS Studio' };
+      const ok = await this.setBusDevice(bus, d.deviceId);
+      if (ok) { this._vmicBus = bus; this._vmicDev = d.deviceId; }
+      return ok ? { ok: true, device: d.label } : { ok: false, error: 'Could not open ' + d.label };
+    }
     busState() { return Object.fromEntries(Object.entries(this.buses).map(([k, b]) => [k, { volume: b.volume, muted: b.muted, toMaster: !!b.toMaster, headphones: !!b.headphones, device: b.device || '' }])); }
     loadBusState(st) {
       for (const [k, v] of Object.entries(st || {})) {
         if (!this.buses[k] || !v) continue;
         this.setBusVolume(k, v.volume ?? 1); this.setBusMute(k, !!v.muted);
-        if (k !== 'M') { this.setBusToMaster(k, !!v.toMaster); this.setBusHeadphones(k, !!v.headphones); if (v.device) this.setBusDevice(k, v.device); }
+        if (k !== 'M') { this.setBusToMaster(k, !!v.toMaster); this.setBusHeadphones(k, !!v.headphones); }
+        if (v.device) this.setBusDevice(k, v.device);
       }
     }
     setMonitor(on) { this.monitorOn = on; this.monitor.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.02); this._updateSolo(); }

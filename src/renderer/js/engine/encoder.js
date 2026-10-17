@@ -263,7 +263,8 @@ registerProcessor('bts-tap', BtsTap);`;
     _src(prof) {
       const st = this.studio, w = prof.w, h = prof.h;
       const from = this._from(prof);
-      const same = from.width === w && from.height === h;
+      // 16-bit mixing: encoders read 8-bit frames, so convert through an 8-bit canvas (one GPU copy)
+      const same = from.width === w && from.height === h && st.colorType !== 'float16';
       if (same) return from;
       const k = [w, h, prof.source, prof.framing, prof.cropX].join('|');
       let c = this.scalers.get(k);

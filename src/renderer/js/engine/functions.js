@@ -255,6 +255,8 @@
   def('LayerOff', 'Position', ['Input', 'Value'], (p) => { layerOf(p).visible = false; S()._updateLive(); return true; });
   def('LayerToggle', 'Position', ['Input', 'Value'], (p) => { const l = layerOf(p); l.visible = l.visible === false; S()._updateLive(); return true; });
   alias('MultiViewOverlayOn', 'LayerOn'); alias('MultiViewOverlayOff', 'LayerOff'); alias('MultiViewOverlay', 'LayerToggle');
+  def('VirtualMicOn', 'Audio', ['Value?'], async (p) => { const bus = String(p.Value || 'M').toUpperCase(); const r = await S().audio.setVirtualMic(bus); if (!r.ok) throw new Error(r.error); BTS.settings.virtualMic = { bus }; return true; }, 'Value = M or A–G (needs VB-CABLE)');
+  def('VirtualMicOff', 'Audio', [], async () => { await S().audio.setVirtualMic(''); BTS.settings.virtualMic = { bus: '' }; return true; });
   def('KeyPress', 'General', ['Value'], (p) => { const k = String(p.Value || ''); const list = (BTS.ui && BTS.ui.shortcuts || []).filter(s => s.key.toLowerCase() === k.toLowerCase()); if (!list.length) throw new Error('No shortcut on ' + k); for (const sc of list) setTimeout(() => call(sc.fn, sc.params || {}), +sc.delay || 0); return true; }, 'Run the shortcut(s) on a key, e.g. Value=Ctrl+1');
 
   async function call(name, params = {}) {

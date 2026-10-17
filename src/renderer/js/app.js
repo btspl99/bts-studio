@@ -27,6 +27,7 @@
     BTS.workspaceUI = new BTS.WorkspaceUI(st);
     BTS.operatorUI.mountModules();
     BTS.DisplayOutputs.init();
+    setTimeout(() => { const vm = BTS.settings.virtualMic; if (vm && vm.bus) st.audio.setVirtualMic(vm.bus).then(r => { if (!r.ok) console.warn('virtual mic', r.error); }); }, 2000);
     setTimeout(() => { try { const n = BTS.studio.outputs.ndi; if (n && n.cfg().autoStart) n.startAll(); } catch (e) { console.warn('ndi autostart', e); } }, 2500);
     if (localStorage.getItem('bts.density') === 'compact') document.body.classList.add('compact');
 
