@@ -1,7 +1,7 @@
 {
   "name": "bts-studio",
   "productName": "BTS Studio",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "BTS Studio — free, open-source live production, switching and streaming software for students",
   "main": "src/main/main.js",
   "author": {
@@ -23,6 +23,7 @@
   "dependencies": {
     "electron-log": "^5.4.3",
     "electron-updater": "^6.8.9",
+    "koffi": "^2.16.3",
     "selfsigned": "^5.5.0"
   },
   "devDependencies": {
@@ -43,9 +44,14 @@
       "build/icon.ico",
       "package.json",
       "LICENSE",
-      "THIRD_PARTY_NOTICES.md"
+      "THIRD_PARTY_NOTICES.md",
+      "!node_modules/koffi/build/koffi/{darwin_*,freebsd_*,openbsd_*,musl_*,linux_arm64,linux_armhf,linux_ia32,linux_loong64,linux_riscv64d,win32_arm64,win32_ia32}/**",
+      "!node_modules/koffi/{src,doc,vendor}/**"
     ],
     "asar": true,
+    "asarUnpack": [
+      "node_modules/koffi/**"
+    ],
     "win": {
       "target": [
         "nsis"

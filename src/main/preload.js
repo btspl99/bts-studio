@@ -8,6 +8,7 @@ const listen = (channel) => (cb) => {
 };
 
 contextBridge.exposeInMainWorld('bts', {
+  platform: process.platform,
   info: () => ipcRenderer.invoke('app:info'),
   metrics: () => ipcRenderer.invoke('app:metrics'),
   settings: {
@@ -91,9 +92,23 @@ contextBridge.exposeInMainWorld('bts', {
   onMenu: listen('menu'),
   onNotice: listen('engine:notice'),
   log: (level, msg) => ipcRenderer.send('log', level, String(msg).slice(0, 4000)),
+  ndi: {
+    status: () => ipcRenderer.invoke('ndi:status'),
+    sources: (wait) => ipcRenderer.invoke('ndi:sources', wait),
+    recv: (id, cfg) => ipcRenderer.invoke('ndi:recv', id, cfg),
+    recvStop: (id) => ipcRenderer.invoke('ndi:recv-stop', id),
+    tally: (id, pgm, pvw) => ipcRenderer.send('ndi:tally', id, pgm, pvw),
+    send: (id, cfg) => ipcRenderer.invoke('ndi:send', id, cfg),
+    sendStop: (id) => ipcRenderer.invoke('ndi:send-stop', id),
+    video: (id, w, h, data, fmt) => ipcRenderer.send('ndi:video', id, w, h, data, fmt),
+    audio: (id, data) => ipcRenderer.send('ndi:audio', id, data)
+  },
   stream: {
     start: (id, cfg) => ipcRenderer.invoke('stream:start', id, cfg),
     stop: (id) => ipcRenderer.invoke('stream:stop', id),
+    stats: () => ipcRenderer.invoke('stream:stats'),
+    devices: (backend) => ipcRenderer.invoke('capture:devices', backend),
+    modes: (backend, device) => ipcRenderer.invoke('capture:modes', backend, device),
     onStatus: listen('stream:status'),
     onAudio: listen('stream:audio')
   },
@@ -129,6 +144,7 @@ contextBridge.exposeInMainWorld('bts', {
     slot: (k, info) => ipcRenderer.invoke('guests:slot', k, info),
     send: (sid, msg) => ipcRenderer.invoke('guests:send', sid, msg),
     urls: () => ipcRenderer.invoke('guests:urls'),
+    relay: (on) => ipcRenderer.invoke('guests:relay', on),
     onSignal: listen('guests:signal')
   },
   replay: {

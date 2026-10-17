@@ -61,3 +61,7 @@ Then publish the first release as described in `updates/README.txt`
 - **Caching / CDN:** if Hostinger CDN or LiteSpeed Cache is enabled for the domain, purge it after each release, or exclude `/updates/latest.yml` from caching.
 - **File size:** File Manager handles large uploads, but if an installer upload fails, use FTP (FileZilla) instead.
 - The updater feed URL built into the app must be `https://studio.btspl.tech/updates/`.
+
+## BTS Link (guest relay, since 1.5)
+
+Upload `website/link/` to `public_html/link/` (index.html, api.php and the `data/` folder with its `.htaccess`). PHP 8 is required; `data/` must be writable by PHP. `link/index.html` is a copy of `src/web/guest/index.html` — copy it again whenever the guest page changes.

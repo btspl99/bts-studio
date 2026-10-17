@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.5.0 — 2026-10-17
+
+The signal-chain release — first of the vMix gap-analysis roadmap.
+
+### New
+- **NDI® input and output.** Receive any NDI source on the network (cameras, PCs, vMix / OBS / Wirecast outputs, NDI Tools) at full quality or as a low-bandwidth proxy, with audio and **tally sent back** to the source (red on air, green in preview). Send up to **4 NDI outputs** — Output, Clean feed, Preview, a multiview or any input, each with its own name, size and audio bus — from Settings → External Outputs. Uses the free NDI runtime (install *NDI Tools* from ndi.video); groups and extra IPs for other subnets are in Settings → Media & Guests.
+- **Capture Card (Pro) input.** Opens a capture card directly (DirectShow, Blackmagic DeckLink, Video4Linux, AVFoundation) with the **exact input port** (SDI / HDMI / component crossbar pin), **pixel format, resolution and frame rate** read from the device, motion-adaptive **deinterlacing**, and **8 or 16 embedded audio channels** — pick which pair goes to the mixer. Frames arrive uncompressed. A built-in **test signal** checks channel routing without hardware.
+- **GPU stream decoding.** RTSP, SRT, RTMP, HLS, UDP / MPEG-TS and file streams in H.264 (and HEVC where the GPU supports it) are no longer re-compressed to MJPEG: the original stream is decoded on the GPU at full quality and lower latency. Other codecs switch to the old compatibility path automatically.
+- **BTS Link — guests without port forwarding.** Turn it on in Settings → Media & Guests and guest links become `studio.btspl.tech/link/…` links that work from anywhere. Only the call set-up passes through the BTS Link server; picture and sound still go directly between the guest and your PC.
+- **Video delay per input** (0–1000 ms, Input → Position → Timing) for lip-sync and lining up cameras.
+- **Per-input frame statistics** — the Statistics module lists every camera, capture, stream and NDI input with frame rate, decode path, resolution and dropped frames; the health monitor warns when a source keeps losing frames.
+
+### Needs checking on real hardware
+NDI (with the NDI runtime), DirectShow crossbar ports, DeckLink capture and HEVC GPU decoding were tested against simulated devices only — please report anything that misbehaves with your cards.
+
 ## 1.4.1 — 2026-10-17
 
 ### Fixed

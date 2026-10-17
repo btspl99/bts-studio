@@ -139,6 +139,7 @@ footer p{margin:4px auto}
       <li><a href="#outputs">External output &amp; Multiview</a></li>
       <li><a href="#shortcuts">Keyboard shortcuts</a></li>
       <li><a href="#api">Web Controller &amp; API</a></li>
+      <li><a href="#new-15">New in 1.5</a></li>
       <li><a href="#new-14">New in 1.4</a></li>
       <li><a href="#new-13">New in 1.3</a></li>
       <li><a href="#updates">Updates</a></li>
@@ -167,7 +168,8 @@ footer p{margin:4px auto}
         <li><a href="#outputs">External output &amp; Multiview</a></li>
         <li><a href="#shortcuts">Keyboard shortcuts</a></li>
         <li><a href="#api">Web Controller &amp; API</a></li>
-        <li><a href="#new-14">New in 1.4</a></li>
+        <li><a href="#new-15">New in 1.5</a></li>
+      <li><a href="#new-14">New in 1.4</a></li>
       <li><a href="#new-13">New in 1.3</a></li>
       <li><a href="#updates">Updates</a></li>
         <li><a href="#troubleshooting">Troubleshooting</a></li>
@@ -446,6 +448,20 @@ footer p{margin:4px auto}
     </section>
 
     <!-- 14 -->
+    <section class="doc" id="new-15" aria-labelledby="h-new15">
+      <h2 id="h-new15">New in 1.5</h2>
+      <h3>NDI® in and out</h3>
+      <p>Install the free <strong>NDI Tools</strong> from ndi.video first — BTS Studio uses the NDI runtime it installs. To receive, click <strong>Add Input → NDI®</strong> and pick a source; it shows red tally on the source when it is on air and green when it is in Preview. To send, open the ⚙ next to <strong>External</strong> and use the <em>NDI outputs</em> table: give each output a name, choose its source (Output, Clean feed, Preview, a multiview or any input), size and audio bus, then press Start. Sources on another subnet can be added under Settings → Media &amp; Guests → <em>NDI extra IPs</em>.</p>
+      <h3>Capture Card (Pro)</h3>
+      <p><strong>Add Input → Capture Card (Pro)</strong> opens a card directly instead of through the webcam layer. Choose the driver (DirectShow, or Blackmagic DeckLink), the device and one of the video modes the card reports, then the <em>input port</em> (SDI, HDMI, component…), whether to deinterlace, and the number of embedded audio channels (2, 8 or 16) and which pair goes to the mixer. Close the card's own software first. Blackmagic cards need Desktop Video and an FFmpeg with DeckLink support (set in External Outputs → Blackmagic). The simple <em>Camera / Capture</em> input is still the lighter choice for webcams.</p>
+      <h3>Better network streams</h3>
+      <p>Stream / IP Cam inputs in H.264 (and HEVC on GPUs that support it) are now decoded on the graphics card with no re-compression — sharper picture and less delay. Other codecs switch to the old compatibility mode automatically; you can also choose it under <em>Decoding</em>.</p>
+      <h3>Guests without port forwarding (BTS Link)</h3>
+      <p>Turn on Settings → Media &amp; Guests → <strong>BTS Link</strong>. Guest links then start with <em>studio.btspl.tech/link/</em> and work from any network, without changing your router. Only the call set-up goes through the BTS Link server; the picture and sound go straight between the guest and your PC. For guests on very strict networks, add a TURN server on the same page.</p>
+      <h3>Video delay and input statistics</h3>
+      <p>Each input has a <em>Video delay</em> (Position → Timing, up to 1 second) to line the picture up with the sound. <strong>Modules → Statistics</strong> now lists every live input with its frame rate, resolution, decode path and dropped frames.</p>
+    </section>
+
     <section class="doc" id="new-14" aria-labelledby="h-new14">
       <h2 id="h-new14">New in 1.4</h2>
       <h3>Faster, higher-quality outputs</h3>

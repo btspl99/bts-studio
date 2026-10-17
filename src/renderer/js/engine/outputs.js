@@ -13,6 +13,7 @@
       this.outs = new Map(); // id -> {state, recorder, cfg, queue, want, attempts, startedAt, stats}
       this.mime = this.pickMime();
       this.encoder = typeof VideoEncoder !== 'undefined' ? new BTS.EncodeEngine(studio) : null;
+      this.ndi = new BTS.NdiOut(studio);
       window.bts.output.onStatus((s) => this._onStatus(s));
     }
     /** Output engine v2 (shared GPU encode) unless the user chose the classic engine or WebCodecs is missing. */

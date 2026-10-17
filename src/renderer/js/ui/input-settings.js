@@ -73,8 +73,30 @@
       case 'screen':
         rows.push({ custom: U.el('button', { class: 'btn', text: 'Restart capture', onclick: () => inp.init() }) }, { label: 'Include in MultiCorder', key: 'isoEnabled', type: 'checkbox' });
         break;
+      case 'capture':
+        rows.push({ custom: U.el('div', { class: 'hint', text: `${c.backend === 'decklink' ? 'Blackmagic DeckLink' : c.backend === 'dshow' ? 'DirectShow' : c.backend} · ${c.device}${c.width ? ` · ${c.width}×${c.height} @ ${c.fps}` : ''} — ${inp.trackInfo || inp.statusMsg || ''}` }) },
+          { label: 'Use audio channels', key: 'audioPair', type: 'select', number: true, options: Array.from({ length: (c.audioChannels || 2) / 2 }, (_, i) => [i, `${i * 2 + 1} + ${i * 2 + 2}`]), onChange: () => inp.init() },
+          { label: 'Deinterlace', key: 'deinterlace', type: 'checkbox', onChange: () => inp.init() },
+          { label: 'Hold last frame on signal loss', key: 'keepLastFrame', type: 'checkbox' },
+          { custom: U.el('button', { class: 'btn', text: 'Restart device', onclick: () => inp.init() }) });
+        break;
+      case 'ndi': {
+        const srcSel = U.el('select', { style: { width: '100%' } });
+        srcSel.append(U.el('option', { value: c.source, text: c.source }));
+        window.bts.ndi.sources(1200).then(r => { for (const x of r.sources || []) if (x.name !== c.source) srcSel.append(U.el('option', { value: x.name, text: x.name })); });
+        srcSel.onchange = () => { c.source = srcSel.value; c.url = ''; inp.init(); };
+        rows.push({ label: 'NDI source', custom: srcSel },
+          { custom: U.el('div', { class: 'hint', text: inp.trackInfo || inp.statusMsg || '' }) },
+          { label: 'Quality', key: 'bandwidth', type: 'select', options: [['highest', 'Full quality'], ['lowest', 'Low bandwidth (proxy)']], onChange: () => inp.init() },
+          { label: 'Audio channels', key: 'audioPair', type: 'select', number: true, options: [[0, '1 + 2'], [1, '3 + 4'], [2, '5 + 6'], [3, '7 + 8']], onChange: () => inp.init() },
+          { label: 'Hold last frame on signal loss', key: 'keepLastFrame', type: 'checkbox' },
+          { custom: U.el('button', { class: 'btn', text: 'Reconnect', onclick: () => inp.init() }) });
+        break;
+      }
       case 'stream':
         rows.push({ label: 'Stream URL', key: 'url', onChange: () => inp.init() },
+          { label: 'Decoding', key: 'decode', type: 'select', options: [['auto', 'GPU, no re-compression'], ['mjpeg', 'Compatibility (MJPEG)']], onChange: () => { inp._forceMjpeg = false; inp.init(); } },
+          { custom: U.el('div', { class: 'hint', text: inp.mode ? `Now: ${inp.mode === 'gpu' ? 'GPU decode' : 'compatibility'}${inp.codec ? ' · ' + inp.codec : ''}` : '' }) },
           { label: 'RTSP transport', key: 'transport', type: 'select', options: [['tcp', 'TCP'], ['udp', 'UDP']], onChange: () => inp.init() },
           { label: 'Max width', key: 'width', type: 'select', number: true, options: [[1280, '1280'], [1920, '1920'], [3840, '3840']], onChange: () => inp.init() },
           { label: 'Frame rate', key: 'fps', type: 'select', number: true, options: [[25, '25'], [30, '30'], [50, '50'], [60, '60']], onChange: () => inp.init() },
@@ -198,7 +220,9 @@
       { section: 'Orientation' },
       { label: 'Mirror horizontally', key: 'position.flipH', type: 'checkbox' },
       { label: 'Flip vertically', key: 'position.flipV', type: 'checkbox' },
-      { label: 'Deinterlace (blend)', key: 'effects.deinterlace', type: 'checkbox' }
+      { label: 'Deinterlace (blend)', key: 'effects.deinterlace', type: 'checkbox' },
+      { section: 'Timing' },
+      { label: 'Video delay', key: 'videoDelay', type: 'range', min: 0, max: 1000, step: 10, default: 0, unit: ' ms', hint: 'Delay this picture to line it up with sound (lip-sync) or with other cameras. For longer delays use a Video Delay input.' }
     ], p);
     refresh();
     box.append(U.el('p', { class: 'hint', text: 'Double-click a slider to reset it. Use the PiP presets with Overlay channels for picture-in-picture.' }));

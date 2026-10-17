@@ -9,6 +9,8 @@
   const TYPE_INFO = {
     camera: { label: 'Camera', icon: '🎥' },
     stream: { label: 'Stream / IP Cam', icon: '📡' },
+    capture: { label: 'Capture (native)', icon: '📼' },
+    ndi: { label: 'NDI', icon: '📶' },
     replay: { label: 'Replay', icon: '⏪' },
     screen: { label: 'Desktop Capture', icon: '🖥️' },
     video: { label: 'Video', icon: '🎞️' },
@@ -71,6 +73,13 @@
 
     /** raw frame {src, w, h} */
     getFrame() { return null; }
+    /** frame counters for the Statistics module (live sources only) */
+    frameStats() {
+      if (this._fc == null) return null;
+      const now = performance.now(), dt = now - (this._fsT || now);
+      if (!this._fsT || dt >= 1000) { this._fps = this._fsT ? Math.round((this._fc - this._fsN) * 10000 / dt) / 10 : 0; this._fsT = now; this._fsN = this._fc; }
+      return { mode: 'device', fps: this._fps || 0, received: this._fc, decoded: this._fc, dropped: this._drops || 0, errors: 0, width: this.el ? this.el.videoWidth : 0, height: this.el ? this.el.videoHeight : 0 };
+    }
 
     fxActive() {
       const fx = this.props.effects;
@@ -82,7 +91,9 @@
       const fid = this.app.frameId;
       if (this._fxFrame === fid) return this._fxResult;
       this._fxFrame = fid;
-      const f = this.getFrame();
+      let f = this.getFrame();
+      if (this.props.videoDelay > 0) f = this._delay(f);
+      else if (this._ring) this._dropDelay();
       if (!f || !f.w || !f.h) return (this._fxResult = null);
       if (!f.processed && this.fxActive() && this.app.gl.ok) {
         // never process above what can be seen: output size × this input's zoom (keeps 4K sharp, saves GPU at 1080p)
@@ -92,6 +103,26 @@
       }
       return (this._fxResult = f);
     }
+
+    /** Per-input video delay (lip-sync, up to 1 s): keeps recent frames in a ring of canvases */
+    _delay(f) {
+      const ms = Math.min(1000, this.props.videoDelay), now = performance.now();
+      if (!this._ring) { this._ring = []; this._pool = []; this._delayOff = this.app.on('frame', () => { try { this.frame(); } catch { /* noop */ } }); }
+      if (f && f.w && f.h && !f.processed) {
+        const s = Math.min(1, this.app.W / f.w, this.app.H / f.h) || 1; // never store above project size
+        const w = Math.max(2, Math.round(f.w * s)), h = Math.max(2, Math.round(f.h * s));
+        let c = this._pool.pop();
+        if (!c || c.width !== w || c.height !== h) { c = document.createElement('canvas'); c.width = w; c.height = h; c._g = c.getContext('2d', { alpha: true }); }
+        c._g.clearRect(0, 0, w, h); c._g.drawImage(f.src, 0, 0, w, h);
+        this._ring.push({ t: now, c });
+      }
+      let pick = null;
+      while (this._ring.length > 1 && now - this._ring[1].t >= ms) this._pool.push(this._ring.shift().c);
+      if (this._ring.length && now - this._ring[0].t >= ms - 1) pick = this._ring[0].c;
+      if (this._pool.length > 4) this._pool.length = 4;
+      return pick ? { src: pick, w: pick.width, h: pick.height } : null;
+    }
+    _dropDelay() { if (this._delayOff) this._delayOff(); this._delayOff = null; this._ring = null; this._pool = null; }
 
     /** Draw into ctx within target rect — fault-isolated so one bad source never stops the engine */
     draw(ctx, tx = 0, ty = 0, tw = ctx.canvas.width, th = ctx.canvas.height) {
@@ -184,6 +215,7 @@
     update(cfg) { Object.assign(this.cfg, cfg); return this.init(); }
     destroy() {
       this.destroyed = true;
+      this._dropDelay();
       if (this.channel) { this.app.audio.removeChannel(this.channel); this.channel = null; }
       this.emit('destroy');
     }
@@ -477,7 +509,14 @@
       el.muted = true; el.playsInline = true; el.srcObject = this.stream;
       await el.play().catch(() => {});
       this._lastFrameAt = performance.now();
-      const onFrame = () => { this._lastFrameAt = performance.now(); if (this.el === el && this.stream) el.requestVideoFrameCallback(onFrame); };
+      this._fc = 0; this._drops = 0; this._pf = null;
+      const onFrame = (t, meta) => {
+        this._lastFrameAt = performance.now(); this._fc++;
+        // presentedFrames jumps when the browser skipped frames from the device
+        if (meta && this._pf != null && meta.presentedFrames > this._pf + 1) this._drops += meta.presentedFrames - this._pf - 1;
+        if (meta) this._pf = meta.presentedFrames;
+        if (this.el === el && this.stream) el.requestVideoFrameCallback(onFrame);
+      };
       if (el.requestVideoFrameCallback) el.requestVideoFrameCallback(onFrame);
       const at = this.stream.getAudioTracks()[0];
       if (at) { const ch = this.ensureChannel(); ch.setSource(this.app.audio.ctx.createMediaStreamSource(new MediaStream([at]))); }
@@ -562,36 +601,132 @@
   }
 
   /* ---------------- Network stream (IP camera / SRT / RTMP / RTSP / HLS / UDP) ---------------- */
-  class StreamInput extends Input {
+  // H.264 (and HEVC where the GPU supports it) is passed through untouched and decoded on the GPU with
+  // WebCodecs; other codecs fall back to an MJPEG preview made by FFmpeg.
+  let hevcOk = null;
+  async function hevcSupported() {
+    if (hevcOk === null) { try { hevcOk = !!(await VideoDecoder.isConfigSupported({ codec: 'hvc1.1.6.L120.B0' })).supported; } catch { hevcOk = false; } }
+    return hevcOk;
+  }
+  /** shared plumbing for inputs fed by FFmpeg/NDI through the media pipe */
+  class PipeInput extends Input {
     wantsSlate() { return true; }
+    async _audio() {
+      if (this.cfg.audio === false) return;
+      const ch = this.ensureChannel();
+      const ok = await this.app.audio.workletReady;
+      if (ok && !this.pcm) { this.pcm = new AudioWorkletNode(this.app.audio.ctx, 'bts-pcm', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] }); ch.setSource(this.pcm); }
+    }
+    _pipe(port) {
+      if (!this.pv) this.pv = new BTS.PipeVideo({ onError: (e) => this.onPipeError && this.onPipeError(e) });
+      if (this.pv.port !== port || this.pv.closed) this.pv.connect(port);
+    }
+    onAudio(buf) { if (this.pcm) this.pcm.port.postMessage(buf, [buf.buffer]); }
+    getFrame() {
+      if (this.mode === 'mjpeg') { const i = this.img; return i && i.naturalWidth && this.status === 'ok' ? { src: i, w: i.naturalWidth, h: i.naturalHeight } : null; }
+      if (!this.pv) return null;
+      const f = this.pv.get();
+      // hold the last frame briefly on a hiccup, then show the slate
+      if (f && this.status !== 'ok' && !this.cfg.keepLastFrame && performance.now() - this.pv.stats.lastAt > 1500) return null;
+      return f;
+    }
+    /** frame statistics for the Statistics window */
+    frameStats() {
+      const s = this.pv ? this.pv.stats : null;
+      return s ? { mode: this.mode, codec: s.codec, fps: s.fps, received: s.received, decoded: s.decoded, dropped: s.dropped + (this._pipeDropped || 0), errors: s.errors, width: s.width, height: s.height } : { mode: this.mode };
+    }
+    destroy() { window.bts.stream.stop(this.id); if (this.img) this.img.src = ''; if (this.pv) this.pv.close(); super.destroy(); }
+  }
+
+  class StreamInput extends PipeInput {
     async init() {
       this.setStatus('loading', 'Connecting…');
       await window.bts.stream.stop(this.id);
-      const r = await window.bts.stream.start(this.id, { url: this.cfg.url, transport: this.cfg.transport || 'tcp', fps: this.cfg.fps || 30, width: this.cfg.width || 1920, quality: this.cfg.quality || 4, audio: this.cfg.audio !== false, lowLatency: this.cfg.lowLatency !== false, listen: !!this.cfg.listen });
+      const cfg = { url: this.cfg.url, transport: this.cfg.transport || 'tcp', fps: this.cfg.fps || 30, width: this.cfg.width || 1920, quality: this.cfg.quality || 4, audio: this.cfg.audio !== false, lowLatency: this.cfg.lowLatency !== false, listen: !!this.cfg.listen,
+        decode: this._forceMjpeg ? 'mjpeg' : (this.cfg.decode || 'auto'), hevc: await hevcSupported() };
+      const r = await window.bts.stream.start(this.id, cfg);
       if (!r.ok) { this.setStatus('error', r.error); return; }
-      this.port = r.port;
-      this._connectImg();
-      if (this.cfg.audio !== false) {
-        const ch = this.ensureChannel();
-        const ok = await this.app.audio.workletReady;
-        if (ok && !this.pcm) { this.pcm = new AudioWorkletNode(this.app.audio.ctx, 'bts-pcm', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] }); ch.setSource(this.pcm); }
-      }
+      this.port = r.port; this.mjpegPort = r.mjpegPort;
+      this.mode = cfg.decode === 'mjpeg' ? 'mjpeg' : 'gpu';
+      if (this.mode === 'gpu') this._pipe(this.port); else this._connectImg();
+      await this._audio();
     }
     _connectImg() {
       const img = new Image();
       img.crossOrigin = 'anonymous';
       img.decoding = 'sync';
-      img.src = `http://127.0.0.1:${this.port}/?t=${Date.now()}`;
+      img.src = `http://127.0.0.1:${this.mjpegPort}/?t=${Date.now()}`;
       this.img = img;
     }
+    onPipeError() { // GPU decoder can't handle this stream: switch to the compatibility path
+      if (this._forceMjpeg) return;
+      this._forceMjpeg = true;
+      U.toast(`${this.title}: the GPU decoder can't play this stream — using compatibility mode`, 'info', 6000);
+      this.init();
+    }
     onStreamStatus(s) {
-      if (s.state === 'live') { if (this.status !== 'ok') this._connectImg(); this.setStatus('ok'); }
+      if (s.state === 'live') {
+        if (s.mode === 'mjpeg' && this.mode !== 'mjpeg') { this.mode = 'mjpeg'; if (this.pv) { this.pv.close(); this.pv = null; } }
+        if (this.mode === 'mjpeg' && (this.status !== 'ok' || !this.img)) this._connectImg();
+        this.codec = s.codec;
+        this.setStatus('ok');
+      }
       else if (s.state === 'reconnecting') this.setStatus('error', 'Reconnecting… ' + (s.message || ''));
       else if (s.state === 'error') this.setStatus('error', s.message || 'Stream error');
     }
-    onAudio(buf) { if (this.pcm) this.pcm.port.postMessage(buf, [buf.buffer]); }
-    getFrame() { const i = this.img; return i && i.naturalWidth && this.status === 'ok' ? { src: i, w: i.naturalWidth, h: i.naturalHeight } : null; }
-    destroy() { window.bts.stream.stop(this.id); if (this.img) this.img.src = ''; super.destroy(); }
+  }
+
+  /* ---------------- Native capture (DirectShow / DeckLink / V4L2 / AVFoundation) ---------------- */
+  // FFmpeg opens the device with the exact port, format and mode; raw NV12 frames, no compression.
+  class CaptureInput extends PipeInput {
+    async init() {
+      this.setStatus('loading', 'Opening device…');
+      await window.bts.stream.stop(this.id);
+      const c = this.cfg;
+      if (!c.device) { this.setStatus('error', 'Choose a device'); return; }
+      const r = await window.bts.stream.start(this.id, { kind: 'capture', backend: c.backend, device: c.device, audioDevice: c.audioDevice || '', audio: c.audio !== false,
+        width: c.width || 0, height: c.height || 0, fps: c.fps || 0, outWidth: c.outWidth || c.width || this.app.W, outHeight: c.outHeight || c.height || this.app.H,
+        devFormat: c.devFormat || 'auto', formatCode: c.formatCode || '', port: c.port ?? '', audioPort: c.audioPort ?? '', audioChannels: c.audioChannels || 2, audioPair: c.audioPair || 0, deinterlace: !!c.deinterlace });
+      if (!r.ok) { this.setStatus('error', r.error); return; }
+      this.mode = 'raw';
+      this._pipe(r.port);
+      await this._audio();
+    }
+    onStreamStatus(s) {
+      if (s.state === 'live') { this.trackInfo = `${s.width}×${s.height} NV12 (native)`; this.setStatus('ok'); }
+      else if (s.state === 'reconnecting') this.setStatus('error', (s.message || 'Reconnecting…'));
+      else if (s.state === 'error') this.setStatus('error', s.message || 'Capture error');
+    }
+  }
+
+  /* ---------------- NDI® source ---------------- */
+  // Received through the NDI runtime installed on this PC; raw BGRA/BGRX frames, tally sent back to the source.
+  class NdiInput extends PipeInput {
+    async init() {
+      this.setStatus('loading', 'Connecting to NDI source…');
+      await window.bts.ndi.recvStop(this.id);
+      if (!this.cfg.source) { this.setStatus('error', 'Choose an NDI source'); return; }
+      const r = await window.bts.ndi.recv(this.id, { source: this.cfg.source, url: this.cfg.url || '', bandwidth: this.cfg.bandwidth || 'highest', audio: this.cfg.audio !== false, audioPair: this.cfg.audioPair || 0 });
+      if (!r.ok) { this.setStatus('error', r.error); return; }
+      this.mode = 'raw';
+      this._pipe(r.port);
+      await this._audio();
+      if (!this._offBus) this._offBus = this.app.on('bus', () => this._tally());
+      this._tally();
+    }
+    _tally() {
+      const pgm = !!this.live, pvw = this.app.previewId === this.id;
+      if (pgm === this._tp && pvw === this._tv) return;
+      this._tp = pgm; this._tv = pvw;
+      window.bts.ndi.tally(this.id, pgm, pvw);
+    }
+    onLive() { this._tally(); }
+    onStreamStatus(s) {
+      if (s.state === 'live') { this.trackInfo = `${s.width}×${s.height} @ ${s.fps} ${s.format} (NDI)`; this.setStatus('ok'); }
+      else if (s.state === 'reconnecting') this.setStatus('error', s.message || 'NDI source offline');
+      else if (s.state === 'error') this.setStatus('error', s.message || 'NDI error');
+    }
+    destroy() { if (this._offBus) this._offBus(); window.bts.ndi.recvStop(this.id); if (this.pv) this.pv.close(); Input.prototype.destroy.call(this); }
   }
 
   /* ---------------- Audio device ---------------- */
@@ -838,7 +973,7 @@
     destroy() { if (this._offFrame) this._offFrame(); for (const f of this.ring) try { f.bmp.close(); } catch { /* noop */ } this.ring = []; super.destroy(); }
   }
 
-  const CLASSES = { mix: MixInput, delay: DelayInput, stream: StreamInput, replay: VideoInput, color: ColorInput, image: ImageInput, video: VideoInput, 'audio-file': VideoInput, playlist: PlaylistInput, camera: CameraInput, screen: ScreenInput, audio: AudioDeviceInput, browser: BrowserInput, title: TitleInput, scene: SceneInput };
+  const CLASSES = { mix: MixInput, delay: DelayInput, stream: StreamInput, capture: CaptureInput, ndi: NdiInput, replay: VideoInput, color: ColorInput, image: ImageInput, video: VideoInput, 'audio-file': VideoInput, playlist: PlaylistInput, camera: CameraInput, screen: ScreenInput, audio: AudioDeviceInput, browser: BrowserInput, title: TitleInput, scene: SceneInput };
 
   function register(type, Cls, info) { CLASSES[type] = Cls; if (info) TYPE_INFO[type] = info; }
   function create(app, data) {
@@ -847,5 +982,5 @@
     return new C(app, data);
   }
 
-  BTS.Inputs = { create, register, playableUrl, VideoInput, TYPE_INFO, DEFAULT_PROPS, Input, cardHint, findPairedAudio };
+  BTS.Inputs = { create, register, playableUrl, VideoInput, PipeInput, TYPE_INFO, DEFAULT_PROPS, Input, cardHint, findPairedAudio };
 })(window.BTS);

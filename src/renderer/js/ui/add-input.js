@@ -5,6 +5,8 @@
 
   const TYPES = [
     ['camera', '🎥', 'Camera / Capture', 'Webcam, Blackmagic, AVerMedia, Elgato…'],
+    ['capture', '📼', 'Capture Card (Pro)', 'Input port, exact format, 8–16 ch audio'],
+    ['ndi', '📶', 'NDI®', 'NDI cameras, PCs, vMix / OBS outputs'],
     ['stream', '📡', 'Stream / IP Cam', 'RTSP, SRT, RTMP, HLS, UDP'],
     ['screen', '🖥️', 'Desktop Capture', 'Screen or application window'],
     ['guest', '📞', 'Remote Guest', 'Callers join from a browser link'],
@@ -153,14 +155,115 @@
       };
     },
 
+    async capture(el) {
+      const plat = window.bts.platform;
+      const backends = plat === 'win32' ? [['dshow', 'DirectShow — any capture card or camera'], ['decklink', 'Blackmagic DeckLink / UltraStudio'], ['test', 'Test signal (no hardware)']]
+        : plat === 'darwin' ? [['avfoundation', 'AVFoundation — cameras & capture devices'], ['decklink', 'Blackmagic DeckLink / UltraStudio'], ['test', 'Test signal (no hardware)']]
+          : [['v4l2', 'Video4Linux — cameras & capture cards'], ['decklink', 'Blackmagic DeckLink'], ['test', 'Test signal (no hardware)']];
+      const o = { backend: backends[0][0], device: '', audioDevice: '', mode: 'auto', port: '', audioPort: '', audioChannels: 2, audioPair: 0, deinterlace: false, outSize: 'project', title: '', keepLastFrame: true };
+      let devs = [], modes = [], busy = false;
+      const box = U.el('div');
+      const draw = () => {
+        box.innerHTML = '';
+        const vids = devs.filter(d => d.kind === 'video'), auds = devs.filter(d => d.kind === 'audio');
+        if (!o.device && vids[0]) o.device = vids[0].name;
+        const sel = (opts, val, on) => { const e = U.el('select', { style: { width: '100%' } }); for (const [v, l] of opts) e.append(U.el('option', { value: v, text: l, selected: String(v) === String(val) })); e.onchange = () => on(e.value); return e; };
+        const backSel = sel(backends, o.backend, (v) => { o.backend = v; o.device = ''; o.mode = 'auto'; modes = []; load(); });
+        const devSel = sel(vids.length ? vids.map(d => [d.name, d.label || d.name]) : [['', busy ? 'Searching…' : '— no device found —']], o.device, (v) => { o.device = v; o.mode = 'auto'; loadModes(); });
+        const modeOpts = [['auto', 'Auto — device default'], ...modes.map(m => [m.code ? `code:${m.code}` : `${m.format || ''}|${m.width}x${m.height}@${m.fps}`, m.code ? `${m.code} — ${m.width}×${m.height} ${m.fps}${m.interlaced ? 'i' : 'p'}` : `${m.width}×${m.height} @ ${m.fps} — ${m.format}`])];
+        if (!modes.length) for (const v of ['1920x1080@60', '1920x1080@50', '1920x1080@30', '1920x1080@25', '3840x2160@30', '1280x720@60']) modeOpts.push([`|${v}`, v.replace('@', ' @ ')]);
+        const modeSel = sel(modeOpts, o.mode, (v) => { o.mode = v; });
+        const portOpts = o.backend === 'decklink' ? [['', 'Default'], ['sdi', 'SDI'], ['hdmi', 'HDMI'], ['optical_sdi', 'Optical SDI'], ['component', 'Component'], ['composite', 'Composite'], ['s_video', 'S-Video']]
+          : [['', 'Default'], ...[0, 1, 2, 3, 4, 5, 6, 7].map(n => [String(n), `Crossbar pin ${n}`])];
+        const rows = [
+          { label: 'Driver', custom: backSel },
+          { label: 'Device', custom: devSel },
+          { label: 'Video mode', custom: modeSel },
+          (o.backend === 'dshow' || o.backend === 'decklink') ? { label: o.backend === 'decklink' ? 'Input connector' : 'Input port', custom: sel(portOpts, o.port, (v) => { o.port = v; }) } : null,
+          (o.backend === 'dshow' || o.backend === 'v4l2' || o.backend === 'avfoundation') ? { label: 'Audio device', custom: sel([['', 'None'], ...auds.map(d => [d.name, d.label || d.name]), ...(o.backend === 'v4l2' ? [['default', 'ALSA default'], ['hw:1', 'ALSA hw:1'], ['hw:2', 'ALSA hw:2']] : [])], o.audioDevice, (v) => { o.audioDevice = v; }) } : null,
+          { label: 'Audio channels', custom: sel([[2, '2 (stereo)'], [8, '8 (embedded SDI / HDMI)'], [16, '16 (embedded SDI)']], o.audioChannels, (v) => { o.audioChannels = +v; o.audioPair = 0; draw(); }) },
+          { label: 'Use channels', custom: sel(Array.from({ length: o.audioChannels / 2 }, (_, i) => [i, `${i * 2 + 1} + ${i * 2 + 2}`]), o.audioPair, (v) => { o.audioPair = +v; }) },
+          { label: 'Picture size', custom: sel([['project', `Project size (${BTS.studio.W}×${BTS.studio.H})`], ['source', 'Same as the video mode']], o.outSize, (v) => { o.outSize = v; }) },
+          { label: 'Deinterlace', key: 'deinterlace', type: 'checkbox', hint: 'For 1080i / 576i / 480i sources (motion-adaptive, full frame rate).' },
+          { label: 'Hold last frame on signal loss', key: 'keepLastFrame', type: 'checkbox' },
+          { label: 'Title', key: 'title', placeholder: 'Optional' }
+        ].filter(Boolean);
+        box.append(BTS.Dialog.form(rows, o));
+        const help = o.backend === 'decklink'
+          ? 'Blackmagic needs <b>Desktop Video</b> and an FFmpeg built with DeckLink support (Settings → External Outputs → Blackmagic → “FFmpeg with DeckLink”). Pick the exact video mode of your camera — DeckLink cards do not convert.'
+          : o.backend === 'dshow' ? 'Opens the card directly with FFmpeg (DirectShow) — you choose the exact input port (crossbar pin: SDI, HDMI, component…), pixel format and frame rate, and up to 16 embedded audio channels. Frames reach BTS Studio uncompressed. Close the card’s own software first. For simple webcams, “Camera / Capture” is lighter.'
+            : o.backend === 'test' ? 'A moving test pattern with a different tone on each audio channel — useful to check channel routing without hardware.' : '';
+        if (help) box.append(U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, html: help }));
+        box.append(U.el('button', { class: 'btn', text: '↻ Search again', onclick: () => load() }));
+      };
+      const loadModes = async () => {
+        modes = [];
+        if (o.device && (o.backend === 'dshow' || o.backend === 'decklink')) { const r = await window.bts.stream.modes(o.backend, o.device); modes = r.modes || []; }
+        draw();
+      };
+      const load = async () => {
+        busy = true; devs = []; draw();
+        const r = await window.bts.stream.devices(o.backend);
+        devs = r.devices || []; busy = false;
+        if (!devs.length && r.error === 'nosupport') U.toast(o.backend === 'decklink' ? 'This FFmpeg has no DeckLink support — set “FFmpeg with DeckLink” in Settings → External Outputs' : 'This driver is not available in the bundled FFmpeg', 'error', 8000);
+        await loadModes();
+      };
+      el.innerHTML = ''; el.append(box);
+      load();
+      return () => {
+        if (!o.device) { U.toast('Choose a device', 'error'); return null; }
+        const cfg = { backend: o.backend, device: o.device, audioDevice: o.audioDevice, port: o.port, audioPort: o.audioPort, audioChannels: o.audioChannels, audioPair: o.audioPair, deinterlace: o.deinterlace, keepLastFrame: o.keepLastFrame, audio: true };
+        if (o.mode.startsWith('code:')) { cfg.formatCode = o.mode.slice(5); const m = modes.find(x => x.code === cfg.formatCode); if (m) { cfg.width = m.width; cfg.height = m.height; cfg.fps = m.fps; } }
+        else if (o.mode !== 'auto') { const [fmt, rest] = o.mode.split('|'); const [wh, f] = rest.split('@'); [cfg.width, cfg.height] = wh.split('x').map(Number); cfg.fps = +f; if (fmt) cfg.devFormat = fmt; }
+        if (o.outSize === 'project' || !cfg.width) { cfg.outWidth = BTS.studio.W; cfg.outHeight = BTS.studio.H; }
+        const label = (devs.find(d => d.name === o.device) || {}).label || o.device;
+        return [{ type: 'capture', title: o.title || String(label).replace(/^\/dev\//, ''), cfg }];
+      };
+    },
+
+    async ndi(el) {
+      const o = { source: '', url: '', bandwidth: 'highest', audioPair: 0, title: '' };
+      let list = [], state = null;
+      const box = U.el('div');
+      const draw = () => {
+        box.innerHTML = '';
+        if (state && !state.available) {
+          box.append(U.el('div', { class: 'ext-warn', html: 'The NDI runtime is not installed on this PC. Install the free <b>NDI Tools</b> from <b>ndi.video</b> (it includes the runtime), then click Search again.' }));
+        }
+        const src = U.el('select', { style: { width: '100%' }, size: 8 });
+        for (const s of list) src.append(U.el('option', { value: s.name, text: s.name, selected: s.name === o.source }));
+        if (!list.length) src.append(U.el('option', { value: '', text: state ? 'No NDI sources found yet' : 'Searching the network…', disabled: true }));
+        src.onchange = () => { o.source = src.value; o.url = (list.find(s => s.name === src.value) || {}).url || ''; };
+        box.append(BTS.Dialog.form([
+          { label: 'Source', custom: src },
+          { label: 'Quality', key: 'bandwidth', type: 'select', options: [['highest', 'Full quality'], ['lowest', 'Low bandwidth (proxy)']] },
+          { label: 'Audio channels', key: 'audioPair', type: 'select', number: true, options: [[0, '1 + 2'], [1, '3 + 4'], [2, '5 + 6'], [3, '7 + 8']] },
+          { label: 'Title', key: 'title', placeholder: 'Optional' }
+        ], o));
+        box.append(U.el('div', { style: { display: 'flex', gap: '8px', marginTop: '8px' } }, [
+          U.el('button', { class: 'btn', text: '↻ Search again', onclick: () => search(2500) }),
+          U.el('span', { class: 'hint', text: 'Sources on other subnets: add their IP in Settings → Media & Guests → NDI extra IPs.' })
+        ]));
+      };
+      const search = async (wait) => { state = null; draw(); state = await window.bts.ndi.sources(wait); list = state.sources || []; if (!o.source && list[0]) { o.source = list[0].name; o.url = list[0].url; } draw(); };
+      el.innerHTML = ''; el.append(box);
+      search(1500);
+      return () => {
+        if (!o.source) { U.toast('Choose an NDI source', 'error'); return null; }
+        return [{ type: 'ndi', title: o.title || o.source.replace(/^.*\((.*)\)$/, '$1'), cfg: { source: o.source, url: o.url, bandwidth: o.bandwidth, audioPair: o.audioPair, audio: true } }];
+      };
+    },
+
     async stream(el) {
-      const o = { url: '', transport: 'tcp', width: 1920, fps: 30, quality: 4, audio: true, lowLatency: true, listen: false, title: '' };
+      const o = { url: '', transport: 'tcp', decode: 'auto', width: 1920, fps: 30, quality: 4, audio: true, lowLatency: true, listen: false, title: '' };
       el.innerHTML = '';
       el.append(BTS.Dialog.form([
         { label: 'Stream URL', key: 'url', placeholder: 'rtsp://user:pass@192.168.1.64:554/Streaming/Channels/101' },
-        { custom: U.el('div', { class: 'hint', style: { lineHeight: '1.7' }, html: 'Examples:<br>• IP camera / CCTV: <span class="kbd">rtsp://192.168.1.64:554/stream1</span><br>• SRT (receive from encoder/phone): <span class="kbd">srt://0.0.0.0:9000?mode=listener&amp;latency=200000</span><br>• RTMP pull: <span class="kbd">rtmp://server/live/key</span> • HLS: <span class="kbd">https://…/index.m3u8</span><br>• UDP / MPEG-TS: <span class="kbd">udp://0.0.0.0:1234</span> • NDI: use an NDI → RTSP/SRT bridge' }) },
+        { custom: U.el('div', { class: 'hint', style: { lineHeight: '1.7' }, html: 'Examples:<br>• IP camera / CCTV: <span class="kbd">rtsp://192.168.1.64:554/stream1</span><br>• SRT (receive from encoder/phone): <span class="kbd">srt://0.0.0.0:9000?mode=listener&amp;latency=200000</span><br>• RTMP pull: <span class="kbd">rtmp://server/live/key</span> • HLS: <span class="kbd">https://…/index.m3u8</span><br>• UDP / MPEG-TS: <span class="kbd">udp://0.0.0.0:1234</span> • NDI: use the NDI input type' }) },
+        { label: 'Decoding', key: 'decode', type: 'select', options: [['auto', 'GPU, no re-compression (recommended)'], ['mjpeg', 'Compatibility (FFmpeg → MJPEG)']], hint: 'H.264 and HEVC are decoded on the GPU at full quality. Other codecs (MPEG-2…) switch to compatibility automatically.' },
         { label: 'RTSP transport', key: 'transport', type: 'select', options: [['tcp', 'TCP (reliable, recommended)'], ['udp', 'UDP (lowest latency)']] },
         { label: 'RTMP: listen for incoming', key: 'listen', type: 'checkbox', hint: 'Lets an encoder push to rtmp://THIS-PC:1935/live/key' },
+        { section: 'Compatibility mode only' },
         { label: 'Max width', key: 'width', type: 'select', number: true, options: [[1280, '1280 (720p)'], [1920, '1920 (1080p)'], [3840, '3840 (4K)']] },
         { label: 'Frame rate', key: 'fps', type: 'select', number: true, options: [[25, '25'], [30, '30'], [50, '50'], [60, '60']] },
         { label: 'Quality', key: 'quality', type: 'select', number: true, options: [[2, 'Highest'], [4, 'High'], [7, 'Medium (lower CPU)']] },
@@ -171,7 +274,7 @@
       return () => {
         if (!o.url) { U.toast('Enter a stream URL', 'error'); return null; }
         let host = ''; try { host = new URL(o.url).hostname; } catch { /* noop */ }
-        return [{ type: 'stream', title: o.title || ('Stream ' + (host || '')).trim(), cfg: { url: o.url, transport: o.transport, width: o.width, fps: o.fps, quality: o.quality, audio: o.audio, lowLatency: o.lowLatency, listen: o.listen } }];
+        return [{ type: 'stream', title: o.title || ('Stream ' + (host || '')).trim(), cfg: { url: o.url, transport: o.transport, decode: o.decode, width: o.width, fps: o.fps, quality: o.quality, audio: o.audio, lowLatency: o.lowLatency, listen: o.listen } }];
       };
     },
 

@@ -191,7 +191,7 @@
     }
     async links() {
       const urls = await Guests.urls();
-      return urls.map(u => `${u}?k=${this.cfg.key}`);
+      return urls.map(u => `${u}${u.includes('?') ? '&' : '?'}k=${this.cfg.key}`);
     }
     async onSignal(m) {
       if (m.type === 'offer') return this._answer(m);

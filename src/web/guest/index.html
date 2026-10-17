@@ -79,6 +79,10 @@ button:disabled{opacity:.5;cursor:default}
   const $ = (id) => document.getElementById(id);
   const q = new URLSearchParams(location.search);
   const K = q.get('k') || '';
+  // Two ways to reach the studio: directly (page served by BTS Studio on the LAN / forwarded port) or through
+  // the BTS Link relay on studio.btspl.tech (?r=ROOM) — no port forwarding needed; media stays peer-to-peer.
+  const ROOM = q.get('r') || '';
+  const RELAY = ROOM ? 'api.php' : '';
   const SID = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2)) ;
   let info = null, stream = null, pc = null, es = null, meterRaf = 0;
   try { $('name').value = localStorage.getItem('bts-guest-name') || ''; } catch {}
@@ -87,7 +91,12 @@ button:disabled{opacity:.5;cursor:default}
   const fail = (m) => { $('err').textContent = m; };
 
   async function api(path, body) {
-    const r = await fetch('/guest/api/' + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+    let url = '/guest/api/' + path;
+    if (RELAY) {
+      if (path.startsWith('info')) url = `${RELAY}?a=info&r=${encodeURIComponent(ROOM)}&k=${encodeURIComponent(K)}`;
+      else { url = `${RELAY}?a=send&r=${encodeURIComponent(ROOM)}`; body = { from: SID, msg: body }; }
+    }
+    const r = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : { cache: 'no-store' });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || j.ok === false) throw new Error(j.error || ('HTTP ' + r.status));
     return j;
@@ -130,9 +139,12 @@ button:disabled{opacity:.5;cursor:default}
       const name = $('name').value.trim() || 'Guest';
       try { localStorage.setItem('bts-guest-name', name); } catch {}
       if (!stream) await getMedia();
-      es = new EventSource(`/guest/api/events?k=${encodeURIComponent(K)}&sid=${encodeURIComponent(SID)}`);
-      es.onmessage = (e) => onMsg(JSON.parse(e.data));
-      await new Promise((res, rej) => { es.onopen = res; setTimeout(() => rej(new Error('Could not reach BTS Studio')), 8000); });
+      if (RELAY) es = relayEvents();
+      else {
+        es = new EventSource(`/guest/api/events?k=${encodeURIComponent(K)}&sid=${encodeURIComponent(SID)}`);
+        es.onmessage = (e) => onMsg(JSON.parse(e.data));
+        await new Promise((res, rej) => { es.onopen = res; setTimeout(() => rej(new Error('Could not reach BTS Studio')), 8000); });
+      }
       pc = new RTCPeerConnection({ iceServers: info.iceServers || [] });
       stream.getTracks().forEach(t => pc.addTrack(t, stream));
       // receive the program return feed
@@ -156,6 +168,23 @@ button:disabled{opacity:.5;cursor:default}
       fail(e.message || String(e)); $('join').disabled = false; setState('Not connected');
       if (es) { es.close(); es = null; } if (pc) { pc.close(); pc = null; }
     }
+  }
+
+  /** relay mode: poll for messages from the studio (answer, chat, tally, bye) */
+  function relayEvents() {
+    let stop = false, delay = 600;
+    const loop = async () => {
+      if (stop) return;
+      try {
+        const r = await fetch(`${RELAY}?a=recv&r=${encodeURIComponent(ROOM)}&sid=${encodeURIComponent(SID)}`, { cache: 'no-store' });
+        const j = await r.json();
+        for (const m of (j.msgs || [])) await onMsg(m);
+        delay = pc && pc.connectionState === 'connected' ? 2000 : 600;
+      } catch { delay = 2000; }
+      setTimeout(loop, delay);
+    };
+    loop();
+    return { close() { stop = true; } };
   }
 
   async function onMsg(m) {
@@ -189,7 +218,12 @@ button:disabled{opacity:.5;cursor:default}
   $('bEnd').onclick = () => leave();
   const send = () => { const t = $('msg').value.trim(); if (!t) return; api('signal', { k: K, sid: SID, type: 'chat', text: t, name: $('name').value }).catch(() => {}); onMsg({ type: 'chat', from: 'You', text: t }); $('msg').value = ''; };
   $('send').onclick = send; $('msg').onkeydown = (e) => { if (e.key === 'Enter') send(); };
-  window.addEventListener('beforeunload', () => { if (pc) navigator.sendBeacon && navigator.sendBeacon('/guest/api/signal', new Blob([JSON.stringify({ k: K, sid: SID, type: 'bye' })], { type: 'application/json' })); });
+  window.addEventListener('beforeunload', () => {
+    if (!pc || !navigator.sendBeacon) return;
+    const bye = { k: K, sid: SID, type: 'bye' };
+    if (RELAY) navigator.sendBeacon(`${RELAY}?a=send&r=${encodeURIComponent(ROOM)}`, new Blob([JSON.stringify({ from: SID, msg: bye })], { type: 'application/json' }));
+    else navigator.sendBeacon('/guest/api/signal', new Blob([JSON.stringify(bye)], { type: 'application/json' }));
+  });
 
   (async () => {
     if (!window.isSecureContext || !navigator.mediaDevices) return fail('This page must be opened over https:// for camera access.');

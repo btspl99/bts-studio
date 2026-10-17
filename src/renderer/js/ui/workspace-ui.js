@@ -142,11 +142,13 @@
       this.encEl = U.el('div', { class: 'list', style: { margin: '0 10px 8px' } });
       this.outsEl = U.el('div', { class: 'list', style: { margin: '0 10px 8px' } });
       this.procEl = U.el('div', { class: 'list', style: { margin: '0 10px 10px' } });
+      this.inEl = U.el('div', { class: 'list', style: { margin: '0 10px 8px' } });
       const h = (t) => U.el('div', { class: 'stat-h', text: t });
-      U.$('#statsModule').append(this.statsEl, h('FRAME RATE (last 2 min)'), this.graph, h('ENCODERS'), this.encEl, h('OUTPUTS'), this.outsEl, h('PROCESSES'), this.procEl);
+      U.$('#statsModule').append(this.statsEl, h('FRAME RATE (last 2 min)'), this.graph, h('LIVE INPUTS'), this.inEl, h('ENCODERS'), this.encEl, h('OUTPUTS'), this.outsEl, h('PROCESSES'), this.procEl);
       if (BTS.health) BTS.health.on('sample', () => { if (this.statsOn) this.renderStats(); });
     }
     renderStats() {
+      if (!this.statsEl) return; // module shown while the workspace is still being built
       const st = this.studio, s = st.stats, H = BTS.health && BTS.health.last;
       const card = (k, v, cls = '') => `<div class="stat"><div class="k">${k}</div><div class="v ${cls}">${v}</div></div>`;
       const gpuEnc = H && H.gpuStatus ? H.gpuStatus.video_encode : '';
@@ -177,6 +179,9 @@
         smp.forEach((x, i) => { const px = i / 59 * W, py = Hh - Math.min(1, x.renderMs / (1000 / x.target)) * Hh * 0.9; i ? g.lineTo(px, py) : g.moveTo(px, py); });
         g.stroke();
       }
+      const ins = st.inputs.map(i => [i, i.frameStats && i.frameStats()]).filter(([, f]) => f);
+      const modeName = { gpu: 'GPU decode', mjpeg: 'Compatibility (MJPEG)', raw: 'Uncompressed', device: 'Device' };
+      this.inEl.innerHTML = ins.length ? ins.map(([i, f]) => `<div class="li"><b style="min-width:150px">${i.number}. ${U.esc(i.title)}</b><span class="grow">${U.esc(modeName[f.mode] || f.mode || '')}${f.codec ? ' · ' + U.esc(f.codec) : ''}${f.width ? ` · ${f.width}×${f.height}` : ''}</span><span>${(f.fps || 0).toFixed(1)} fps</span><span style="min-width:110px;text-align:right" class="${f.dropped ? 'bad' : ''}">${f.dropped} dropped${f.errors ? ` · ${f.errors} err` : ''}</span></div>`).join('') : '<div class="li hint">No cameras, streams, capture or NDI inputs</div>';
       const enc = st.outputs.encoder ? st.outputs.encoder.stats() : [];
       this.encEl.innerHTML = enc.length ? enc.map(e => `<div class="li"><b style="min-width:110px">${e.w}×${e.h} ${e.fps}p</b><span class="grow">${e.hardware ? 'GPU' : 'CPU'} H.264 · ${U.esc(e.mode || '')} · ${e.users} output${e.users > 1 ? 's' : ''}</span><span>${e.mbps.toFixed(1)} Mb/s</span><span style="min-width:90px;text-align:right" class="${e.dropped ? 'bad' : ''}">${e.dropped} dropped</span></div>`).join('') : '<div class="li hint">No encoders running</div>';
       const outs = H ? H.outs : [];

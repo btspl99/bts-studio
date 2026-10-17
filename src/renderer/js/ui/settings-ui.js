@@ -140,7 +140,7 @@
       U.el('div', { html: `<b>TCP API</b>: port <span class="kbd">${s.api.tcpPort || 8099}</span> — <span class="kbd">FUNCTION Cut Input=2</span> · <span class="kbd">TALLY</span> · <span class="kbd">SUBSCRIBE TALLY</span> · <span class="kbd">XML</span> (Companion / Stream Deck / tally boxes)` })
     ]));
 
-    s.guests = s.guests || {}; s.media = s.media || {};
+    s.guests = s.guests || {}; s.media = s.media || {}; s.ndi = s.ndi || {};
     const guestsEl = U.el('div', {}, [
       F([{ section: 'Media files' },
         { label: 'Auto-convert unsupported formats', key: 'autoConvert', type: 'checkbox', hint: 'AVI, WMV, MXF, MPEG-2, VOB, FLV, ProRes/DNxHD MOV… are converted once to an H.264 proxy with FFmpeg and cached.' },
@@ -148,12 +148,18 @@
       ], s.media),
       U.el('div', { style: { margin: '6px 0 14px' } }, [U.el('button', { class: 'btn', text: 'Clear converted-file cache', onclick: async () => { await window.bts.media.clearCache(); U.toast('Cache cleared'); } })]),
       F([{ section: 'Remote Guests (browser call-in)' },
+        { label: 'BTS Link — no port forwarding', key: 'relay', type: 'checkbox', hint: 'Guests join from a studio.btspl.tech link, from anywhere. Only the call set-up passes through the BTS Link server; picture and sound go directly between the guest and this PC.', onChange: (v) => { window.bts.guests.relay(!!v); } },
         { label: 'Guest page port (HTTPS)', key: 'port', type: 'number', min: 1024, max: 65535, hint: 'Forward this TCP port on your router to allow guests from outside your network.' },
         { label: 'STUN server(s)', key: 'stun', placeholder: 'stun:stun.l.google.com:19302', hint: 'Helps guests behind home routers find a direct path. Separate several with commas.' },
         { label: 'TURN server', key: 'turn', placeholder: 'turn:turn.example.com:3478', hint: 'Optional relay for guests on strict corporate / mobile networks.' },
         { label: 'TURN user name', key: 'turnUser' },
         { label: 'TURN password', key: 'turnPass', type: 'password' }
       ], s.guests),
+      F([{ section: 'NDI®' },
+        { label: 'NDI extra IPs', key: 'extraIps', placeholder: '192.168.2.20, 10.0.0.15', hint: 'Find NDI sources on other subnets (where discovery does not reach).' },
+        { label: 'NDI groups', key: 'groups', placeholder: 'public', hint: 'Only see / send in these NDI groups (comma separated). Empty = public.' },
+        { label: 'NDI runtime (optional)', key: 'runtime', type: 'file', hint: 'Only if NDI Tools is installed somewhere unusual: path to Processing.NDI.Lib.x64.dll.' }
+      ], s.ndi),
       U.el('p', { class: 'hint', text: 'Port changes apply the next time BTS Studio starts.' })
     ]);
 
@@ -373,6 +379,38 @@
         ], opt, () => {})
       ]));
       box.append(U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'Like vMix: set up each output once, tick it, then press External (or F7) to turn them all on or off. Each output is a clean, full-screen feed. Sources: Output, Clean feed (Output without overlays / titles — for IMAG and recorders), Preview, Multiview 1–4 or any input. Rotate for portrait screens, Mirror for teleprompters, Area or Video wall to spread one picture over several screens. Set each screen’s resolution and refresh rate in Windows display settings. Press Esc on an output to close it.' }));
+
+      /* ----- NDI® outputs ----- */
+      const NO = out.ndi, ncfg = NO.cfg();
+      const ndiState = await window.bts.ndi.status();
+      box.append(U.el('div', { class: 'ext-head' }, [
+        U.el('h4', { text: 'NDI® outputs — send to other PCs, vMix, OBS, NDI monitors and converters on the network' }),
+        U.el('span', { class: 'hint', html: ndiState.available ? `<b style="color:var(--pvw)">●</b> ${U.esc(ndiState.version || 'NDI runtime')}` : '<b style="color:var(--pgm)">●</b> NDI runtime not installed' })
+      ]));
+      if (!ndiState.available) box.append(U.el('div', { class: 'ext-warn', html: 'NDI needs the free <b>NDI Tools</b> (or NDI Runtime) from <b>ndi.video</b> — install it, then reopen this window. BTS Studio uses the runtime installed on this PC.' }));
+      const ntbl = U.el('table', { class: 'tbl ext-tbl' });
+      ntbl.append(U.el('tr', {}, ['On', '#', 'NDI name', 'Source', 'Size', 'Audio', 'Status', ''].map(h => U.el('th', { text: h }))));
+      for (let slot = 0; slot < BTS.NdiOut.SLOTS; slot++) {
+        const c = ncfg.outputs[slot], isLive = NO.isLive(slot);
+        const set = (k, v) => { c[k] = v; NO.save(); if (isLive) { NO.start(slot).then(() => setTimeout(draw, 300)); } };
+        const en = U.el('input', { type: 'checkbox', title: 'Started by “Start all” and when BTS Studio opens (if enabled)' }); en.checked = !!c.enabled; en.onchange = () => { c.enabled = en.checked; NO.save(); };
+        const nm = U.el('input', { type: 'text', value: c.name, style: { width: '150px' } }); nm.onchange = () => set('name', nm.value.trim() || 'BTS Studio');
+        const src = sel(srcOpts(), c.source, (v) => set('source', v));
+        const size = sel([['project', `Project (${st.W}×${st.H})`], ['2160', '3840×2160'], ['1080', '1920×1080'], ['720', '1280×720']], c.size, (v) => set('size', v));
+        const bus = sel([['M', 'Master'], ...'ABCDEFG'.split('').map(b => [b, 'Bus ' + b])], c.bus || 'M', (v) => set('bus', v));
+        const s2 = NO.status(slot);
+        const btn = isLive ? U.el('button', { class: 'btn danger', text: 'Stop', onclick: () => { NO.stop(slot); setTimeout(draw, 200); } })
+          : U.el('button', { class: 'btn primary', text: 'Start', disabled: !ndiState.available, onclick: async () => { await NO.start(slot); setTimeout(draw, 400); } });
+        ntbl.append(U.el('tr', { class: isLive ? 'live' : '' }, [U.el('td', {}, [en]), U.el('td', { text: String(slot + 1) }), U.el('td', {}, [nm]), U.el('td', {}, [src]), U.el('td', {}, [size]), U.el('td', {}, [bus]),
+          U.el('td', { html: isLive ? `<b style="color:var(--pvw)">● Live</b> <span class="hint">${s2 ? s2.frames : 0} frames</span>` : '<span class="hint">Off</span>' }), U.el('td', {}, [btn])]));
+      }
+      box.append(ntbl);
+      box.append(U.el('div', { class: 'ext-row' }, [
+        U.el('button', { class: 'btn primary', text: '▶ Start ticked NDI outputs', disabled: !ndiState.available, onclick: async () => { await NO.startAll(); setTimeout(draw, 500); } }),
+        U.el('button', { class: 'btn', text: '■ Stop NDI', onclick: () => { NO.stopAll(); setTimeout(draw, 300); } }),
+        U.el('span', { class: 'spacer' }),
+        BTS.Dialog.form([{ label: 'Start NDI with BTS Studio', key: 'autoStart', type: 'checkbox', onChange: (v) => { ncfg.autoStart = v; NO.save(); } }], { autoStart: !!ncfg.autoStart }, () => {})
+      ]));
 
       /* ----- Blackmagic DeckLink / UltraStudio ----- */
       box.append(U.el('div', { class: 'ext-head' }, [

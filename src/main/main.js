@@ -25,6 +25,7 @@ const media = require('./media');
 const guests = require('./guests');
 const dataFiles = require('./dataFiles');
 const ptz = require('./ptz');
+const ndi = require('./ndi');
 
 log.initialize();
 log.transports.file.level = 'info';
@@ -244,14 +245,15 @@ function createMainWindow() {
       return;
     }
   });
-  mainWin.on('closed', () => { mainWin = null; browserSources.destroyAll(); outputs.stopAll(); streamInputs.stopAll(); replay.stopAll(); });
+  mainWin.on('closed', () => { mainWin = null; browserSources.destroyAll(); outputs.stopAll(); streamInputs.stopAll(); ndi.stopAll(); replay.stopAll(); });
 
   outputs.init({ getWin: () => mainWin, getSettings: () => settings, resourcesPath: process.resourcesPath, isPackaged: app.isPackaged, root: path.join(ROOT, '..') });
   browserSources.init({ getWin: () => mainWin });
-  streamInputs.init({ getWin: () => mainWin });
+  streamInputs.init({ getWin: () => mainWin, getSettings: () => settings });
+  ndi.init({ getWin: () => mainWin, getSettings: () => settings });
   replay.init({ getWin: () => mainWin, getSettings: () => settings });
   media.init({ getWin: () => mainWin });
-  guests.init({ getWin: () => mainWin, getSettings: () => settings, webRoot: path.join(ROOT, 'web') });
+  guests.init({ getWin: () => mainWin, getSettings: () => settings, saveSettings, webRoot: path.join(ROOT, 'web') });
   updater.init({ getWin: () => mainWin, getSettings: () => settings, isPackaged: app.isPackaged });
   restartApi();
 }
@@ -358,7 +360,12 @@ function registerIpc() {
   ipcMain.handle('settings:get', () => settings);
   ipcMain.handle('settings:set', (e, next) => {
     const prevApi = JSON.stringify(settings.api);
+    const prevGuests = settings.guests || {};
     settings = deepMerge(DEFAULT_SETTINGS, next);
+    // the relay identity is created in the main process — never lose it to an older renderer copy
+    settings.guests = settings.guests || {};
+    for (const k of ['relayRoom', 'relaySecret']) if (!settings.guests[k] && prevGuests[k]) settings.guests[k] = prevGuests[k];
+    guests.settingsChanged();
     saveSettings();
     if (JSON.stringify(settings.api) !== prevApi) restartApi();
     return settings;
@@ -459,6 +466,7 @@ function registerIpc() {
   outputs.registerIpc(ipcMain);
   browserSources.registerIpc(ipcMain);
   streamInputs.registerIpc(ipcMain);
+  ndi.registerIpc(ipcMain);
   replay.registerIpc(ipcMain);
   media.registerIpc(ipcMain);
   guests.registerIpc(ipcMain);
@@ -516,5 +524,5 @@ if (!gotLock) {
   });
 
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-  app.on('before-quit', () => { outputs.stopAll(); browserSources.destroyAll(); streamInputs.stopAll(); replay.stopAll(); guests.stop(); ptz.closeAll(); api.stop(); });
+  app.on('before-quit', () => { outputs.stopAll(); browserSources.destroyAll(); streamInputs.stopAll(); ndi.stopAll(); replay.stopAll(); guests.stop(); ptz.closeAll(); api.stop(); });
 }

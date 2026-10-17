@@ -61,6 +61,73 @@ function readBody(req) {
 }
 function json(res, code, obj) { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); }
 
+/** a message from a guest (direct or through the relay): check the link and password, pass it to the renderer */
+function incoming(msg) {
+  const s = slots.get(msg.k);
+  if (!s) return { code: 404, body: { ok: false, error: 'Link not active' } };
+  if (s.password && msg.type === 'offer' && msg.password !== s.password) return { code: 403, body: { ok: false, error: 'Wrong password' } };
+  if (!['offer', 'bye', 'chat', 'state'].includes(msg.type)) return { code: 400, body: { ok: false } };
+  delete msg.password;
+  msg.name = String(msg.name || 'Guest').slice(0, 40);
+  toRenderer('guests:signal', msg);
+  return { code: 200, body: { ok: true } };
+}
+
+/* ---------------- BTS Link relay (no port forwarding) ----------------
+ * The guest page is served by studio.btspl.tech/link/; this studio registers its guest slots there and polls
+ * for offers / chat. Only signalling passes through the relay — media flows directly by WebRTC. */
+const relay = { timer: null, cloudSids: new Set(), lastHost: 0, failing: 0, state: 'off', error: '' };
+function relayCfg() {
+  const c = cfg();
+  return { enabled: !!c.relay, server: (c.relayServer || 'https://studio.btspl.tech/link/').replace(/\/?$/, '/'), room: c.relayRoom || '', secret: c.relaySecret || '' };
+}
+function ensureRelayIds() {
+  const s = ctx.getSettings(); s.guests = s.guests || {};
+  const crypto = require('crypto');
+  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  if (!s.guests.relayRoom) s.guests.relayRoom = Array.from(crypto.randomBytes(20), b => abc[b % abc.length]).join('');
+  if (!s.guests.relaySecret) s.guests.relaySecret = crypto.randomBytes(24).toString('base64url');
+  if (ctx.saveSettings) ctx.saveSettings();
+}
+async function relayCall(action, body) {
+  const c = relayCfg();
+  const r = await fetch(`${c.server}api.php?a=${action}&r=${encodeURIComponent(c.room)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret: c.secret, ...body }), signal: AbortSignal.timeout(10000) });
+  const j = await r.json().catch(() => ({ ok: false, error: 'HTTP ' + r.status }));
+  if (!r.ok || j.ok === false) throw new Error(j.error || ('HTTP ' + r.status));
+  return j;
+}
+async function relayHost() {
+  const out = {};
+  for (const [k, s] of slots) out[k] = { title: s.title, needsPassword: !!s.password };
+  await relayCall('host', { slots: out, ice: iceServers() });
+  relay.lastHost = Date.now();
+}
+async function relayTick() {
+  relay.timer = null;
+  let c = relayCfg();
+  if (c.enabled && (!c.room || !c.secret)) { ensureRelayIds(); c = relayCfg(); }
+  if (!c.enabled || !slots.size) { relay.state = c.enabled ? 'idle' : 'off'; return; }
+  try {
+    if (Date.now() - relay.lastHost > 20000 || relay.dirty) { relay.dirty = false; await relayHost(); }
+    const j = await relayCall('recv', {});
+    for (const m of j.msgs || []) {
+      if (m.sid) relay.cloudSids.add(m.sid);
+      if (m.type === 'bye' && m.sid) setTimeout(() => relay.cloudSids.delete(m.sid), 5000);
+      incoming(m);
+    }
+    relay.failing = 0; relay.state = 'online'; relay.error = '';
+  } catch (e) {
+    relay.failing++; relay.state = 'error'; relay.error = e.message;
+    if (relay.failing === 1 || relay.failing % 30 === 0) log.warn('[guests] relay', e.message);
+  }
+  relay.timer = setTimeout(relayTick, relay.failing ? Math.min(10000, 1000 * relay.failing) : 1000);
+}
+function relayKick() { relay.dirty = true; if (!relay.timer) relay.timer = setTimeout(relayTick, 50); }
+function relayLinks() {
+  const c = relayCfg();
+  return c.enabled && c.room ? `${c.server}?r=${c.room}` : null;
+}
+
 async function handle(req, res) {
   const url = new URL(req.url, 'https://localhost');
   const p = url.pathname;
@@ -88,15 +155,9 @@ async function handle(req, res) {
 
   if (p === '/guest/api/signal' && req.method === 'POST') {
     const msg = await readBody(req);
-    const s = slots.get(msg.k);
-    if (!s) return json(res, 404, { ok: false, error: 'Link not active' });
-    if (s.password && msg.password !== s.password) return json(res, 403, { ok: false, error: 'Wrong password' });
-    if (!['offer', 'bye', 'chat', 'state'].includes(msg.type)) return json(res, 400, { ok: false });
-    delete msg.password;
-    msg.name = String(msg.name || 'Guest').slice(0, 40);
     msg.ip = req.socket.remoteAddress;
-    toRenderer('guests:signal', msg);
-    return json(res, 200, { ok: true });
+    const r = incoming(msg);
+    return json(res, r.code, r.body);
   }
 
   // static guest page (web/guest/*)
@@ -135,6 +196,7 @@ function stop() {
 }
 
 function sendToGuest(sid, msg) {
+  if (relay.cloudSids.has(sid) && relayCfg().enabled) { relayCall('send', { to: sid, msg }).catch((e) => log.warn('[guests] relay send', e.message)); return true; }
   const c = clients.get(sid);
   if (!c) return false;
   c.res.write(`data: ${JSON.stringify(msg)}\n\n`);
@@ -144,9 +206,12 @@ function sendToGuest(sid, msg) {
 function registerIpc(ipcMain) {
   ipcMain.handle('guests:start', () => start());
   ipcMain.handle('guests:stop', () => stop());
-  ipcMain.handle('guests:slot', (e, key, info) => { if (info) slots.set(key, info); else { slots.delete(key); for (const [sid, c] of clients) if (c.k === key) { sendToGuest(sid, { type: 'bye', reason: 'Removed by producer' }); } } return true; });
+  ipcMain.handle('guests:slot', (e, key, info) => { if (info) slots.set(key, info); else { slots.delete(key); for (const [sid, c] of clients) if (c.k === key) { sendToGuest(sid, { type: 'bye', reason: 'Removed by producer' }); } } relayKick(); return true; });
+  ipcMain.handle('guests:relay', (e, on) => { if (on !== undefined) { const s = ctx.getSettings(); s.guests = s.guests || {}; s.guests.relay = !!on; if (on) ensureRelayIds(); if (ctx.saveSettings) ctx.saveSettings(); relayKick(); } return { enabled: relayCfg().enabled, state: relay.state, error: relay.error, link: relayLinks() }; });
   ipcMain.handle('guests:send', (e, sid, msg) => sendToGuest(sid, msg));
-  ipcMain.handle('guests:urls', () => server ? urls() : []);
+  ipcMain.handle('guests:urls', () => { const out = server ? urls() : []; const l = relayLinks(); if (l) out.unshift(l); return out; });
 }
 
-module.exports = { init, registerIpc, start, stop };
+function settingsChanged() { relay.lastHost = 0; relayKick(); }
+
+module.exports = { init, registerIpc, start, stop, settingsChanged };

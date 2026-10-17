@@ -4,3 +4,5 @@ vendor/ffmpeg/
 *.log
 .DS_Store
 release/
+website/link/data/*
+!website/link/data/.htaccess

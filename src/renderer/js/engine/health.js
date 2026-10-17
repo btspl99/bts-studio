@@ -57,6 +57,13 @@
         if (o.dropped > (this._prevDropped?.[o.id] || 0)) this._warn('drop-' + o.id, `${o.id}: dropping frames to stay live (slow connection or disk).`);
       }
       this._prevDropped = Object.fromEntries(outs.map(o => [o.id, o.dropped || 0]));
+      // per-input frame drops (capture cards, streams, NDI): warn when a source keeps losing frames
+      this._inDrops = this._inDrops || new Map();
+      for (const i of st.inputs) {
+        const f = i.frameStats && i.frameStats(); if (!f) continue;
+        const prev = this._inDrops.get(i.id) || 0; this._inDrops.set(i.id, f.dropped || 0);
+        if (f.dropped - prev > Math.max(10, st.fps)) this._warn('in-drop-' + i.id, `Input ${i.number} (${i.title}) is losing frames — ${f.mode === 'gpu' ? 'the network stream is unstable or the GPU decoder is overloaded' : 'the device, cable or USB port cannot keep up (try a lower mode or another USB port)'}.`, 'error', 300000);
+      }
       const lowMem = (x.freeMB && x.totalMB && x.freeMB / x.totalMB < 0.06) || (heap && heap.used / heap.limit > 0.82);
       if (lowMem) { this.freeMemory(); this._warn('mem', 'Memory is running low — cleared caches. Close other programs or remove unused inputs.'); }
       this.emit('sample', x);
