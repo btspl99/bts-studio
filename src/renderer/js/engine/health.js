@@ -50,7 +50,7 @@
       if (x.fps && x.fps < st.fps * 0.85 && performance.now() - (st._lastLoadT || 0) > 5000 && this._lowFps++ >= 2) this._warn('fps', `Rendering at ${x.fps.toFixed(0)} of ${st.fps} fps. Close unused inputs/modules, lower the output resolution, or enable GPU rendering in Settings → Devices & Performance.`, 'error');
       else if (x.fps >= st.fps * 0.85) this._lowFps = 0;
       for (const e of enc) {
-        if (e.frames > 60 && e.dropped / Math.max(1, e.frames + e.dropped) > 0.08) this._warn('enc-' + e.sid, `Video encoder ${e.w}×${e.h} is dropping frames (${e.hardware ? 'GPU' : 'CPU'} encoder). ${e.hardware ? 'Too many encodes at once — share one profile between outputs.' : 'Update the graphics driver so the GPU encoder can be used, or lower the resolution.'}`);
+        if (e.frames > 60 && e.dropped / Math.max(1, e.frames + e.dropped) > 0.08) this._warn('enc-' + e.sid, `Video encoder ${e.w}×${e.h} is dropping frames (${e.hardware ? 'GPU' : 'CPU'} encoder). ${e.hardware ? (enc.length > 1 ? 'Too many encodes at once — share one profile between outputs.' : 'The GPU is busy — turn off High-precision mixing, close unused inputs/multiviews, or lower the frame rate.') : 'Update the graphics driver so the GPU encoder can be used, or lower the resolution.'}`);
       }
       for (const o of outs) {
         if (o.buffered > 8e6) this._warn('buf-' + o.id, `${o.id}: ${Math.round(o.buffered / 1e6)} MB waiting to be sent — the internet upload or the disk is too slow for this bitrate.`);

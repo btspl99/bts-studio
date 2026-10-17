@@ -105,7 +105,7 @@ registerProcessor('bts-tap', BtsTap);`;
       const { fps } = this.prof;
       const ts = now - this.t0;
       // keep the encoder ahead of the GPU: when it falls behind, skip a frame rather than queue (no growing latency)
-      if (this.enc.encodeQueueSize > 2) { this.dropped++; return; }
+      if (this.enc.encodeQueueSize > Math.max(4, Math.round(fps / 10))) { this.dropped++; return; } // GPU encoders pipeline a few frames: allow ~100 ms
       const gop = Math.max(1, Math.round(fps * (this.prof.keyint || 2)));
       const key = this.needKey || this.frames % gop === 0;
       let frame;

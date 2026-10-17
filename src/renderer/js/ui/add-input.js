@@ -41,8 +41,10 @@
     let current = type || 'camera';
     let build = null; // returns array of input data or null
     const left = U.el('div', { class: 'grid-cards', style: { gridTemplateColumns: '1fr', width: '210px', alignContent: 'start' } });
-    const right = U.el('div', { style: { flex: 1, minWidth: '560px', minHeight: '400px' } });
-    const body = U.el('div', { style: { display: 'flex', gap: '14px' } }, [left, right]);
+    const right = U.el('div', { class: 'ai-right', style: { flex: 1, minWidth: '560px', minHeight: '400px', overflowY: 'auto', paddingRight: '4px' } });
+    left.classList.add('ai-left'); Object.assign(left.style, { overflowY: 'auto', flexShrink: '0', paddingRight: '4px' });
+    // the type list and the settings scroll separately, so picking a type near the bottom keeps its settings in view
+    const body = U.el('div', { class: 'ai-body', style: { display: 'flex', gap: '14px', height: 'min(640px, calc(92vh - 120px))' } }, [left, right]);
     for (const [id, ico, lbl, desc] of TYPES) {
       const c = U.el('div', { class: 'type-card', 'data-t': id, style: { display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', textAlign: 'left' } }, [
         U.el('span', { class: 'ico', text: ico, style: { fontSize: '20px', margin: 0 } }),

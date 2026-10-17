@@ -370,23 +370,24 @@
     const ui = BTS.ui, st = BTS.studio, out = st.outputs;
     const box = U.el('div', { class: 'ext-dlg' });
     const srcOpts = () => [['program', 'Output (program)'], ['clean', 'Clean feed (Output without overlays)'], ['overlays', 'Overlays only (titles with transparency — key)'], ['preview', 'Preview'], ...st.multiviews.list.map(m => ['multiview:' + m.n, `${m.cfg.name} (${BTS.Multiview.LAYOUTS[m.cfg.layout]?.name || ''})`]), ...st.inputs.map(i => ['input:' + i.id, `Input ${i.number}: ${i.title}`])];
-    let displays = [], deck = null, deckBusy = false, dk = null, dkBusy = false;
+    let displays = [], deck = null, deckBusy = false, dk = null, dkBusy = false, drawGen = 0;
     const DL = () => { const st2 = BTS.settings; st2.decklink = st2.decklink || { ffmpeg: '', outputs: [] }; st2.decklink.outputs = st2.decklink.outputs || []; return st2.decklink; };
     const draw = async () => {
+      // build off-screen and swap at the end: keeps the scroll position and never mixes two overlapping redraws
+      const gen = ++drawGen, root = box, box2 = U.el('div');
       displays = await window.bts.displays();
-      box.innerHTML = '';
       /* ----- monitors / HDMI / DisplayPort / projectors (saved, vMix-style) ----- */
       const DO = BTS.DisplayOutputs, dcfg = DO.cfg();
       const outsScreens = displays.filter(d => !d.control).sort((p, q) => p.bounds.x - q.bounds.x || p.bounds.y - q.bounds.y);
       const live = (i) => DO.isLive(i);
-      box.append(U.el('div', { class: 'ext-head' }, [
+      box2.append(U.el('div', { class: 'ext-head' }, [
         U.el('h4', { text: 'Screens — projectors, TVs, LED walls, HDMI / DisplayPort / capture devices' }),
         U.el('button', { class: 'btn', text: '🔢 Identify screens', title: 'Show each screen’s number on it for 3 seconds', onclick: () => window.bts.displaysIdentify() }),
         U.el('button', { class: 'btn', text: '▦ Video wall…', title: 'Spread one picture over several screens', onclick: () => wallWizard() }),
         U.el('button', { class: 'btn', text: '⟳', title: 'Refresh screens', onclick: () => draw() })
       ]));
       if (!outsScreens.length) {
-        box.append(U.el('div', { class: 'ext-warn', html: '<b>Only one screen is available.</b> If a TV, projector or capture device is plugged into an HDMI / DisplayPort port, Windows is probably <i>duplicating</i> your screen — that is why the output shows your whole desktop. Press <kbd>Win</kbd>+<kbd>P</kbd> and choose <b>Extend</b>, then click ⟳. (Or Windows Settings → System → Display → “Extend these displays”.)' }));
+        box2.append(U.el('div', { class: 'ext-warn', html: '<b>Only one screen is available.</b> If a TV, projector or capture device is plugged into an HDMI / DisplayPort port, Windows is probably <i>duplicating</i> your screen — that is why the output shows your whole desktop. Press <kbd>Win</kbd>+<kbd>P</kbd> and choose <b>Extend</b>, then click ⟳. (Or Windows Settings → System → Display → “Extend these displays”.)' }));
       }
       const tbl = U.el('table', { class: 'tbl ext-tbl' });
       tbl.append(U.el('tr', {}, ['On', '#', 'Screen', 'Source', 'Fit', 'Rotate', 'Mirror', 'Area', ''].map(h => U.el('th', { text: h }))));
@@ -414,9 +415,9 @@
           : U.el('button', { class: 'btn primary', text: 'Start', onclick: async () => { if (!(await DO.start(slot))) U.toast(`${c.screen.name} is not connected`, 'error'); setTimeout(draw, 500); } });
         tbl.append(U.el('tr', { class: isLive ? 'live' : '' }, [U.el('td', {}, [en]), U.el('td', { html: `${slot + 1}${isLive ? ' <b style="color:var(--pvw)">●</b>' : ''}` }), U.el('td', {}, [scr]), U.el('td', {}, [src]), U.el('td', {}, [fit]), U.el('td', {}, [rot]), U.el('td', {}, [mir]), U.el('td', {}, [area]), U.el('td', {}, [btn])]));
       }
-      box.append(tbl);
+      box2.append(tbl);
       const opt = { autoStart: !!dcfg.autoStart, reconnect: dcfg.reconnect !== false };
-      box.append(U.el('div', { class: 'ext-row' }, [
+      box2.append(U.el('div', { class: 'ext-row' }, [
         U.el('button', { class: 'btn primary', text: '▶ Start all ticked', onclick: async () => { await DO.startAll(); setTimeout(draw, 500); } }),
         U.el('button', { class: 'btn', text: '■ Stop all', onclick: () => { DO.stopAll(); setTimeout(draw, 300); } }),
         U.el('span', { class: 'spacer' }),
@@ -425,17 +426,17 @@
           { label: 'Restart when a screen is reconnected', key: 'reconnect', type: 'checkbox', onChange: (v) => { dcfg.reconnect = v; DO.save(); } }
         ], opt, () => {})
       ]));
-      box.append(U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'Like vMix: set up each output once, tick it, then press External (or F7) to turn them all on or off. Each output is a clean, full-screen feed. Sources: Output, Clean feed (Output without overlays / titles — for IMAG and recorders), Preview, Multiview 1–4 or any input. Rotate for portrait screens, Mirror for teleprompters, Area or Video wall to spread one picture over several screens. Set each screen’s resolution and refresh rate in Windows display settings. Press Esc on an output to close it.' }));
+      box2.append(U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'Like vMix: set up each output once, tick it, then press External (or F7) to turn them all on or off. Each output is a clean, full-screen feed. Sources: Output, Clean feed (Output without overlays / titles — for IMAG and recorders), Preview, Multiview 1–4 or any input. Rotate for portrait screens, Mirror for teleprompters, Area or Video wall to spread one picture over several screens. Set each screen’s resolution and refresh rate in Windows display settings. Press Esc on an output to close it.' }));
 
       /* ----- Virtual camera (Windows) ----- */
       const VC = out.vcam, vcfg = VC.cfg(), vst = await window.bts.vcam.status();
-      box.append(U.el('div', { class: 'ext-head' }, [
+      box2.append(U.el('div', { class: 'ext-head' }, [
         U.el('h4', { text: 'Virtual camera — use BTS Studio as a webcam in Zoom, Teams, Google Meet, OBS, Skype…' }),
         U.el('span', { class: 'hint', html: !vst.supported ? '<b style="color:var(--pgm)">●</b> Not available' : vst.installed ? '<b style="color:var(--pvw)">●</b> Installed' : '<b style="color:var(--accent2)">●</b> Not installed' })
       ]));
-      if (!vst.supported) box.append(U.el('div', { class: 'ext-warn', text: vst.reason }));
+      if (!vst.supported) box2.append(U.el('div', { class: 'ext-warn', text: vst.reason }));
       else {
-        if (!vst.installed || vst.stale) box.append(U.el('div', { class: 'ext-warn', html: vst.stale ? 'The virtual camera is registered from another BTS Studio folder — click <b>Install</b> again to update it.' : 'Install the camera once (Windows asks for administrator permission). It then appears as <b>“BTS Studio Virtual Camera”</b> in every video app.' }));
+        if (!vst.installed || vst.stale) box2.append(U.el('div', { class: 'ext-warn', html: vst.stale ? 'The virtual camera is registered from another BTS Studio folder — click <b>Install</b> again to update it.' : 'Install the camera once (Windows asks for administrator permission). It then appears as <b>“BTS Studio Virtual Camera”</b> in every video app.' }));
         const vsel = (opts, val, onch) => { const e = U.el('select'); for (const [v, l] of opts) e.append(U.el('option', { value: v, text: l, selected: String(v) === String(val) })); e.onchange = () => onch(e.value); return e; };
         const set = (k, v) => { vcfg[k] = v; VC.save(); if (VC.live) VC.start().then(() => setTimeout(draw, 300)); };
         const s2 = VC.status();
@@ -452,17 +453,17 @@
           U.el('span', { class: 'spacer' }),
           BTS.Dialog.form([{ label: 'Start with BTS Studio', key: 'autoStart', type: 'checkbox', onChange: (v) => { vcfg.autoStart = v; VC.save(); } }], { autoStart: !!vcfg.autoStart }, () => {})
         ]);
-        box.append(row, U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'Pick “BTS Studio Virtual Camera” as the camera in the other app. For sound, send a bus to a virtual audio cable and pick it as the microphone. Some apps mirror their own self-view — the picture the other people see is not mirrored.' }));
+        box2.append(row, U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'Pick “BTS Studio Virtual Camera” as the camera in the other app. For sound, send a bus to a virtual audio cable and pick it as the microphone. Some apps mirror their own self-view — the picture the other people see is not mirrored.' }));
       }
 
       /* ----- NDI® outputs ----- */
       const NO = out.ndi, ncfg = NO.cfg();
       const ndiState = await window.bts.ndi.status();
-      box.append(U.el('div', { class: 'ext-head' }, [
+      box2.append(U.el('div', { class: 'ext-head' }, [
         U.el('h4', { text: 'NDI® outputs — send to other PCs, vMix, OBS, NDI monitors and converters on the network' }),
         U.el('span', { class: 'hint', html: ndiState.available ? `<b style="color:var(--pvw)">●</b> ${U.esc(ndiState.version || 'NDI runtime')}` : '<b style="color:var(--pgm)">●</b> NDI runtime not installed' })
       ]));
-      if (!ndiState.available) box.append(U.el('div', { class: 'ext-warn', html: 'NDI needs the free <b>NDI Tools</b> (or NDI Runtime) from <b>ndi.video</b> — install it, then reopen this window. BTS Studio uses the runtime installed on this PC.' }));
+      if (!ndiState.available) box2.append(U.el('div', { class: 'ext-warn', html: 'NDI needs the free <b>NDI Tools</b> (or NDI Runtime) from <b>ndi.video</b> — install it, then reopen this window. BTS Studio uses the runtime installed on this PC.' }));
       const ntbl = U.el('table', { class: 'tbl ext-tbl' });
       ntbl.append(U.el('tr', {}, ['On', '#', 'NDI name', 'Source', 'Size', 'Audio', 'Status', ''].map(h => U.el('th', { text: h }))));
       for (let slot = 0; slot < BTS.NdiOut.SLOTS; slot++) {
@@ -479,8 +480,8 @@
         ntbl.append(U.el('tr', { class: isLive ? 'live' : '' }, [U.el('td', {}, [en]), U.el('td', { text: String(slot + 1) }), U.el('td', {}, [nm]), U.el('td', {}, [src]), U.el('td', {}, [size]), U.el('td', {}, [bus]),
           U.el('td', { html: isLive ? `<b style="color:var(--pvw)">● Live</b> <span class="hint">${s2 ? s2.frames : 0} frames</span>` : '<span class="hint">Off</span>' }), U.el('td', {}, [btn])]));
       }
-      box.append(ntbl);
-      box.append(U.el('div', { class: 'ext-row' }, [
+      box2.append(ntbl);
+      box2.append(U.el('div', { class: 'ext-row' }, [
         U.el('button', { class: 'btn primary', text: '▶ Start ticked NDI outputs', disabled: !ndiState.available, onclick: async () => { await NO.startAll(); setTimeout(draw, 500); } }),
         U.el('button', { class: 'btn', text: '■ Stop NDI', onclick: () => { NO.stopAll(); setTimeout(draw, 300); } }),
         U.el('span', { class: 'spacer' }),
@@ -488,7 +489,7 @@
       ]));
 
       /* ----- Blackmagic DeckLink / UltraStudio ----- */
-      box.append(U.el('div', { class: 'ext-head' }, [
+      box2.append(U.el('div', { class: 'ext-head' }, [
         U.el('h4', { text: 'Blackmagic DeckLink / UltraStudio (SDI & HDMI out)' }),
         U.el('button', { class: 'btn', text: deckBusy ? 'Searching…' : '🔍 Find devices', onclick: async () => { deckBusy = true; draw(); deck = await window.bts.output.decklink(); deckBusy = false; draw(); } })
       ]));
@@ -498,7 +499,7 @@
           ? 'The FFmpeg used by BTS Studio was built without Blackmagic support (Blackmagic’s licence does not allow it to be shipped). Install <b>Blackmagic Desktop Video</b>, then choose an FFmpeg build with DeckLink support below.'
           : deck.error === 'nodriver' ? 'No Blackmagic driver found. Install <b>Blackmagic Desktop Video</b> from blackmagicdesign.com/support and restart the PC.'
             : 'No Blackmagic output device was found. Check the card is installed, Desktop Video is installed, and the device is not in use by another program.';
-        box.append(U.el('div', { class: 'ext-warn', html: why }));
+        box2.append(U.el('div', { class: 'ext-warn', html: why }));
       }
       const dtbl = U.el('table', { class: 'tbl' });
       dtbl.append(U.el('tr', {}, ['#', 'Device', 'Video mode', 'Audio', 'Status', ''].map(h => U.el('th', { text: h }))));
@@ -517,19 +518,19 @@
         dtbl.append(U.el('tr', {}, [U.el('td', { text: String(n) }), U.el('td', {}, [dev]), U.el('td', {}, [mode]), U.el('td', {}, [bus]),
           U.el('td', { html: live ? '<b style="color:var(--pvw)">● Live</b>' : '<span class="hint">Off</span>' }), U.el('td', {}, [btn])]));
       }
-      box.append(dtbl);
-      box.append(BTS.Dialog.form([
+      box2.append(dtbl);
+      box2.append(BTS.Dialog.form([
         { label: 'FFmpeg with DeckLink', key: 'ffmpeg', type: 'file', filters: [{ name: 'FFmpeg', extensions: ['exe', '*'] }], hint: 'Optional. Path to an ffmpeg.exe built with --enable-decklink (needed for Blackmagic cards). Leave empty to use the built-in FFmpeg.', onChange: async () => { await save(); deck = null; draw(); } }
       ], DL(), () => {}));
       /* ----- Blackmagic key + fill (hardware keyer) ----- */
       const DK = out.decklinkKey, kcfg = DK.cfg();
-      box.append(U.el('div', { class: 'ext-head' }, [
+      box2.append(U.el('div', { class: 'ext-head' }, [
         U.el('h4', { text: 'Blackmagic key + fill (hardware keyer)' }),
         U.el('button', { class: 'btn', text: dkBusy ? 'Searching…' : '🔍 Find keyer devices', onclick: async () => { dkBusy = true; draw(); dk = await window.bts.decklinkKey.list(); dkBusy = false; draw(); } })
       ]));
-      if (dk && !dk.helper) box.append(U.el('div', { class: 'ext-warn', html: 'The DeckLink keyer helper is part of the Windows installer of BTS Studio (not the Microsoft Store version).' }));
-      else if (dk && !dk.driver) box.append(U.el('div', { class: 'ext-warn', html: 'No Blackmagic driver found. Install <b>Blackmagic Desktop Video</b> from blackmagicdesign.com/support, restart the PC, then search again.' }));
-      else if (dk && !dk.devices.length) box.append(U.el('div', { class: 'ext-warn', text: 'Desktop Video is installed but no DeckLink device was found.' }));
+      if (dk && !dk.helper) box2.append(U.el('div', { class: 'ext-warn', html: 'The DeckLink keyer helper is part of the Windows installer of BTS Studio (not the Microsoft Store version).' }));
+      else if (dk && !dk.driver) box2.append(U.el('div', { class: 'ext-warn', html: 'No Blackmagic driver found. Install <b>Blackmagic Desktop Video</b> from blackmagicdesign.com/support, restart the PC, then search again.' }));
+      else if (dk && !dk.devices.length) box2.append(U.el('div', { class: 'ext-warn', text: 'Desktop Video is installed but no DeckLink device was found.' }));
       const ktbl = U.el('table', { class: 'tbl ext-tbl' });
       ktbl.append(U.el('tr', {}, ['#', 'Device', 'Mode', 'Keyer', 'Level', 'Source', 'Audio', 'Status', ''].map(h => U.el('th', { text: h }))));
       const devs = dk && dk.devices || [];
@@ -552,9 +553,14 @@
         ktbl.append(U.el('tr', { class: isLive ? 'live' : '' }, [U.el('td', { text: String(slot + 1) }), U.el('td', {}, [dev]), U.el('td', {}, [mode]), U.el('td', {}, [key]), U.el('td', {}, [lvl]), U.el('td', {}, [srcSel]), U.el('td', {}, [au]),
           U.el('td', { html: isLive ? `<b style="color:var(--pvw)">● ${s2 && s2.ready ? 'Live' : 'Starting'}</b> <span class="hint">${s2 ? s2.frames : 0} frames${s2 && s2.stats && s2.stats.late ? ' · ' + s2.stats.late + ' late' : ''}</span>` : '<span class="hint">Off</span>' }), U.el('td', {}, [btn])]));
       }
-      box.append(ktbl, U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'Sends graphics with transparency to the card’s keyer. External: the card outputs fill and key on two connectors (e.g. SDI A and SDI B) for a vision mixer’s downstream keyer. Internal: the card keys the graphics over the video on its own input. Choose a mode the card and the mixer use (genlock the card to the house reference in Desktop Video Setup). Functions: StartBlackmagicKey / StopBlackmagicKey.' }));
+      box2.append(ktbl, U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'Sends graphics with transparency to the card’s keyer. External: the card outputs fill and key on two connectors (e.g. SDI A and SDI B) for a vision mixer’s downstream keyer. Internal: the card keys the graphics over the video on its own input. Choose a mode the card and the mixer use (genlock the card to the house reference in Desktop Video Setup). Functions: StartBlackmagicKey / StopBlackmagicKey.' }));
 
-      box.append(U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'Blackmagic output sends the program (near-lossless) with embedded audio to the card’s SDI / HDMI connector. The video mode must be one your card supports at the project frame rate. AJA, Magewell and other cards that appear as a Windows display can be used as a screen above.' }));
+      box2.append(U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'Blackmagic output sends the program (near-lossless) with embedded audio to the card’s SDI / HDMI connector. The video mode must be one your card supports at the project frame rate. AJA, Magewell and other cards that appear as a Windows display can be used as a screen above.' }));
+      if (gen !== drawGen) return;
+      let sc = root.parentElement; while (sc && !(sc.scrollHeight > sc.clientHeight && /auto|scroll/.test(getComputedStyle(sc).overflowY))) sc = sc.parentElement;
+      const keepTop = sc ? sc.scrollTop : 0;
+      root.replaceChildren(...box2.childNodes);
+      if (sc) sc.scrollTop = keepTop;
     };
     // region of the picture shown by one output (percent of the source)
     const areaDialog = (slot) => {
