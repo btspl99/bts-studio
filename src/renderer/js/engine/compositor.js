@@ -374,6 +374,12 @@
         if (cc.width !== this.W || cc.height !== this.H) { cc.width = this.W; cc.height = this.H; this.cctx = cc.getContext('2d', { alpha: false }); this.cctx.imageSmoothingQuality = 'high'; }
         this._drawProgram(this.cctx, this.W, this.H, now, tp, true);
       }
+      // Overlays only (titles, logos) on a transparent background — fill + key for a downstream keyer / NDI with alpha
+      if (this.overlayUsers > 0) {
+        const oc = this.overlayCanvas || (this.overlayCanvas = document.createElement('canvas'));
+        if (oc.width !== this.W || oc.height !== this.H) { oc.width = this.W; oc.height = this.H; this.octx = oc.getContext('2d', { alpha: true }); this.octx.imageSmoothingQuality = 'high'; }
+        this._drawProgram(this.octx, this.W, this.H, now, tp, false, true);
+      }
       if (this.frameId % this.perf.previewEvery === 0) this._drawPreview(this.vctx, this.previewCanvas.width, this.previewCanvas.height);
       if (this.multiviews.anyActive) this.multiviews.render(this.frameId, this.perf.multiviewEvery);
       this.emit('frame', now);
@@ -387,10 +393,10 @@
 
     _drawInput(ctx, inp, W, H) { if (inp) inp.draw(ctx, 0, 0, W, H); }
 
-    _drawProgram(ctx, W, H, now, tp, clean = false) {
-      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-      const a = this.active;
-      if (a) {
+    _drawProgram(ctx, W, H, now, tp, clean = false, overlaysOnly = false) {
+      if (overlaysOnly) ctx.clearRect(0, 0, W, H); else { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); }
+      const a = overlaysOnly ? null : this.active;
+      if (overlaysOnly) { /* no background: only the overlay channels */ } else if (a) {
         const A = this.byId(a.from), B = this.byId(a.to);
         if (a.stinger) {
           const st = a.stinger;
@@ -399,7 +405,7 @@
         } else {
           BTS.Transitions.draw(a.type, ctx, W, H, U.clamp(tp, 0, 1), (c) => this._drawInput(c, A, W, H), (c) => this._drawInput(c, B, W, H));
         }
-      } else this._drawInput(ctx, this.program, W, H);
+      } else if (!overlaysOnly) this._drawInput(ctx, this.program, W, H);
 
       for (const o of clean ? [] : this.overlays) {
         if (!o.inputId || o.state === 'off') continue;
@@ -412,8 +418,18 @@
         if (inp.type === 'title') p = 1;
         this._drawOverlay(ctx, inp, o.type, p, W, H);
       }
-      if (this.ftb.value > 0) { ctx.save(); ctx.globalAlpha = this.ftb.value; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); ctx.restore(); }
+      if (this.ftb.value > 0) {
+        ctx.save(); ctx.globalAlpha = this.ftb.value;
+        if (overlaysOnly) { ctx.globalCompositeOperation = 'destination-out'; ctx.fillStyle = '#000'; } else ctx.fillStyle = '#000'; // FTB fades the key out too
+        ctx.fillRect(0, 0, W, H); ctx.restore();
+      }
     }
+    /** reference-count users of the special program variants ('clean', 'overlays') so they are only drawn while needed */
+    useSource(src, on) {
+      const k = src === 'clean' ? 'cleanUsers' : src === 'overlays' ? 'overlayUsers' : null;
+      if (k) this[k] = Math.max(0, (this[k] || 0) + (on ? 1 : -1));
+    }
+    sourceCanvas(src) { return src === 'clean' ? (this.cleanCanvas || this.programCanvas) : src === 'overlays' ? (this.overlayCanvas || null) : null; }
 
     _drawOverlay(ctx, inp, type, p, W, H) {
       if (p <= 0) return;

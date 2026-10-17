@@ -265,6 +265,7 @@
       let from = null, sw = st.W, sh = st.H;
       if (src === 'program') from = st.programCanvas;
       else if (src === 'clean') from = st.cleanCanvas || st.programCanvas;
+      else if (src === 'overlays') from = st.overlayCanvas || null;
       else if (src === 'preview') from = st.previewCanvas;
       else if (src.startsWith('multiview:')) { const mv = st.multiviews.get(src.slice(10)); from = mv.canvas; }
       else if (src.startsWith('input:')) {
@@ -287,7 +288,7 @@
       const r = U.fit(rw, rh, tw, th, o.fit === 'stretch' ? 'stretch' : o.fit === 'cover' ? 'cover' : 'contain');
       const key = [cw, ch, rot, r.x, r.y, r.w, r.h, !!o.mirror].join(',');
       g.save();
-      if (rec.bars !== key || o.fit === 'cover') { g.fillStyle = '#000'; g.fillRect(0, 0, cw, ch); rec.bars = key; }
+      if (rec.bars !== key || o.fit === 'cover' || src === 'overlays') { g.fillStyle = '#000'; g.fillRect(0, 0, cw, ch); rec.bars = key; }
       g.translate(cw / 2, ch / 2);
       if (rot) g.rotate(rot * Math.PI / 180);
       if (o.mirror) g.scale(-1, 1);
@@ -325,6 +326,7 @@
       const rec = this.externals[slot] = { win: w, display: displayId, source, slot, opts: opts || {} };
       if (source.startsWith('multiview:')) { rec.mv = st.multiviews.get(source.slice(10)); rec.mv.users++; }
       if (source === 'clean') { st.cleanUsers = (st.cleanUsers || 0) + 1; rec.clean = true; }
+      if (source === 'overlays') { st.useSource('overlays', true); rec.ovl = true; }
       rec.off = st.on('frame', () => { try { this._drawExternal(rec); } catch (e) { /* window closing */ } });
       const title = () => { if (!w.closed && w.document) w.document.title = `BTS Studio — External ${slot + 1} (${this._sourceLabel(source)})`; };
       w.addEventListener('load', () => { rec.canvas = null; title(); this.updateButtons(); });
@@ -341,6 +343,8 @@
       if (rec.mv) rec.mv.users++;
       if (rec.clean) this.studio.cleanUsers = Math.max(0, (this.studio.cleanUsers || 1) - 1);
       rec.clean = source === 'clean'; if (rec.clean) this.studio.cleanUsers = (this.studio.cleanUsers || 0) + 1;
+      if (rec.ovl) this.studio.useSource('overlays', false);
+      rec.ovl = source === 'overlays'; if (rec.ovl) this.studio.useSource('overlays', true);
       rec.source = source; rec.bars = null;
       try { rec.win.document.title = `BTS Studio — External ${slot + 1} (${this._sourceLabel(source)})`; } catch { /* closing */ }
     }
@@ -350,6 +354,7 @@
       if (x.off) x.off();
       if (x.mv) x.mv.users = Math.max(0, x.mv.users - 1);
       if (x.clean) this.studio.cleanUsers = Math.max(0, (this.studio.cleanUsers || 1) - 1);
+      if (x.ovl) this.studio.useSource('overlays', false);
       this.externals[slot] = null;
       this.updateButtons();
       BTS.SettingsUI && BTS.SettingsUI.refreshExternals && BTS.SettingsUI.refreshExternals();
@@ -357,7 +362,7 @@
     closeExternal(slot) { const x = this.externals[slot]; if (x && x.win && !x.win.closed) x.win.close(); this._cleanupExternal(slot); }
     _sourceLabel(src) {
       src = this._normSource(src);
-      if (src === 'program') return 'Output'; if (src === 'preview') return 'Preview'; if (src === 'clean') return 'Clean feed';
+      if (src === 'program') return 'Output'; if (src === 'preview') return 'Preview'; if (src === 'clean') return 'Clean feed'; if (src === 'overlays') return 'Overlays only (key)';
       if (src.startsWith('multiview:')) return this.studio.multiviews.get(src.slice(10)).cfg.name;
       if (src.startsWith('input:')) return this.studio.byId(src.slice(6))?.title || 'Input';
       return src;

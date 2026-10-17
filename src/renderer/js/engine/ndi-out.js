@@ -38,6 +38,7 @@
       const size = c.size === '1080' ? [1920, 1080] : c.size === '720' ? [1280, 720] : c.size === '2160' ? [3840, 2160] : [st.W, st.H];
       const rec = { slot, id, cfg: c, name: r.name, w: size[0], h: size[1], fps, last: 0, busy: false, frames: 0, dropped: 0, errors: 0, canvas: null };
       if (c.source === 'clean') { st.cleanUsers = (st.cleanUsers || 0) + 1; rec.clean = true; }
+      if (c.source === 'overlays') { st.useSource('overlays', true); rec.ovl = true; rec.alpha = true; } // send with transparency
       if (String(c.source).startsWith('multiview:')) { rec.mv = st.multiviews.get(c.source.slice(10)); if (rec.mv) rec.mv.users++; }
       await this._audio(rec, c.bus || 'M');
       this.live.set(slot, rec);
@@ -49,6 +50,7 @@
       if (!rec) return;
       this.live.delete(slot);
       if (rec.clean) this.studio.cleanUsers = Math.max(0, (this.studio.cleanUsers || 1) - 1);
+      if (rec.ovl) this.studio.useSource('overlays', false);
       if (rec.mv) rec.mv.users = Math.max(0, rec.mv.users - 1);
       if (rec.tap) { try { rec.tapSrc.disconnect(rec.tap); rec.tap.disconnect(); } catch { /* noop */ } }
       window.bts.ndi.sendStop(rec.id);
@@ -73,6 +75,7 @@
       const st = this.studio, s = rec.cfg.source;
       if (s === 'program') return st.programCanvas;
       if (s === 'clean') return st.cleanCanvas || st.programCanvas;
+      if (s === 'overlays') return st.overlayCanvas || null;
       if (s === 'preview') return st.previewCanvas;
       if (String(s).startsWith('multiview:')) return rec.mv ? rec.mv.canvas : null;
       if (String(s).startsWith('input:')) {
@@ -93,22 +96,23 @@
       rec.last = now;
       if (src.width !== rec.w || src.height !== rec.h) { // scale to the output size
         const c = rec.canvas || (rec.canvas = document.createElement('canvas'));
-        if (c.width !== rec.w || c.height !== rec.h) { c.width = rec.w; c.height = rec.h; rec.g = c.getContext('2d', { alpha: false }); rec.g.imageSmoothingQuality = 'high'; }
+        if (c.width !== rec.w || c.height !== rec.h) { c.width = rec.w; c.height = rec.h; rec.g = c.getContext('2d', { alpha: !!rec.alpha }); rec.g.imageSmoothingQuality = 'high'; }
+        if (rec.alpha) rec.g.clearRect(0, 0, rec.w, rec.h);
         rec.g.drawImage(src, 0, 0, rec.w, rec.h); src = c;
       }
       let vf;
-      try { vf = new VideoFrame(src, { timestamp: Math.round(now * 1000), alpha: 'discard' }); } catch { rec.errors++; return; }
+      try { vf = new VideoFrame(src, { timestamp: Math.round(now * 1000), alpha: rec.alpha ? 'keep' : 'discard' }); } catch { rec.errors++; return; }
       const size = rec.w * rec.h * 4;
       const buf = new Uint8Array(size);
       rec.busy = true;
       const done = (fmt) => { rec.busy = false; rec.frames++; window.bts.ndi.video(rec.id, rec.w, rec.h, buf, fmt); };
-      vf.copyTo(buf, { format: 'BGRA' }).then(() => { vf.close(); done('BGRX'); }).catch(() => {
+      vf.copyTo(buf, { format: 'BGRA' }).then(() => { vf.close(); done(rec.alpha ? 'BGRA' : 'BGRX'); }).catch(() => {
         // older drivers: no conversion on readback — fall back to the canvas pixels (RGBA)
         try { vf.close(); } catch { /* noop */ }
         const c = rec.rb || (rec.rb = document.createElement('canvas'));
         if (c.width !== rec.w || c.height !== rec.h) { c.width = rec.w; c.height = rec.h; rec.rg = c.getContext('2d', { willReadFrequently: true }); }
         rec.rg.drawImage(src, 0, 0); buf.set(rec.rg.getImageData(0, 0, rec.w, rec.h).data);
-        done('RGBX');
+        done(rec.alpha ? 'RGBA' : 'RGBX');
       });
     }
   }

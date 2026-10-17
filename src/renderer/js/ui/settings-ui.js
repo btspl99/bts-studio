@@ -351,8 +351,8 @@
   async function external() {
     const ui = BTS.ui, st = BTS.studio, out = st.outputs;
     const box = U.el('div', { class: 'ext-dlg' });
-    const srcOpts = () => [['program', 'Output (program)'], ['clean', 'Clean feed (Output without overlays)'], ['preview', 'Preview'], ...st.multiviews.list.map(m => ['multiview:' + m.n, `${m.cfg.name} (${BTS.Multiview.LAYOUTS[m.cfg.layout]?.name || ''})`]), ...st.inputs.map(i => ['input:' + i.id, `Input ${i.number}: ${i.title}`])];
-    let displays = [], deck = null, deckBusy = false;
+    const srcOpts = () => [['program', 'Output (program)'], ['clean', 'Clean feed (Output without overlays)'], ['overlays', 'Overlays only (titles with transparency — key)'], ['preview', 'Preview'], ...st.multiviews.list.map(m => ['multiview:' + m.n, `${m.cfg.name} (${BTS.Multiview.LAYOUTS[m.cfg.layout]?.name || ''})`]), ...st.inputs.map(i => ['input:' + i.id, `Input ${i.number}: ${i.title}`])];
+    let displays = [], deck = null, deckBusy = false, dk = null, dkBusy = false;
     const DL = () => { const st2 = BTS.settings; st2.decklink = st2.decklink || { ffmpeg: '', outputs: [] }; st2.decklink.outputs = st2.decklink.outputs || []; return st2.decklink; };
     const draw = async () => {
       displays = await window.bts.displays();
@@ -475,6 +475,39 @@
       box.append(BTS.Dialog.form([
         { label: 'FFmpeg with DeckLink', key: 'ffmpeg', type: 'file', filters: [{ name: 'FFmpeg', extensions: ['exe', '*'] }], hint: 'Optional. Path to an ffmpeg.exe built with --enable-decklink (needed for Blackmagic cards). Leave empty to use the built-in FFmpeg.', onChange: async () => { await save(); deck = null; draw(); } }
       ], DL(), () => {}));
+      /* ----- Blackmagic key + fill (hardware keyer) ----- */
+      const DK = out.decklinkKey, kcfg = DK.cfg();
+      box.append(U.el('div', { class: 'ext-head' }, [
+        U.el('h4', { text: 'Blackmagic key + fill (hardware keyer)' }),
+        U.el('button', { class: 'btn', text: dkBusy ? 'Searching…' : '🔍 Find keyer devices', onclick: async () => { dkBusy = true; draw(); dk = await window.bts.decklinkKey.list(); dkBusy = false; draw(); } })
+      ]));
+      if (dk && !dk.helper) box.append(U.el('div', { class: 'ext-warn', html: 'The DeckLink keyer helper is part of the Windows installer of BTS Studio (not the Microsoft Store version).' }));
+      else if (dk && !dk.driver) box.append(U.el('div', { class: 'ext-warn', html: 'No Blackmagic driver found. Install <b>Blackmagic Desktop Video</b> from blackmagicdesign.com/support, restart the PC, then search again.' }));
+      else if (dk && !dk.devices.length) box.append(U.el('div', { class: 'ext-warn', text: 'Desktop Video is installed but no DeckLink device was found.' }));
+      const ktbl = U.el('table', { class: 'tbl ext-tbl' });
+      ktbl.append(U.el('tr', {}, ['#', 'Device', 'Mode', 'Keyer', 'Level', 'Source', 'Audio', 'Status', ''].map(h => U.el('th', { text: h }))));
+      const devs = dk && dk.devices || [];
+      for (let slot = 0; slot < BTS.DecklinkKey.SLOTS; slot++) {
+        const c = kcfg.outputs[slot], isLive = DK.isLive(slot);
+        const set = (k, v) => { c[k] = v; DK.cfg().outputs[slot][k] = v; save(); }; // settings object is replaced on save
+        const devOpts = devs.length ? devs.map(d => [String(d.index), `${d.name}${d.externalKeying ? ' — external key' : d.internalKeying ? ' — internal key' : ' — no keyer'}`]) : [[String(c.device), c.deviceName || `Device ${+c.device + 1}`]];
+        const dev = sel(devOpts, String(c.device), (v) => { set('device', v); const d = devs.find(x => String(x.index) === v); if (d) set('deviceName', d.name); });
+        const d0 = devs.find(x => String(x.index) === String(c.device));
+        const modeList = d0 && d0.modes.length ? d0.modes.filter(m => m.bgra).map(m => [m.id, m.name || m.id]) : BTS.DecklinkKey.MODES.map(m => [m, m]);
+        const mode = sel(modeList, c.mode, (v) => set('mode', v));
+        const key = sel([['external', 'External (fill + key)'], ['internal', 'Internal (over card input)'], ['none', 'Off (fill only)']], c.key, (v) => set('key', v));
+        const lvl = U.el('input', { type: 'number', min: 0, max: 255, value: c.level, style: { width: '60px' }, title: 'Key level 0–255 (255 = fully opaque)' }); lvl.onchange = () => set('level', Math.max(0, Math.min(255, +lvl.value || 0)));
+        const srcSel = sel([['overlays', 'Overlays only (titles)'], ['clean', 'Clean feed'], ['program', 'Output'], ...st.inputs.map(i => ['input:' + i.id, `Input ${i.number}: ${i.title}`])], c.source, (v) => set('source', v));
+        const au = U.el('input', { type: 'checkbox', title: 'Embed Master audio' }); au.checked = !!c.audio; au.onchange = () => set('audio', au.checked);
+        const s2 = DK.status(slot);
+        const btn = isLive ? U.el('button', { class: 'btn danger', text: 'Stop', onclick: () => { DK.stop(slot); setTimeout(draw, 300); } })
+          : U.el('button', { class: 'btn primary', text: 'Start', onclick: async () => { await save(); await DK.start(slot); setTimeout(draw, 800); } });
+        if (isLive) [dev, mode, key, srcSel].forEach(x => { x.disabled = true; });
+        ktbl.append(U.el('tr', { class: isLive ? 'live' : '' }, [U.el('td', { text: String(slot + 1) }), U.el('td', {}, [dev]), U.el('td', {}, [mode]), U.el('td', {}, [key]), U.el('td', {}, [lvl]), U.el('td', {}, [srcSel]), U.el('td', {}, [au]),
+          U.el('td', { html: isLive ? `<b style="color:var(--pvw)">● ${s2 && s2.ready ? 'Live' : 'Starting'}</b> <span class="hint">${s2 ? s2.frames : 0} frames${s2 && s2.stats && s2.stats.late ? ' · ' + s2.stats.late + ' late' : ''}</span>` : '<span class="hint">Off</span>' }), U.el('td', {}, [btn])]));
+      }
+      box.append(ktbl, U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'Sends graphics with transparency to the card’s keyer. External: the card outputs fill and key on two connectors (e.g. SDI A and SDI B) for a vision mixer’s downstream keyer. Internal: the card keys the graphics over the video on its own input. Choose a mode the card and the mixer use (genlock the card to the house reference in Desktop Video Setup). Functions: StartBlackmagicKey / StopBlackmagicKey.' }));
+
       box.append(U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'Blackmagic output sends the program (near-lossless) with embedded audio to the card’s SDI / HDMI connector. The video mode must be one your card supports at the project frame rate. AJA, Magewell and other cards that appear as a Windows display can be used as a screen above.' }));
     };
     // region of the picture shown by one output (percent of the source)

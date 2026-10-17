@@ -93,6 +93,15 @@ contextBridge.exposeInMainWorld('bts', {
   onMenu: listen('menu'),
   onNotice: listen('engine:notice'),
   log: (level, msg) => ipcRenderer.send('log', level, String(msg).slice(0, 4000)),
+  decklinkKey: {
+    list: () => ipcRenderer.invoke('dlk:list'),
+    start: (id, cfg) => ipcRenderer.invoke('dlk:start', id, cfg),
+    stop: (id) => ipcRenderer.invoke('dlk:stop', id),
+    status: () => ipcRenderer.invoke('dlk:status'),
+    frame: (id, data) => ipcRenderer.send('dlk:frame', id, data),
+    audio: (id, data) => ipcRenderer.send('dlk:audio', id, data),
+    onStatus: listen('dlk:status')
+  },
   ndi: {
     status: () => ipcRenderer.invoke('ndi:status'),
     sources: (wait) => ipcRenderer.invoke('ndi:sources', wait),
