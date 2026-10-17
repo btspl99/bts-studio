@@ -28,7 +28,7 @@ if (-not (Test-Path (Join-Path $asio 'common/asio.h'))) {
 }
 
 $build = Join-Path $here 'build'
-cmake -S $here -B $build -A x64 "-DDEPS_DIR=$deps"  # newest Visual Studio on the runner
+cmake -S $here -B $build -A x64 "-DDEPS_DIR=$deps" -DCMAKE_POLICY_VERSION_MINIMUM=3.5  # newest Visual Studio on the runner; PortAudio 19.7 needs the policy floor with CMake 4
 if ($LASTEXITCODE) { throw 'cmake configure failed' }
 cmake --build $build --config Release --target bts-audio --parallel
 if ($LASTEXITCODE) { throw 'cmake build failed' }
