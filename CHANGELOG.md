@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.4.1 — 2026-10-17
+
+### Fixed
+- **External output showing the whole desktop / opening on the wrong screen.** Full-screen outputs now open exactly on the chosen monitor (HDMI, DisplayPort, projector, LED processor, capture device) and stay there when screens are plugged in, unplugged or changed. Before, Windows could put the output on the control screen.
+- If only one screen is available (Windows set to *Duplicate*), External Outputs explains how to switch to **Extend** (Win+P). Choosing the control screen for an output now asks first.
+- The `StartExternal` function opens on a second screen when one is connected, instead of in a window.
+
+### New
+- **Identify screens** — shows each monitor's number on it for 3 seconds. Screens are listed with their names, real resolution and refresh rate.
+- **Change the source of a running external output** (Output, Preview, any multiview or input) without closing it.
+- **Blackmagic DeckLink / UltraStudio output (SDI & HDMI)** — 2 playout outputs with the program picture (near-lossless) and embedded audio from Master or any bus, in 1080p, 1080i, 720p, 2160p or the project format. Needs Blackmagic Desktop Video and an FFmpeg built with DeckLink support (Blackmagic's licence does not allow it to be bundled); set its path in External Outputs. New functions `StartBlackmagic` / `StopBlackmagic`.
+
 ## 1.4.0 — 2026-10-17
 
 The performance and 4K release.

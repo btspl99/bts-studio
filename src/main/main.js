@@ -9,6 +9,8 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const log = require('electron-log/main');
+const pendingOutputDisplays = []; // display ids for external-output windows being created
+const outputWindows = new Map();   // output window -> display id
 // Last-resort guards: a stray pipe/socket error in one output or API client must never take down a live show.
 process.on('uncaughtException', (err) => { try { log.error('Uncaught exception (kept running)', err && err.stack || err); } catch { /* noop */ } });
 process.on('unhandledRejection', (err) => { try { log.warn('Unhandled rejection', err && err.stack || err); } catch { /* noop */ } });
@@ -82,6 +84,7 @@ const DEFAULT_SETTINGS = {
   },
   record2: { enabled: false, format: 'mkv', mode: 'encode', encoder: 'gpu', quality: 'medium', rateControl: 'quality', videoBitrate: 12000, suffix: '-2' },
   encoding: { engine: 'v2', hardware: 'auto', migrated: 0 },
+  decklink: { ffmpeg: '', outputs: [] },
   api: { enabled: true, port: 8088, allowRemote: true, tcpEnabled: true, tcpPort: 8099 },
   guests: { port: 8089, stun: 'stun:stun.l.google.com:19302', turn: '', turnUser: '', turnPass: '' },
   media: { autoConvert: true, convertQuality: 'fast' },
@@ -166,12 +169,34 @@ function createMainWindow() {
         icon: path.join(ROOT, '..', 'build', 'icon.png'),
         webPreferences: { contextIsolation: true, nodeIntegration: false, backgroundThrottling: false }
       };
-      if (d) Object.assign(opts, { x: d.bounds.x, y: d.bounds.y, width: d.bounds.width, height: d.bounds.height, frame: false, fullscreen: true });
+      // Full-screen outputs: create a frameless window exactly on the chosen monitor. Do NOT pass fullscreen:true here —
+      // on Windows that makes the window go full screen on the monitor it was first created on (usually the control screen).
+      if (d) Object.assign(opts, { x: d.bounds.x, y: d.bounds.y, width: d.bounds.width, height: d.bounds.height, frame: false, show: false, resizable: false, movable: false,
+        minimizable: false, maximizable: false, skipTaskbar: true, hasShadow: false, roundedCorners: false, thickFrame: false, enableLargerThanScreen: true, fullscreenable: true });
       else Object.assign(opts, { width: 960, height: 560 });
+      if (d) pendingOutputDisplays.push(d.id);
       return { action: 'allow', overrideBrowserWindowOptions: opts };
     }
     shell.openExternal(url);
     return { action: 'deny' };
+  });
+
+  mainWin.webContents.on('did-create-window', (win, { frameName }) => {
+    if (!/^external/.test(frameName || '')) return;
+    const id = pendingOutputDisplays.shift();
+    if (id == null) return;
+    const place = () => {
+      const d = screen.getAllDisplays().find(x => x.id === id);
+      if (!d || win.isDestroyed()) return;
+      win.setBounds(d.bounds);
+      win.setAlwaysOnTop(true, 'screen-saver');
+      win.setFullScreen(true);
+      win.setBounds(d.bounds); // re-assert after the full-screen switch (mixed-DPI monitors)
+    };
+    win.once('ready-to-show', () => { place(); win.showInactive(); });
+    setTimeout(() => { if (!win.isDestroyed() && !win.isVisible()) { place(); win.showInactive(); } }, 1500);
+    outputWindows.set(win, id);
+    win.on('closed', () => outputWindows.delete(win));
   });
 
   mainWin.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file:')) { e.preventDefault(); shell.openExternal(url); } });
@@ -346,9 +371,27 @@ function registerIpc() {
     let gpu = {}; try { gpu = app.getGPUFeatureStatus(); } catch { /* noop */ }
     return { procs, sys, gpu: { video_encode: gpu.video_encode, video_decode: gpu.video_decode, gpu_compositing: gpu.gpu_compositing, webgl: gpu.webgl } };
   });
-  ipcMain.handle('displays:list', () => screen.getAllDisplays().map((d, i) => ({
-    id: d.id, label: `Display ${i + 1} — ${d.size.width}×${d.size.height}${d.id === screen.getPrimaryDisplay().id ? ' (primary)' : ''}`, bounds: d.bounds
-  })));
+  ipcMain.handle('displays:list', () => {
+    const ctrl = mainWin && !mainWin.isDestroyed() ? screen.getDisplayMatching(mainWin.getBounds()).id : screen.getPrimaryDisplay().id;
+    return screen.getAllDisplays().map((d, i) => {
+      const px = `${Math.round(d.size.width * d.scaleFactor)}×${Math.round(d.size.height * d.scaleFactor)}`;
+      const hz = d.displayFrequency ? ` ${Math.round(d.displayFrequency)} Hz` : '';
+      const name = d.label && !/^\s*$/.test(d.label) ? d.label : `Display ${i + 1}`;
+      return { id: d.id, n: i + 1, name, control: d.id === ctrl, primary: d.id === screen.getPrimaryDisplay().id, bounds: d.bounds, scale: d.scaleFactor, hz: d.displayFrequency || 0,
+        label: `${i + 1}. ${name} — ${px}${hz}${d.id === ctrl ? ' (BTS Studio is on this screen)' : ''}` };
+    });
+  });
+  // Show a big number on every monitor for 3 s so the operator can tell them apart
+  ipcMain.handle('displays:identify', () => {
+    screen.getAllDisplays().forEach((d, i) => {
+      const w = new BrowserWindow({ x: d.bounds.x + Math.round(d.bounds.width / 2) - 180, y: d.bounds.y + Math.round(d.bounds.height / 2) - 180, width: 360, height: 360, frame: false, transparent: true,
+        alwaysOnTop: true, skipTaskbar: true, focusable: false, resizable: false, show: false, webPreferences: { contextIsolation: true, nodeIntegration: false } });
+      const html = `<body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;background:rgba(10,12,16,.88);border-radius:28px;font:800 220px Segoe UI,Arial,sans-serif;color:#f5a524">${i + 1}</body>`;
+      w.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html)).then(() => w.showInactive()).catch(() => {});
+      setTimeout(() => { if (!w.isDestroyed()) w.close(); }, 3000);
+    });
+    return true;
+  });
 
   ipcMain.handle('capture:sources', async () => {
     const list = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 320, height: 180 }, fetchWindowIcons: false });
@@ -444,6 +487,19 @@ if (!gotLock) {
   app.on('open-file', (e, f) => { e.preventDefault(); if (mainWin) send('menu', { id: 'open-file', file: f }); else pendingOpenFile = f; });
 
   app.whenReady().then(() => {
+    // Monitors plugged in / unplugged / resolution changed: keep full-screen outputs on their screen, close ones whose screen is gone
+    const onDisplays = (why) => {
+      for (const [win, id] of outputWindows) {
+        if (win.isDestroyed()) continue;
+        const d = screen.getAllDisplays().find(x => x.id === id);
+        if (!d) { win.close(); continue; }
+        win.setFullScreen(false); win.setBounds(d.bounds); win.setFullScreen(true); win.setBounds(d.bounds);
+      }
+      send('displays:changed', why);
+    };
+    screen.on('display-added', () => onDisplays('added'));
+    screen.on('display-removed', () => onDisplays('removed'));
+    screen.on('display-metrics-changed', (e, d, changed) => { if (changed.includes('bounds') || changed.includes('scaleFactor')) onDisplays('changed'); });
     session.defaultSession.setPermissionRequestHandler((wc, permission, cb) => cb(['media', 'display-capture', 'fullscreen', 'clipboard-read', 'clipboard-sanitized-write', 'notifications', 'midi', 'midiSysex'].includes(permission)));
     app.on('child-process-gone', (e, d) => {
       log.error('Child process gone', d);

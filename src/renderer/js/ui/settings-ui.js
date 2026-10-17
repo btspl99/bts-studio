@@ -314,31 +314,89 @@
   /* ---------------- external / fullscreen outputs (up to 6) ---------------- */
   let extDlg = null, extRefresh = null;
   async function external() {
-    const ui = BTS.ui, st = BTS.studio;
-    const displays = await window.bts.displays();
-    const box = U.el('div');
+    const ui = BTS.ui, st = BTS.studio, out = st.outputs;
+    const box = U.el('div', { class: 'ext-dlg' });
     const srcOpts = () => [['program', 'Output (program)'], ['preview', 'Preview'], ...st.multiviews.list.map(m => ['multiview:' + m.n, `${m.cfg.name} (${BTS.Multiview.LAYOUTS[m.cfg.layout]?.name || ''})`]), ...st.inputs.map(i => ['input:' + i.id, `Input ${i.number}: ${i.title}`])];
-    const draw = () => {
+    let displays = [], deck = null, deckBusy = false;
+    const DL = () => { const st2 = BTS.settings; st2.decklink = st2.decklink || { ffmpeg: '', outputs: [] }; st2.decklink.outputs = st2.decklink.outputs || []; return st2.decklink; };
+    const draw = async () => {
+      displays = await window.bts.displays();
       box.innerHTML = '';
+      /* ----- monitors / HDMI / DisplayPort / projectors ----- */
+      const outsScreens = displays.filter(d => !d.control);
+      box.append(U.el('div', { class: 'ext-head' }, [
+        U.el('h4', { text: 'Monitors, projectors & HDMI / DisplayPort outputs' }),
+        U.el('button', { class: 'btn', text: '🔢 Identify screens', title: 'Show each screen’s number on it for 3 seconds', onclick: () => window.bts.displaysIdentify() }),
+        U.el('button', { class: 'btn', text: '⟳ Refresh', onclick: () => draw() })
+      ]));
+      if (!outsScreens.length) {
+        box.append(U.el('div', { class: 'ext-warn', html: '<b>Only one screen is available.</b> If a TV, projector or capture device is plugged into an HDMI / DisplayPort port, Windows is probably <i>duplicating</i> your screen — that is why the output shows your whole desktop. Press <kbd>Win</kbd>+<kbd>P</kbd> and choose <b>Extend</b>, then click Refresh. (Or use Windows Settings → System → Display → “Extend these displays”.)' }));
+      }
       const tbl = U.el('table', { class: 'tbl' });
       tbl.append(U.el('tr', {}, ['#', 'Screen', 'Source', 'Status', ''].map(h => U.el('th', { text: h }))));
       for (let slot = 0; slot < 6; slot++) {
         const x = ui.externals[slot];
         const live = x && x.win && !x.win.closed;
-        const disp = U.el('select'); for (const [v, l] of [...displays.map(d => [String(d.id), d.label]), ['', 'Window (resizable)']]) disp.append(U.el('option', { value: v, text: l, selected: live ? String(x.display || '') === v : v === String(displays.find(d => !/primary/.test(d.label))?.id ?? '') }));
+        const defScreen = outsScreens[slot] ? String(outsScreens[slot].id) : '';
+        const disp = U.el('select');
+        for (const d of displays) disp.append(U.el('option', { value: String(d.id), text: d.label, selected: live ? String(x.display || '') === String(d.id) : String(d.id) === defScreen }));
+        disp.append(U.el('option', { value: '', text: 'Window (resizable, for testing or capture)', selected: live ? !x.display : !defScreen }));
         const src = U.el('select'); for (const [v, l] of srcOpts()) src.append(U.el('option', { value: v, text: l, selected: live ? x.source === v : v === 'program' }));
+        const start = async () => {
+          const d = displays.find(z => String(z.id) === disp.value);
+          if (d && d.control && !(await BTS.Dialog.confirm(`Screen ${d.n} is the screen BTS Studio is running on. A full-screen output there will cover the whole control screen (press Esc on it to close).\n\nIf you meant an HDMI / projector output, set Windows to Extend (Win+P) and pick the other screen.`, { ok: 'Use this screen anyway' }))) return;
+          ui.openExternal(disp.value || null, src.value, slot); setTimeout(draw, 500);
+        };
         const btn = live ? U.el('button', { class: 'btn danger', text: 'Stop', onclick: () => { ui.closeExternal(slot); draw(); } })
-          : U.el('button', { class: 'btn primary', text: 'Start', onclick: () => { ui.openExternal(disp.value || null, src.value, slot); setTimeout(draw, 400); } });
+          : U.el('button', { class: 'btn primary', text: 'Start', onclick: start });
+        if (live) { disp.disabled = true; src.onchange = () => ui.setExternalSource(slot, src.value); }
         tbl.append(U.el('tr', {}, [U.el('td', { text: String(slot + 1) }), U.el('td', {}, [disp]), U.el('td', {}, [src]),
           U.el('td', { html: live ? '<b style="color:var(--pvw)">● Live</b>' : '<span class="hint">Off</span>' }), U.el('td', {}, [btn])]));
       }
-      box.append(tbl, U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'Each output is a clean feed for a projector, LED wall, confidence monitor or a capture device — choose a full screen or a resizable window. Source can be Output, Preview, Multiview or any single input (e.g. a Mix input as a stage feed). Press Esc in an output window to close it.' }));
+      box.append(tbl, U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'Each output is a clean, full-screen feed (no menus or borders) for a projector, LED wall, confidence monitor, HDMI capture / recorder or an ATEM / Web Presenter input. Set the screen’s resolution and refresh rate in Windows display settings (e.g. 1920×1080 at 50 or 60 Hz). Press Esc on an output to close it.' }));
+
+      /* ----- Blackmagic DeckLink / UltraStudio ----- */
+      box.append(U.el('div', { class: 'ext-head' }, [
+        U.el('h4', { text: 'Blackmagic DeckLink / UltraStudio (SDI & HDMI out)' }),
+        U.el('button', { class: 'btn', text: deckBusy ? 'Searching…' : '🔍 Find devices', onclick: async () => { deckBusy = true; draw(); deck = await window.bts.output.decklink(); deckBusy = false; draw(); } })
+      ]));
+      const deckList = deck && deck.devices || [];
+      if (deck && !deckList.length) {
+        const why = deck.error === 'nosupport'
+          ? 'The FFmpeg used by BTS Studio was built without Blackmagic support (Blackmagic’s licence does not allow it to be shipped). Install <b>Blackmagic Desktop Video</b>, then choose an FFmpeg build with DeckLink support below.'
+          : deck.error === 'nodriver' ? 'No Blackmagic driver found. Install <b>Blackmagic Desktop Video</b> from blackmagicdesign.com/support and restart the PC.'
+            : 'No Blackmagic output device was found. Check the card is installed, Desktop Video is installed, and the device is not in use by another program.';
+        box.append(U.el('div', { class: 'ext-warn', html: why }));
+      }
+      const dtbl = U.el('table', { class: 'tbl' });
+      dtbl.append(U.el('tr', {}, ['#', 'Device', 'Video mode', 'Audio', 'Status', ''].map(h => U.el('th', { text: h }))));
+      for (let n = 1; n <= 2; n++) {
+        const saved = DL().outputs[n - 1] || {};
+        const live = out.isDecklink(n);
+        const dev = U.el('select');
+        const names = [...new Set([...deckList, ...(saved.device ? [saved.device] : [])])];
+        if (!names.length) dev.append(U.el('option', { value: '', text: deck ? '— none found —' : 'Click “Find devices”' }));
+        for (const nm of names) dev.append(U.el('option', { value: nm, text: nm, selected: nm === saved.device }));
+        const mode = U.el('select'); for (const [v, l] of [['program', `Same as project (${st.W}×${st.H} ${st.fps}p)`], ['1080p', `1080p${st.fps}`], ['1080i', `1080i${st.fps * 2}`], ['720p', `720p${st.fps}`], ['2160p', `2160p${st.fps} (4K)`]]) mode.append(U.el('option', { value: v, text: l, selected: v === (saved.mode || 'program') }));
+        const bus = U.el('select'); for (const [v, l] of [['M', 'Master'], ...'ABCDEFG'.split('').map(b => [b, 'Bus ' + b])]) bus.append(U.el('option', { value: v, text: l, selected: v === (saved.bus || 'M') }));
+        const btn = live ? U.el('button', { class: 'btn danger', text: 'Stop', onclick: async () => { await out.stopDecklink(n); draw(); } })
+          : U.el('button', { class: 'btn primary', text: 'Start', onclick: async () => { const o = { device: dev.value, mode: mode.value, bus: bus.value }; DL().outputs[n - 1] = o; await save(); await out.startDecklink(n, o); setTimeout(draw, 600); } });
+        if (live) [dev, mode, bus].forEach(c => { c.disabled = true; });
+        dtbl.append(U.el('tr', {}, [U.el('td', { text: String(n) }), U.el('td', {}, [dev]), U.el('td', {}, [mode]), U.el('td', {}, [bus]),
+          U.el('td', { html: live ? '<b style="color:var(--pvw)">● Live</b>' : '<span class="hint">Off</span>' }), U.el('td', {}, [btn])]));
+      }
+      box.append(dtbl);
+      box.append(BTS.Dialog.form([
+        { label: 'FFmpeg with DeckLink', key: 'ffmpeg', type: 'file', filters: [{ name: 'FFmpeg', extensions: ['exe', '*'] }], hint: 'Optional. Path to an ffmpeg.exe built with --enable-decklink (needed for Blackmagic cards). Leave empty to use the built-in FFmpeg.', onChange: async () => { await save(); deck = null; draw(); } }
+      ], DL(), () => {}));
+      box.append(U.el('p', { class: 'hint', style: { lineHeight: '1.6' }, text: 'Blackmagic output sends the program (near-lossless) with embedded audio to the card’s SDI / HDMI connector. The video mode must be one your card supports at the project frame rate. AJA, Magewell and other cards that appear as a Windows display can be used as a screen above.' }));
     };
-    draw();
+    await draw();
     if (extDlg) extDlg.close();
     extRefresh = draw;
-    extDlg = BTS.Dialog.open({ title: 'External Outputs', body: box, width: 760, onClose: () => { extDlg = null; extRefresh = null; } });
+    extDlg = BTS.Dialog.open({ title: 'External Outputs', body: box, width: 860, onClose: () => { extDlg = null; extRefresh = null; } });
   }
+  window.bts.onDisplaysChanged && window.bts.onDisplaysChanged((why) => { if (extRefresh) extRefresh(); if (why === 'added') U.toast('A screen was connected — open External Outputs to use it', 'info', 5000); });
   function refreshExternals() { if (extRefresh) extRefresh(); }
 
   function about() {

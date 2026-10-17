@@ -648,3 +648,11 @@ table.tbl tr.sel { background: color-mix(in srgb, var(--accent) 14%, transparent
 .ab-search:hover { border-color: var(--accent); color: var(--fg2); }
 .ab-search kbd { font: 10px/1 inherit; padding: 3px 5px; border-radius: 4px; background: var(--bg3); border: 1px solid var(--line2); color: var(--fg2); }
 @media (max-width: 1300px) { .ab-search { min-width: 0; } .ab-search span { display: none; } }
+
+/* ===== External outputs dialog ===== */
+.ext-dlg .ext-head { display: flex; align-items: center; gap: 8px; margin: 6px 0 8px; }
+.ext-dlg .ext-head h4 { margin: 0; flex: 1; font-size: 13px; }
+.ext-dlg .ext-head:not(:first-child) { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--line); }
+.ext-dlg .tbl select { max-width: 330px; }
+.ext-warn { background: color-mix(in srgb, var(--warn) 14%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); border-radius: 8px; padding: 10px 12px; margin: 6px 0 10px; line-height: 1.55; }
+.ext-warn kbd { font: 11px/1 inherit; padding: 2px 5px; border-radius: 4px; background: var(--bg3); border: 1px solid var(--line2); }

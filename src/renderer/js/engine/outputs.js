@@ -110,6 +110,27 @@
     async stopRecording() { await this._stop('record'); await this._stop('record2'); this._power(); }
     toggleRecording() { return this.isRecording() ? this.stopRecording() : this.startRecording(); }
 
+    /* ---------- Blackmagic DeckLink / UltraStudio playout (SDI / HDMI out) ---------- */
+    isDecklink(n) { return [...this.outs.entries()].some(([id, o]) => (n == null ? id.startsWith('decklink') : id === 'decklink-' + n) && o.want); }
+    /** n: 1..4, device: Blackmagic device name, mode: '1080p' | '1080i' | '720p' | '2160p' | 'program', bus: audio bus */
+    async startDecklink(n, { device, mode = 'program', bus = 'M' } = {}) {
+      if (!this.v2) { U.toast('Blackmagic output needs the GPU output engine (Settings → Encoders → Engine).', 'error', 9000); return false; }
+      if (!device) { U.toast('Choose a Blackmagic device first', 'error'); return false; }
+      const probe = await window.bts.output.decklink().catch(() => null);
+      if (probe && probe.error === 'nosupport') { U.toast('Blackmagic output needs an FFmpeg built with DeckLink support — set it in External Outputs → “FFmpeg with DeckLink”.', 'error', 12000); return false; }
+      if (probe && probe.error === 'nodriver') { U.toast('Blackmagic Desktop Video is not installed — install it from blackmagicdesign.com/support and restart the PC.', 'error', 12000); return false; }
+      if (probe && probe.devices.length && !probe.devices.includes(device)) { U.toast(`Blackmagic device “${device}” was not found. Available: ${probe.devices.join(', ')}`, 'error', 10000); return false; }
+      const st = this.studio, fps = st.fps;
+      const size = { '1080p': [1920, 1080], '1080i': [1920, 1080], '720p': [1280, 720], '2160p': [3840, 2160] }[mode] || [st.W, st.H];
+      const interlaced = mode === '1080i';
+      const cfg = { kind: 'decklink', name: `Blackmagic ${n} (${device})`, device, size, interlaced, rate: fps };
+      // mezzanine (near-lossless) picture; shares the recorder's encode. A keyframe is requested as soon as playout attaches.
+      const ok = await this._startV2('decklink-' + n, cfg, { mode: 'quality', quality: 'mezzanine', keyint: 1, bus }, {});
+      if (ok) window.bts.power(true);
+      return ok;
+    }
+    async stopDecklink(n) { if (n == null) { for (const id of [...this.outs.keys()]) if (id.startsWith('decklink')) await this._stop(id); } else await this._stop('decklink-' + n); this._power(); }
+
     async startIso(inputId) {
       const inp = this.studio.byId(inputId); if (!inp) return false;
       const ms = inp.getMediaStream();
@@ -131,7 +152,7 @@
 
     stopAll() { for (const id of [...this.outs.keys()]) this._stop(id); }
 
-    _power() { if (!this.isStreaming() && !this.isRecording()) window.bts.power(false); }
+    _power() { if (!this.isStreaming() && !this.isRecording() && !this.isDecklink()) window.bts.power(false); }
 
     /* ---------- internals: engine v2 ---------- */
     async _startV2(id, cfg, prof, extra = {}) {

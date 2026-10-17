@@ -97,6 +97,18 @@ function buildArgs(cfg) {
     : ['-hide_banner', '-loglevel', 'info', '-stats_period', '1', '-fflags', '+genpts+discardcorrupt', '-thread_queue_size', '2048', '-probesize', '1M', '-analyzeduration', '1500000', '-i', 'pipe:0'];
   const map = cfg.v2 ? ['-map', '0:v:0', '-map', '1:a:0'] : ['-map', '0:v?', '-map', '0:a?'];
 
+  if (cfg.kind === 'decklink') {
+    // Blackmagic DeckLink / UltraStudio playout (SDI / HDMI). Needs Blackmagic Desktop Video and an FFmpeg built with DeckLink.
+    const [w, h] = cfg.size || [s.video.width, s.video.height];
+    const vf = [`scale=${w}:${h}:flags=lanczos`, cfg.interlaced ? 'interlace=scan=tff:lowpass=complex' : null, 'format=uyvy422'].filter(Boolean).join(',');
+    return ['-hide_banner', '-loglevel', 'info', '-stats_period', '1', '-fflags', 'nobuffer', '-flags', 'low_delay',
+      '-thread_queue_size', '4096', '-probesize', '32', '-analyzeduration', '0', '-f', 'flv', '-i', 'pipe:0',
+      '-thread_queue_size', '4096', '-f', 's16le', '-ar', '48000', '-ac', '2', '-i', 'pipe:3',
+      '-map', '0:v:0', '-map', '1:a:0', '-vf', vf, '-fps_mode', 'cfr', '-r', String(cfg.rate || fps),
+      '-c:v', 'wrapped_avframe', '-c:a', 'pcm_s16le', '-ar', '48000', '-ac', '2',
+      ...(cfg.interlaced ? ['-field_order', 'tt'] : []), '-f', 'decklink', ...(cfg.preroll ? ['-preroll', String(cfg.preroll)] : []), cfg.device];
+  }
+
   if (cfg.kind === 'stream') {
     const st = s.stream;
     const url = cfg.url;
@@ -147,9 +159,9 @@ function parseStats(line, p) {
 
 function start(id, cfg) {
   if (procs.has(id)) stop(id, true);
-  if (cfg.kind !== 'stream') fs.mkdirSync(path.dirname(cfg.file), { recursive: true });
+  if (cfg.kind === 'record' || cfg.kind === 'iso') fs.mkdirSync(path.dirname(cfg.file), { recursive: true });
   const args = buildArgs(cfg);
-  const bin = ffmpegPath();
+  const bin = cfg.kind === 'decklink' ? decklinkFfmpeg() : ffmpegPath();
   log.info(`[output ${id}] ${bin} ${args.map(a => (cfg.key && a.includes(cfg.key) ? a.replace(cfg.key, '****') : a)).join(' ')}`);
   let proc;
   try {
@@ -276,7 +288,7 @@ function onVideo(sid, pts, key, data) {
   for (const p of s.consumers.values()) {
     if (p.stopping) continue;
     const c = p.v2;
-    const limit = p.cfg.kind === 'stream' ? 24e6 : 256e6;
+    const limit = p.cfg.kind === 'stream' ? 24e6 : p.cfg.kind === 'decklink' ? 6e6 : 256e6; // playout must stay live: never queue more than a few frames
     if (!c.started) {
       if (!key) continue;
       c.started = true; c.basePts = pts; c.nextSample = Math.round(pts * 48);
@@ -340,7 +352,36 @@ function ffmpegVersion() {
   return new Promise(res => execFile(ffmpegPath(), ['-version'], { windowsHide: true, timeout: 8000 }, (e, out) => res(e ? null : out.split('\n')[0])));
 }
 
+/** FFmpeg used for DeckLink playout: a user-chosen build (with --enable-decklink) or the bundled one. */
+function decklinkFfmpeg() {
+  const s = ctx.getSettings();
+  const custom = s.decklink && s.decklink.ffmpeg;
+  return custom && fs.existsSync(custom) ? custom : ffmpegPath();
+}
+/** List Blackmagic output devices: [{name}] or {error} when DeckLink support/drivers are missing. */
+function listDecklink() {
+  const bin = decklinkFfmpeg();
+  const run = (args) => new Promise(res => execFile(bin, args, { windowsHide: true, timeout: 10000 }, (e, so, se) => res(String(so || '') + String(se || ''))));
+  return (async () => {
+    let out = await run(['-hide_banner', '-sinks', 'decklink']);
+    if (!/\[[^\]]+\]/.test(out)) out += '\n' + await run(['-hide_banner', '-f', 'lavfi', '-i', 'nullsrc', '-f', 'decklink', '-list_devices', '1', 'dummy']);
+    const names = new Set();
+    let inSinks = false;
+    for (const line of out.split(/\r?\n/)) {
+      if (/Auto-detected sinks for decklink/i.test(line)) { inSinks = true; continue; }
+      if (inSinks) { const m = /^\s+\*?\s*(.+?)\s+\[(.+)\]\s*$/.exec(line); if (m) { names.add(m[2].trim() || m[1].trim()); continue; } if (line.trim()) inSinks = false; }
+      const q = /\[decklink @ [^\]]+\]\s+'([^']+)'/.exec(line); // -list_devices output
+      if (q) names.add(q[1].trim());
+    }
+    const noSupport = /Unknown output format|Requested output format 'decklink' is not|format 'decklink' is not known|Unknown input format: 'decklink'/i.test(out);
+    const noDriver = /Could not create DeckLink iterator|DeckLink drivers|DeckLinkAPI/i.test(out);
+    return { devices: [...names].filter(n => n && n.length < 80), ffmpeg: bin, custom: bin !== ffmpegPath(),
+      error: names.size ? null : noSupport ? 'nosupport' : noDriver ? 'nodriver' : 'none' };
+  })();
+}
+
 function registerIpc(ipcMain) {
+  ipcMain.handle('decklink:list', () => listDecklink());
   ipcMain.handle('output:start', (e, id, cfg) => start(id, cfg));
   ipcMain.on('output:chunk', (e, id, buf) => write(id, buf));
   ipcMain.on('enc:config', (e, sid, avcC) => onConfig(sid, avcC));

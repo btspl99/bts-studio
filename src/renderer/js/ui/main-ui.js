@@ -303,6 +303,16 @@
       rec.iv = setInterval(() => { if (w.closed) this._cleanupExternal(slot); }, 500);
       this.updateButtons();
     }
+    /** Change what a running external output shows, without closing its window */
+    setExternalSource(slot, source) {
+      const rec = this.externals[slot]; if (!rec || !rec.win || rec.win.closed) return;
+      source = this._normSource(source);
+      if (rec.mv) rec.mv.users = Math.max(0, rec.mv.users - 1);
+      rec.mv = source.startsWith('multiview:') ? this.studio.multiviews.get(source.slice(10)) : null;
+      if (rec.mv) rec.mv.users++;
+      rec.source = source; rec.bars = null;
+      try { rec.win.document.title = `BTS Studio — External ${slot + 1} (${this._sourceLabel(source)})`; } catch { /* closing */ }
+    }
     _cleanupExternal(slot) {
       const x = this.externals[slot]; if (!x) return;
       clearInterval(x.iv);

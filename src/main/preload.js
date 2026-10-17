@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('bts', {
     set: (s) => ipcRenderer.invoke('settings:set', s)
   },
   displays: () => ipcRenderer.invoke('displays:list'),
+  displaysIdentify: () => ipcRenderer.invoke('displays:identify'),
+  onDisplaysChanged: (fn) => ipcRenderer.on('displays:changed', (e, why) => fn(why)),
   captureSources: () => ipcRenderer.invoke('capture:sources'),
   dialog: {
     open: (o) => ipcRenderer.invoke('dialog:open', o),
@@ -49,7 +51,8 @@ contextBridge.exposeInMainWorld('bts', {
     encoders: () => ipcRenderer.invoke('output:encoders'),
     ffmpegVersion: () => ipcRenderer.invoke('output:ffmpeg-version'),
     onStatus: listen('output:status'),
-    list: () => ipcRenderer.invoke('output:list')
+    list: () => ipcRenderer.invoke('output:list'),
+    decklink: () => ipcRenderer.invoke('decklink:list')
   },
   enc: {
     config: (sid, avcC) => ipcRenderer.send('enc:config', sid, avcC),
