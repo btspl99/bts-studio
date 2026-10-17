@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.7.0 — 2026-10-17
+
+The production release — third step of the vMix gap-analysis roadmap.
+
+### New
+- **Layers on every input** — any input (camera, video, NDI, image…) can carry up to 10 other inputs on top, placed and resized on the picture in its new *Layers* tab, like vMix input layers. A camera with a logo bug and a lower third becomes one input.
+- **Input effects** (new *Effects* tab): **3D LUTs** (.cube files — log-to-Rec.709 conversions and creative looks, applied on the GPU with an amount slider), **Gaussian blur**, and an **alpha mask** from a PNG's transparency or a black-and-white picture (circles, frames, shaped wipes).
+- **Digital PTZ** — save up to 12 framings (zoom + pan) on any input and glide between them smoothly; API `DigitalPTZPreset` and `DigitalPTZMove`.
+- **Title pages (storyboard)** — save sets of field values (one page per speaker, score or result) and step through them on air; the title animates out and back in between pages. API `TitlePageNext`, `TitlePagePrevious`, `TitlePage`.
+- **Replay tags** — tag events (Goal, Save, Wicket… — editable list), filter the event list by tag and play every event with a tag as a highlights reel. API `ReplayTagLastEvent`, `ReplayPlayTag`.
+- **Image-sequence stingers** — a folder of PNG / WebP frames can be used as a stinger, at its own frame rate.
+- **Social comments** (Tools menu) — read live chat from **Twitch** (no login) and **YouTube** (with a free YouTube Data API key), click a comment to show it on air with any title, auto-hide after a few seconds. API `SocialShowNewest`, `SocialHide`.
+
 ## 1.6.0 — 2026-10-17
 
 The outputs release — second step of the vMix gap-analysis roadmap.

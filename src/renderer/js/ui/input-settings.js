@@ -7,7 +7,7 @@
   function open(inp, tab = 'general') {
     const st = BTS.studio;
     const tabs = [{ id: 'general', label: 'General', el: general(inp, st) }];
-    if (inp.type === 'scene') tabs.push({ id: 'layers', label: 'Layers', el: layers(inp, st) });
+    if (inp.hasVideo) tabs.push({ id: 'layers', label: 'Layers', el: layers(inp, st) });
     if (inp.type === 'mix') tabs.push({ id: 'mix', label: 'Mix Switcher', el: mixTab(inp, st) });
     if (inp.type === 'delay') tabs.push({ id: 'delay', label: 'Delay', el: delayTab(inp, st) });
     if (inp.type === 'slides') tabs.push({ id: 'slides', label: 'Slides', el: slidesTab(inp) });
@@ -18,6 +18,7 @@
       tabs.push({ id: 'position', label: 'Position / Crop', el: position(inp) });
       tabs.push({ id: 'color', label: 'Colour Correction', el: colour(inp) });
       tabs.push({ id: 'key', label: 'Keying', el: keying(inp) });
+      tabs.push({ id: 'effects', label: 'Effects', el: effectsTab(inp) });
     }
     if (inp.channel) tabs.push({ id: 'audio', label: 'Audio', el: audio(inp, st) });
     tabs.push({ id: 'triggers', label: 'Triggers', el: BTS.operatorUI.triggersTab(inp) });
@@ -127,7 +128,37 @@
         { label: 'On completion', key: 'onEnd', type: 'select', options: [['', 'Do nothing'], ['next', 'Quick Play the Preview input'], ['next-input', 'Quick Play the next input']] }
       ], p));
     }
-    if (inp.type === 'title') box.append(U.el('div', { style: { height: '10px' } }), titleFields(inp, st));
+    if (inp.type === 'title') box.append(U.el('div', { style: { height: '10px' } }), titleFields(inp, st), U.el('div', { style: { height: '10px' } }), titlePages(inp));
+    return box;
+  }
+
+  /** Pages (storyboard): saved sets of field values — e.g. one page per speaker or per result */
+  function titlePages(inp) {
+    const box = U.el('div');
+    const draw = () => {
+      box.innerHTML = '';
+      box.append(U.el('h4', { text: 'PAGES (storyboard)', style: { margin: '6px 0', color: 'var(--accent2)', fontSize: '11px', letterSpacing: '.08em' } }));
+      const tbl = U.el('div', { class: 'list', style: { maxHeight: '200px' } });
+      inp.pages.forEach((p, i) => {
+        const first = Object.values(p.values).find(v => v && !/\.(png|jpe?g|webp|svg)$/i.test(v)) || '';
+        tbl.append(U.el('div', { class: 'li' + (inp.cfg.page === i ? ' sel' : '') }, [
+          U.el('b', { text: String(i + 1), style: { minWidth: '22px' } }),
+          U.el('input', { value: p.name, style: { width: '140px' }, onchange: (e) => { p.name = e.target.value; } }),
+          U.el('span', { class: 'grow hint', text: String(first).slice(0, 60) }),
+          U.el('button', { class: 'btn small primary', text: 'Show', onclick: async () => { await inp.goPage(i); draw(); } }),
+          U.el('button', { class: 'btn small', text: 'Update', title: 'Replace with the current field values', onclick: () => { inp.savePage(p.name, i); draw(); } }),
+          U.el('button', { class: 'btn small', text: '✕', onclick: () => { inp.pages.splice(i, 1); draw(); } })
+        ]));
+      });
+      if (!inp.pages.length) tbl.append(U.el('div', { class: 'li hint', text: 'Type the fields above, then “Save as page”. Repeat for each speaker, score or result; step through them on air with Next page.' }));
+      box.append(tbl, U.el('div', { class: 'inline', style: { marginTop: '6px' } }, [
+        U.el('button', { class: 'btn', text: '＋ Save as page', onclick: () => { inp.savePage(); draw(); } }),
+        U.el('button', { class: 'btn', text: '◀ Previous', onclick: async () => { await inp.prevPage(); draw(); } }),
+        U.el('button', { class: 'btn', text: 'Next ▶', onclick: async () => { await inp.nextPage(); draw(); } }),
+        U.el('span', { class: 'hint', text: 'API: TitlePageNext / TitlePagePrevious / TitlePage Value=n' })
+      ]));
+    };
+    draw();
     return box;
   }
 
@@ -196,9 +227,22 @@
     ];
     for (const [l, v] of P) presets.append(U.el('button', { class: 'btn', text: l, onclick: () => set(v) }));
     presets.append(U.el('button', { class: 'btn', text: 'Reset crop', onclick: () => set({}, { l: 0, r: 0, t: 0, b: 0 }) }));
-    const box = U.el('div', {}, [presets]);
+    // Digital PTZ: saved framings this input glides to (any input — cameras, NDI, streams, video)
+    p.dptz = p.dptz || [];
+    const dptzBox = U.el('div', { class: 'inline', style: { flexWrap: 'wrap', margin: '0 0 10px' } });
+    const dptzMs = U.el('input', { type: 'number', value: 1500, min: 0, max: 20000, step: 100, style: { width: '80px' }, title: 'Move time (ms)' });
+    const drawDptz = () => {
+      dptzBox.innerHTML = '';
+      dptzBox.append(U.el('b', { text: 'Digital PTZ', style: { marginRight: '6px' } }));
+      p.dptz.forEach((pr, i) => dptzBox.append(U.el('button', { class: 'btn', text: `${i + 1}`, title: `${pr.name || 'Preset ' + (i + 1)} — click: move, right-click: delete`, onclick: () => inp.moveTo(pr, +dptzMs.value), oncontextmenu: (e) => { e.preventDefault(); p.dptz.splice(i, 1); drawDptz(); } })));
+      if (p.dptz.length < 12) dptzBox.append(U.el('button', { class: 'btn', text: '＋ Save framing', onclick: () => { p.dptz.push({ zoom: p.position.zoom, panX: p.position.panX, panY: p.position.panY, ms: +dptzMs.value }); drawDptz(); } }));
+      dptzBox.append(U.el('span', { class: 'hint', text: 'move' }), dptzMs, U.el('span', { class: 'hint', text: 'ms · API: DigitalPTZPreset Input=… Value=1' }));
+    };
+    drawDptz();
+    const box = U.el('div', {}, [presets, dptzBox]);
     let formEl;
     const refresh = () => { if (formEl) formEl.remove(); formEl = build(); box.append(formEl); };
+    inp.on('position', () => { if (box.isConnected) refresh(); });
     const build = () => F([
       { section: 'Position' },
       { label: 'Zoom', key: 'position.zoom', type: 'range', min: 0.05, max: 4, step: 0.01, default: 1 },
@@ -312,6 +356,32 @@
     return box;
   }
 
+  /** LUT, blur and alpha mask (vMix-style input effects) */
+  function effectsTab(inp) {
+    const fx = inp.props.effects;
+    fx.lut = fx.lut || { enabled: false, path: '', amount: 1 };
+    fx.mask = fx.mask || { enabled: false, path: '', mode: 'alpha', invert: false };
+    if (fx.blur == null) fx.blur = 0;
+    return U.el('div', {}, [
+      F([{ section: '3D LUT' },
+        { label: 'Enable', key: 'enabled', type: 'checkbox' },
+        { label: 'LUT file (.cube)', key: 'path', type: 'file', filters: [{ name: '3D LUT', extensions: ['cube'] }], onChange: () => { fx.lut.enabled = !!fx.lut.path; } },
+        { label: 'Amount', key: 'amount', type: 'range', min: 0, max: 1, step: 0.01, default: 1 },
+        { custom: U.el('div', { class: 'hint', text: 'Camera log-to-Rec.709 conversions and creative looks (.cube files from DaVinci Resolve, camera makers, LUT packs). Applied on the GPU after colour correction.' }) }
+      ], fx.lut),
+      U.el('div', { style: { height: '12px' } }),
+      F([{ section: 'Blur' }, { label: 'Gaussian blur', key: 'blur', type: 'range', min: 0, max: 60, step: 0.5, default: 0, unit: ' px', hint: 'Soft background behind titles, privacy blur, or a blurred copy behind a vertical video.' }], fx),
+      U.el('div', { style: { height: '12px' } }),
+      F([{ section: 'Alpha mask' },
+        { label: 'Enable', key: 'enabled', type: 'checkbox' },
+        { label: 'Mask image', key: 'path', type: 'file', filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'svg'] }], onChange: () => { fx.mask.enabled = !!fx.mask.path; } },
+        { label: 'Use', key: 'mode', type: 'select', options: [['alpha', 'Transparency of a PNG'], ['luma', 'Brightness (white = visible)']] },
+        { label: 'Invert', key: 'invert', type: 'checkbox' },
+        { custom: U.el('div', { class: 'hint', text: 'Cut the input to any shape — circles, rounded frames, logos, wipes. The mask is stretched over the whole input.' }) }
+      ], fx.mask)
+    ]);
+  }
+
   function keying(inp) {
     const ck = inp.props.effects.chroma, lk = inp.props.effects.luma;
     const pickBtn = U.el('button', { class: 'btn', text: 'Pick colour from input', onclick: () => {
@@ -380,7 +450,7 @@
     const tableBox = U.el('div');
     const snap = (v) => (dragSnap ? Math.round(v * 40) / 40 : v);
     let drag = null, dragSnap = true;
-    const L = () => inp.cfg.layers;
+    const L = () => (inp.type === 'scene' ? inp.cfg.layers : (inp.props.layers = inp.props.layers || [])); // scenes keep layers in cfg; every other input in props
     const hit = (x, y) => { for (let i = L().length - 1; i >= 0; i--) { const l = L()[i]; if (l.visible === false) continue; if (x >= l.x && x <= l.x + l.w && y >= l.y && y <= l.y + l.h) return i; } return -1; };
     const corner = (x, y) => { const l = L()[sel]; if (!l) return null; const tol = 10 / SW; for (const [cx, cy, k] of [[l.x, l.y, 'tl'], [l.x + l.w, l.y, 'tr'], [l.x, l.y + l.h, 'bl'], [l.x + l.w, l.y + l.h, 'br']]) if (Math.abs(x - cx) < tol && Math.abs(y - cy) < tol * SW / SH) return k; return null; };
     const pos = (e) => { const r = stage.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; };

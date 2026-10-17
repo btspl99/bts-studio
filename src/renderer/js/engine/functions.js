@@ -55,6 +55,10 @@
   def('SelectIndex', 'Playback', ['Input', 'Value'], (p) => { const i = need(inp(p)); if (i.load) i.load(num(p.Value, 1) - 1, i.playing); return true; });
 
   // ---- titles
+  const title = (p) => { const i = need(inp(p)); if (i.type !== 'title') throw new Error('Not a title input'); return i; };
+  def('TitlePageNext', 'Titles', ['Input'], (p) => title(p).nextPage(), 'Show the next page (storyboard) of a title');
+  def('TitlePagePrevious', 'Titles', ['Input'], (p) => title(p).prevPage());
+  def('TitlePage', 'Titles', ['Input', 'Value'], (p) => title(p).goPage(num(p.Value, 1) - 1), 'Show page Value (1 = first)');
   def('SetText', 'Titles', ['Input', 'SelectedName', 'Value'], (p) => { const i = need(inp(p)); if (i.type !== 'title') throw new Error('Not a title input'); if (!i.setText(p.SelectedName || p.SelectedIndex || 'Name', p.Value ?? '')) throw new Error('Field not found'); return true; });
   def('SetImage', 'Titles', ['Input', 'SelectedName', 'Value'], (p) => { const i = need(inp(p)); if (i.type !== 'title') throw new Error('Not a title input'); return i.setImage(p.SelectedName, p.Value); });
   def('SetColor', 'Titles', ['Input', 'SelectedName', 'Value'], (p) => { const i = need(inp(p)); return i.renderer.setColor(p.SelectedName, p.Value); });
@@ -92,6 +96,8 @@
 
   // ---- position / effects
   const pos = (p) => need(inp(p)).props.position;
+  def('DigitalPTZPreset', 'Position', ['Input', 'Value', 'Duration?'], (p) => { if (!need(inp(p)).ptzPreset(num(p.Value, 1), p.Duration != null && p.Duration !== '' ? num(p.Duration, 1500) : undefined)) throw new Error('No such digital PTZ preset'); return true; }, 'Glide an input to its saved framing 1–12');
+  def('DigitalPTZMove', 'Position', ['Input', 'Value', 'Duration?'], (p) => { const [z, x, y] = String(p.Value || '').split(',').map(Number); need(inp(p)).moveTo({ zoom: isNaN(z) ? undefined : z, panX: isNaN(x) ? undefined : x, panY: isNaN(y) ? undefined : y }, num(p.Duration, 1000)); return true; }, 'Value="zoom,panX,panY" e.g. 2,0.3,-0.2');
   def('SetZoom', 'Position', ['Input', 'Value'], (p) => { pos(p).zoom = num(p.Value, 1); return true; });
   def('SetPanX', 'Position', ['Input', 'Value'], (p) => { pos(p).panX = num(p.Value, 0); return true; }, '-1..1 (fraction of width)');
   def('SetPanY', 'Position', ['Input', 'Value'], (p) => { pos(p).panY = num(p.Value, 0); return true; });
@@ -183,6 +189,10 @@
   def('ReplayPlay', 'Replay', [], () => R().goLive(), 'Send the loaded replay to Output');
   def('ReplayPause', 'Replay', [], () => { const i = R().replayInput(); if (!i) throw new Error('No replay loaded'); i.togglePlay(); return true; });
   def('ReplayPlayHighlights', 'Replay', [], () => R().playHighlights(), 'Play starred events back-to-back');
+  def('SocialHide', 'Social', [], () => { BTS.social.hide(); return true; }, 'Take the on-air comment off');
+  def('SocialShowNewest', 'Social', [], () => { const c = BTS.social.comments[0]; if (!c) throw new Error('No comments yet'); return BTS.social.show(c); }, 'Show the newest comment with the comment title');
+  def('ReplayTagLastEvent', 'Replay', ['Value'], (p) => R().tagLast(String(p.Value || 'Best')), 'Add a tag (event list) to the newest event, e.g. Value=Goal');
+  def('ReplayPlayTag', 'Replay', ['Value'], (p) => R().playTag(String(p.Value || '')), 'Play every event with this tag back-to-back');
   def('ReplaySelectChannel', 'Replay', ['Value'], (p) => R().select(String(p.Value || 'A').toUpperCase()), 'A or B — which replay channel the controls act on');
   def('ReplayChannelA', 'Replay', [], () => R().select('A'));
   def('ReplayChannelB', 'Replay', [], () => R().select('B'));

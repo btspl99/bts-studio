@@ -79,11 +79,12 @@
           </section>
           <section class="rp-events">
             <div class="rp-ev-head"><span class="hint">EVENTS</span><div class="spacer"></div><input type="search" id="rpFilter" placeholder="Filter…"><label class="hint"><input type="checkbox" id="rpStarOnly"> ★ only</label></div>
+            <div class="rp-tags" id="rpTags"></div>
             <div class="rp-ev-list" id="rpEvents"></div>
           </section>
         </div>`;
       const $ = (s) => this.root.querySelector(s);
-      this.el = { rec: $('#rpRec'), src: $('#rpSources'), buf: $('#rpBuf'), secs: $('#rpSecs'), canvas: $('#rpCanvas'), tc: $('#rpTc'), dur: $('#rpDur'), seek: $('#rpSeek'), play: $('#rpPlay'), speed: $('#rpSpeed'), speedVal: $('#rpSpeedVal'), cams: $('#rpCams'), marks: $('#rpMarks'), events: $('#rpEvents'), filter: $('#rpFilter'), starOnly: $('#rpStarOnly'), osdCam: $('#rpOsdCam'), osdSpeed: $('#rpOsdSpeed') };
+      this.el = { rec: $('#rpRec'), src: $('#rpSources'), buf: $('#rpBuf'), secs: $('#rpSecs'), canvas: $('#rpCanvas'), tc: $('#rpTc'), dur: $('#rpDur'), seek: $('#rpSeek'), play: $('#rpPlay'), speed: $('#rpSpeed'), speedVal: $('#rpSpeedVal'), cams: $('#rpCams'), marks: $('#rpMarks'), events: $('#rpEvents'), filter: $('#rpFilter'), starOnly: $('#rpStarOnly'), tags: $('#rpTags'), osdCam: $('#rpOsdCam'), osdSpeed: $('#rpOsdSpeed') };
       this.ctx = this.el.canvas.getContext('2d');
       this.el.secs.value = String(R.cfg.seconds);
       this.el.secs.onchange = () => { R.cfg.seconds = +this.el.secs.value; if (R.running) U.toast('New buffer length applies when the recorder restarts'); };
@@ -175,7 +176,15 @@
       const R = this.R, q = this.el.filter.value.toLowerCase(), starOnly = this.el.starOnly.checked;
       const list = this.el.events;
       list.innerHTML = '';
-      const evs = R.events.filter(e => (!starOnly || e.star) && (!q || (e.label || '').toLowerCase().includes(q) || e.time.includes(q)));
+      // tag bar: click = show only that list, ▶ = play the list as highlights
+      const tb = this.el.tags; tb.innerHTML = '';
+      for (const t of R.tagList) {
+        const n = R.byTag(t).length;
+        tb.append(U.el('button', { class: 'tbtn small' + (this.tagFilter === t ? ' on' : ''), text: `${t}${n ? ' ' + n : ''}`, title: `Show events tagged ${t}`, onclick: () => { this.tagFilter = this.tagFilter === t ? null : t; this.renderEvents(); } }));
+      }
+      if (this.tagFilter) tb.append(U.el('button', { class: 'tbtn small hot', text: `▶ Play “${this.tagFilter}”`, onclick: () => R.playTag(this.tagFilter) }));
+      tb.append(U.el('button', { class: 'tbtn small', text: '✎', title: 'Edit tag names', onclick: async () => { const v = await BTS.Dialog.prompt('Tags (comma separated)', R.tagList.join(', ')); if (v != null) { R.cfg.tags = v.split(',').map(x => x.trim()).filter(Boolean).slice(0, 20); this.renderEvents(); } } }));
+      const evs = R.events.filter(e => (!starOnly || e.star) && (!this.tagFilter || (e.tags || []).includes(this.tagFilter)) && (!q || (e.label || '').toLowerCase().includes(q) || e.time.includes(q) || (e.tags || []).some(t => t.toLowerCase().includes(q))));
       if (!evs.length) { list.append(U.el('div', { class: 'mod-empty', text: R.events.length ? 'No matching events' : 'Saved replays appear here. Use LAST 5s/10s, Mark In/Out or Instant Replay.' })); return; }
       evs.forEach((ev) => {
         const n = R.events.indexOf(ev) + 1;
@@ -183,7 +192,8 @@
         const row = U.el('div', { class: 'rp-ev' + (this.selected === ev ? ' sel' : '') + (R.loaded && R.loaded.event === ev ? ' loaded' : '') }, [
           U.el('button', { class: 'rp-star' + (ev.star ? ' on' : ''), text: ev.star ? '★' : '☆', title: 'Highlight', onclick: (e) => { e.stopPropagation(); R.toggleStar(ev); } }),
           U.el('span', { class: 'rp-ev-n', text: String(n) }),
-          U.el('div', { class: 'rp-ev-info' }, [label, U.el('div', { class: 'hint', text: `${ev.time} · ${ev.duration.toFixed(1)} s · ${Object.keys(ev.files).length} angle${Object.keys(ev.files).length > 1 ? 's' : ''}` })]),
+          U.el('div', { class: 'rp-ev-info' }, [label, U.el('div', { class: 'hint', text: `${ev.time} · ${ev.duration.toFixed(1)} s · ${Object.keys(ev.files).length} angle${Object.keys(ev.files).length > 1 ? 's' : ''}${(ev.tags || []).length ? ' · ' + ev.tags.join(', ') : ''}` })]),
+          U.el('button', { class: 'tbtn small', text: '#', title: 'Tag this event', onclick: (e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); BTS.Dialog.ctxMenu(r.left, r.bottom + 2, R.tagList.map(t => ({ label: `${(ev.tags || []).includes(t) ? '✓' : '   '}  ${t}`, onClick: () => R.toggleTag(ev, t) }))); } }),
           U.el('button', { class: 'tbtn small', text: 'PVW', title: 'Load to replay monitor / Preview', onclick: (e) => { e.stopPropagation(); this.select(ev); } }),
           U.el('button', { class: 'tbtn small hot', text: '▶ OUT', title: 'Play to Output', onclick: (e) => { e.stopPropagation(); this.selected = ev; R.load(ev, { toOutput: true }); } }),
           U.el('button', { class: 'tbtn small', text: '✕', title: 'Delete event', onclick: (e) => { e.stopPropagation(); R.removeEvent(ev); } })

@@ -199,6 +199,12 @@
     async playLast() { return this.load(this.events[0], { toOutput: true }); }
     setSpeed(v) { this.cfg.speed = U.clamp(v, 0.05, 2); const i = this.replayInput(); if (i) i.setSpeed(this.cfg.speed); if (this.following) { const b = this.replayInput('B'); if (b) b.setSpeed(this.cfg.speed); } this.emit('speed'); return true; }
     toggleStar(ev) { ev.star = !ev.star; this.emit('change'); }
+    /** tags (event lists): Goal, Wicket, Save… — an event can carry several */
+    get tagList() { return this.cfg.tags && this.cfg.tags.length ? this.cfg.tags : ['Goal', 'Save', 'Foul', 'Wicket', 'Six', 'Four', 'Best']; }
+    toggleTag(ev, tag) { ev.tags = ev.tags || []; ev.tags = ev.tags.includes(tag) ? ev.tags.filter(t => t !== tag) : [...ev.tags, tag]; this.emit('change'); return true; }
+    tagLast(tag) { const ev = this.events[0]; if (!ev) return false; ev.tags = [...new Set([...(ev.tags || []), tag])]; this.emit('change'); return true; }
+    byTag(tag) { return this.events.filter(e => (e.tags || []).includes(tag)); }
+    playTag(tag) { const l = this.byTag(tag); if (!l.length) { U.toast(`No events tagged “${tag}”`, 'error'); return false; } return this.playHighlights(l); }
     removeEvent(ev) { for (const f of Object.values(ev.files)) window.bts.replay.deleteClip(f); this.events = this.events.filter(e => e !== ev); if (this.loaded && this.loaded.event === ev) this.loaded = null; this.emit('change'); }
 
     /** Highlights: play a list of events back-to-back on Output */

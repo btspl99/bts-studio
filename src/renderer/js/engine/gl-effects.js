@@ -22,6 +22,15 @@ uniform int u_luma; uniform float u_lumaLo, u_lumaHi, u_lumaSmooth; uniform int 
 uniform float u_opacity;
 uniform int u_deint; uniform float u_texelY;
 uniform vec3 u_lift, u_gammaRGB, u_gain; uniform float u_sharpen; uniform vec2 u_texel;
+uniform sampler2D u_lut; uniform int u_lutOn; uniform float u_lutN, u_lutAmt;
+// 3D LUT (.cube) stored as N slices of N×N side by side (WebGL 1 has no 3D textures); blue slices interpolated
+vec3 applyLut(vec3 c){
+  float n = u_lutN; float b = clamp(c.b, 0.0, 1.0) * (n - 1.0); float b0 = floor(b); float b1 = min(b0 + 1.0, n - 1.0);
+  float x = clamp(c.r, 0.0, 1.0) * (n - 1.0) + 0.5, y = (clamp(c.g, 0.0, 1.0) * (n - 1.0) + 0.5) / n;
+  vec3 s0 = texture2D(u_lut, vec2((b0 * n + x) / (n * n), y)).rgb;
+  vec3 s1 = texture2D(u_lut, vec2((b1 * n + x) / (n * n), y)).rgb;
+  return mix(s0, s1, b - b0);
+}
 
 vec2 cbcr(vec3 c){ return vec2(-0.168736*c.r - 0.331264*c.g + 0.5*c.b, 0.5*c.r - 0.418688*c.g - 0.081312*c.b); }
 vec3 hueRotate(vec3 c, float a){
@@ -57,6 +66,7 @@ void main(){
   if (u_hue != 0.0) rgb = hueRotate(rgb, u_hue);
   rgb = pow(max(rgb, 0.0), vec3(1.0/u_gamma));
   rgb = clamp(rgb, 0.0, 1.0);
+  if (u_lutOn == 1) rgb = mix(rgb, applyLut(rgb), u_lutAmt);
 
   if (u_chroma == 1) {
     float d = distance(cbcr(t.rgb / max(t.a, 0.0001)), cbcr(u_key));
@@ -106,7 +116,7 @@ void main(){
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       this.u = {};
-      ['u_tex', 'u_swizzle', 'u_premulIn', 'u_bright', 'u_contrast', 'u_sat', 'u_hue', 'u_gamma', 'u_temp', 'u_tint', 'u_chroma', 'u_key', 'u_sim', 'u_smooth', 'u_spill', 'u_luma', 'u_lumaLo', 'u_lumaHi', 'u_lumaSmooth', 'u_lumaInvert', 'u_opacity', 'u_deint', 'u_texelY', 'u_lift', 'u_gammaRGB', 'u_gain', 'u_sharpen', 'u_texel']
+      ['u_tex', 'u_swizzle', 'u_premulIn', 'u_bright', 'u_contrast', 'u_sat', 'u_hue', 'u_gamma', 'u_temp', 'u_tint', 'u_chroma', 'u_key', 'u_sim', 'u_smooth', 'u_spill', 'u_luma', 'u_lumaLo', 'u_lumaHi', 'u_lumaSmooth', 'u_lumaInvert', 'u_opacity', 'u_deint', 'u_texelY', 'u_lift', 'u_gammaRGB', 'u_gain', 'u_sharpen', 'u_texel', 'u_lut', 'u_lutOn', 'u_lutN', 'u_lutAmt']
         .forEach(n => { this.u[n] = gl.getUniformLocation(p, n); });
       gl.clearColor(0, 0, 0, 0);
       this.canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.lost = true; });
@@ -165,7 +175,53 @@ void main(){
       const lgg = GLProcessor.lgg(ccOn ? cc : null);
       gl.uniform3fv(u.u_lift, lgg.lift); gl.uniform3fv(u.u_gammaRGB, lgg.gamma); gl.uniform3fv(u.u_gain, lgg.gain);
       gl.uniform1f(u.u_sharpen, fx.sharpen || 0);
+      const lut = fx.lut && fx.lut.enabled && fx.lut.path ? this.lutTexture(fx.lut.path) : null;
+      gl.uniform1i(u.u_lut, 1); gl.uniform1i(u.u_lutOn, lut ? 1 : 0);
+      if (lut) { gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, lut.tex); gl.activeTexture(gl.TEXTURE0); gl.uniform1f(u.u_lutN, lut.n); gl.uniform1f(u.u_lutAmt, fx.lut.amount ?? 1); }
       gl.uniform2f(u.u_texel, 1 / Math.max(1, opts.srcW || 1920), 1 / Math.max(1, opts.srcH || 1080));
+    }
+
+    /** parse a .cube 3D LUT once and keep it as a texture (null while loading or if invalid) */
+    lutTexture(path) {
+      this.luts = this.luts || new Map();
+      const have = this.luts.get(path);
+      if (have) return have.tex ? have : null;
+      const rec = { tex: null, n: 0 };
+      this.luts.set(path, rec);
+      window.bts.file.readText(path).then((txt) => {
+        const lut = GLProcessor.parseCube(txt);
+        if (!lut || !this.gl) { BTS.U.toast(`Not a 3D .cube LUT: ${BTS.U.baseName(path)}`, 'error'); return; }
+        const gl = this.gl, n = lut.n;
+        const px = new Uint8Array(n * n * n * 4);
+        for (let b = 0; b < n; b++) for (let g = 0; g < n; g++) for (let r = 0; r < n; r++) {
+          const i = (r + g * n + b * n * n) * 3, o = ((g * n * n) + b * n + r) * 4;
+          px[o] = Math.round(lut.data[i] * 255); px[o + 1] = Math.round(lut.data[i + 1] * 255); px[o + 2] = Math.round(lut.data[i + 2] * 255); px[o + 3] = 255;
+        }
+        const tex = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n * n, n, 0, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        gl.activeTexture(gl.TEXTURE0);
+        rec.tex = tex; rec.n = n;
+      }).catch(() => BTS.U.toast(`Cannot read LUT ${path}`, 'error'));
+      return null;
+    }
+    static parseCube(txt) {
+      let n = 0; const data = []; let min = [0, 0, 0], max = [1, 1, 1];
+      for (const raw of String(txt).split(/\r?\n/)) {
+        const line = raw.trim(); if (!line || line[0] === '#') continue;
+        let m;
+        if ((m = /^LUT_3D_SIZE\s+(\d+)/i.exec(line))) { n = +m[1]; continue; }
+        if ((m = /^DOMAIN_MIN\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)/i.exec(line))) { min = [+m[1], +m[2], +m[3]]; continue; }
+        if ((m = /^DOMAIN_MAX\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)/i.exec(line))) { max = [+m[1], +m[2], +m[3]]; continue; }
+        if (/^[A-Z_]/i.test(line)) continue; // TITLE, LUT_1D_SIZE… (1D LUTs not supported)
+        const v = line.split(/\s+/).map(Number);
+        if (v.length >= 3 && v.every(x => !isNaN(x))) for (let k = 0; k < 3; k++) data.push(Math.min(1, Math.max(0, (v[k] - min[k]) / ((max[k] - min[k]) || 1))));
+      }
+      if (n < 2 || n > 128 || data.length !== n * n * n * 3) return null;
+      return { n, data };
     }
 
     _copyOut(w, h, out) {

@@ -4,6 +4,26 @@
  * 4 overlay channels, fade-to-black, render loop, multiview, project (de)serialisation.
  */
 (function (BTS) {
+  /** Image-sequence stinger (folder of PNG / WebP frames with alpha), with the same small API as a <video> */
+  class SeqPlayer {
+    constructor(folder, fps) {
+      this.fps = fps || 30; this.frames = []; this.readyState = 0; this.t0 = 0; this.playing = false; this._t = 0;
+      window.bts.media.listImages(folder).then(async (files) => {
+        const list = (files || []).filter(f => /\.(png|webp|tga|gif)$/i.test(f)).slice(0, 600);
+        const bitmaps = await Promise.all(list.map(async (f) => { const img = new Image(); img.src = await window.bts.file.url(f); await img.decode().catch(() => {}); return img.naturalWidth ? createImageBitmap(img) : null; }));
+        this.frames = bitmaps.filter(Boolean);
+        if (this.frames.length) { this.videoWidth = this.frames[0].width; this.videoHeight = this.frames[0].height; this.readyState = 4; }
+      }).catch(() => {});
+    }
+    get duration() { return this.frames.length / this.fps; }
+    get currentTime() { return this.playing ? Math.min(this.duration, (performance.now() - this.t0) / 1000) : this._t; }
+    set currentTime(v) { this._t = v; this.t0 = performance.now() - v * 1000; }
+    get ended() { return this.currentTime >= this.duration; }
+    get frame() { return this.frames[Math.min(this.frames.length - 1, Math.floor(this.currentTime * this.fps))] || null; }
+    play() { this.t0 = performance.now() - this._t * 1000; this.playing = true; return Promise.resolve(); }
+    pause() { this._t = this.currentTime; this.playing = false; }
+  }
+
   const U = BTS.U;
 
   const TIMER_WORKER = `let id=null; onmessage=(e)=>{ if(id) clearInterval(id); if(e.data>0) id=setInterval(()=>postMessage(performance.now()), e.data); };`;
@@ -185,7 +205,9 @@
       const cfg = this.transitions.stingers[type];
       if (!cfg || !cfg.path) return null;
       let s = this.stingerEls[type];
-      if (!s || s.path !== cfg.path) {
+      if ((!s || s.path !== cfg.path) && cfg.sequence) {
+        s = this.stingerEls[type] = { el: new SeqPlayer(cfg.path, cfg.fps || this.fps), path: cfg.path };
+      } else if (!s || s.path !== cfg.path) {
         const el = document.createElement('video');
         el.muted = false; el.preload = 'auto'; el.playsInline = true;
         window.bts.file.url(cfg.path).then(u => { el.src = u; el.load(); });
@@ -373,7 +395,7 @@
         if (a.stinger) {
           const st = a.stinger;
           this._drawInput(ctx, st.el.currentTime < st.cutPoint ? A : B, W, H);
-          if (st.el.readyState >= 2) { const r = U.fit(st.el.videoWidth, st.el.videoHeight, W, H, 'cover'); ctx.drawImage(st.el, r.x, r.y, r.w, r.h); }
+          if (st.el.readyState >= 2) { const src = st.el.frame || st.el; if (src) { const r = U.fit(st.el.videoWidth, st.el.videoHeight, W, H, 'cover'); ctx.drawImage(src, r.x, r.y, r.w, r.h); } }
         } else {
           BTS.Transitions.draw(a.type, ctx, W, H, U.clamp(tp, 0, 1), (c) => this._drawInput(c, A, W, H), (c) => this._drawInput(c, B, W, H));
         }

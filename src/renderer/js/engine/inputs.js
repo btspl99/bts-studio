@@ -83,7 +83,7 @@
 
     fxActive() {
       const fx = this.props.effects;
-      return (fx.color && fx.color.enabled) || (fx.chroma && fx.chroma.enabled) || (fx.luma && fx.luma.enabled) || !!fx.deinterlace || (fx.sharpen > 0);
+      return (fx.color && fx.color.enabled) || (fx.chroma && fx.chroma.enabled) || (fx.luma && fx.luma.enabled) || !!fx.deinterlace || (fx.sharpen > 0) || !!(fx.lut && fx.lut.enabled && fx.lut.path);
     }
 
     /** processed frame for this render tick */
@@ -99,10 +99,88 @@
         // never process above what can be seen: output size × this input's zoom (keeps 4K sharp, saves GPU at 1080p)
         const z = Math.max(1, (this.props.position && this.props.position.zoom) || 1);
         const out = this.app.gl.process(f.src, f.w, f.h, this.props.effects, this.fxCanvas, [Math.ceil(this.app.W * z), Math.ceil(this.app.H * z)]);
-        if (out) return (this._fxResult = { src: out, w: out.width, h: out.height, scaleBack: f.w / out.width });
+        if (out) return (this._fxResult = this._post({ src: out, w: out.width, h: out.height, scaleBack: f.w / out.width }));
       }
-      return (this._fxResult = f);
+      return (this._fxResult = this._post(f));
     }
+
+    /** Digital PTZ: glide zoom / pan to a target over ms (ease in-out), on any input */
+    moveTo(target, ms = 1000) {
+      const P = this.props.position, from = { zoom: P.zoom ?? 1, panX: P.panX ?? 0, panY: P.panY ?? 0 };
+      const to = { zoom: target.zoom ?? from.zoom, panX: target.panX ?? from.panX, panY: target.panY ?? from.panY };
+      if (this._moveOff) this._moveOff();
+      if (!(ms > 0)) { Object.assign(P, to); this.emit('position'); return; }
+      const t0 = performance.now();
+      this._moveOff = this.app.on('frame', (now) => {
+        const k = Math.min(1, (now - t0) / ms), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+        // zoom moves geometrically so it feels even; pan linearly
+        P.zoom = from.zoom * Math.pow(to.zoom / from.zoom, e); P.panX = from.panX + (to.panX - from.panX) * e; P.panY = from.panY + (to.panY - from.panY) * e;
+        if (k >= 1) { this._moveOff(); this._moveOff = null; this.emit('position'); }
+      });
+    }
+    ptzPreset(n, ms) {
+      const pr = (this.props.dptz || [])[n - 1];
+      if (!pr) return false;
+      this.moveTo(pr, ms ?? pr.ms ?? 1500);
+      return true;
+    }
+
+    /** 2D post effects: Gaussian blur and alpha mask (image), and layers drawn on top of this input */
+    _post(f) {
+      const fx = this.props.effects || {};
+      const blur = fx.blur > 0 ? fx.blur : 0;
+      const mask = fx.mask && fx.mask.enabled && fx.mask.path ? fx.mask : null;
+      const layers = this.type !== 'scene' && this.props.layers && this.props.layers.some(l => l.visible !== false && l.inputId) ? this.props.layers : null;
+      if (!blur && !mask && !layers) return f;
+      const c = this._postCanvas || (this._postCanvas = document.createElement('canvas'));
+      if (c.width !== f.w || c.height !== f.h) { c.width = f.w; c.height = f.h; c._g = c.getContext('2d'); c._g.imageSmoothingQuality = 'high'; }
+      const g = c._g;
+      g.clearRect(0, 0, f.w, f.h);
+      g.filter = blur ? `blur(${(blur * f.w / 1920).toFixed(1)}px)` : 'none';
+      g.drawImage(f.src, 0, 0, f.w, f.h);
+      g.filter = 'none';
+      if (mask) {
+        const img = this._maskImg(mask);
+        if (img) { g.globalCompositeOperation = mask.invert ? 'destination-out' : 'destination-in'; g.drawImage(img, 0, 0, f.w, f.h); g.globalCompositeOperation = 'source-over'; }
+      }
+      if (layers && !this._inLayers) { // up to 10 other inputs drawn over this one (vMix "layers")
+        this._inLayers = true;
+        try {
+          for (const l of layers.slice(0, 10)) {
+            if (l.visible === false) continue;
+            const inp = this.app.byId(l.inputId);
+            if (!inp || inp === this || (inp.containsInput && inp.containsInput(this.id))) continue;
+            g.save(); if (l.opacity != null && l.opacity < 1) g.globalAlpha = l.opacity;
+            inp.draw(g, (l.x ?? 0) * f.w, (l.y ?? 0) * f.h, (l.w ?? 1) * f.w, (l.h ?? 1) * f.h);
+            g.restore();
+          }
+        } finally { this._inLayers = false; }
+      }
+      return { src: c, w: f.w, h: f.h, scaleBack: f.scaleBack };
+    }
+    /** mask image (PNG with alpha, or a black-and-white picture used as luminance) */
+    _maskImg(m) {
+      if (this._mask && this._mask.key === m.path + '|' + m.mode) return this._mask.ready ? this._mask.c : null;
+      const rec = this._mask = { key: m.path + '|' + m.mode, ready: false, c: null };
+      (async () => {
+        const img = new Image();
+        img.src = /^(https?|file|data):/i.test(m.path) ? m.path : await window.bts.file.url(m.path);
+        await img.decode().catch(() => {});
+        if (!img.naturalWidth || this._mask !== rec) return;
+        const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+        const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+        if (m.mode === 'luma') { // white = visible, black = hidden
+          const d = g.getImageData(0, 0, c.width, c.height), p = d.data;
+          for (let i = 0; i < p.length; i += 4) { p[i + 3] = (p[i] * 0.2126 + p[i + 1] * 0.7152 + p[i + 2] * 0.0722) * (p[i + 3] / 255); }
+          g.putImageData(d, 0, 0);
+        }
+        rec.c = c; rec.ready = true;
+      })();
+      return null;
+    }
+    containsInput(id) { return !!(this.props.layers && this.props.layers.some(l => l.inputId === id)); }
+    /** inputs shown inside this one (tally, autoplay): its layers */
+    children() { return (this.props.layers || []).filter(l => l.visible !== false).map(l => this.app.byId(l.inputId)).filter(Boolean); }
 
     /** Per-input video delay (lip-sync, up to 1 s): keeps recent frames in a ring of canvases */
     _delay(f) {
@@ -820,6 +898,22 @@
     }
     setText(name, v) { const ok = this.renderer.setText(name, v); this.emit('fields'); return ok; }
     setImage(name, v) { const ok = this.renderer.setImage(name, v); this.emit('fields'); return ok; }
+    /* ---- pages (storyboard): saved sets of field values, stepped through on air ---- */
+    get pages() { return (this.cfg.pages = this.cfg.pages || []); }
+    snapshotFields() { const v = {}; for (const e of this.renderer.t.elements) { if (e.type === 'text' || e.type === 'ticker') v[e.id] = e.text; if (e.type === 'image') v[e.id] = e.src || ''; } return v; }
+    savePage(name, at) { const p = { name: name || `Page ${this.pages.length + 1}`, values: this.snapshotFields() }; if (at != null && this.pages[at]) this.pages[at] = p; else this.pages.push(p); this.emit('pages'); return p; }
+    /** show page n (0-based); on air it animates out, swaps the text and animates back in */
+    async goPage(n) {
+      const p = this.pages[n]; if (!p) return false;
+      this.cfg.page = n;
+      const swap = () => { for (const [id, v] of Object.entries(p.values)) { const e = this.renderer.find(id); if (!e) continue; if (e.type === 'image') this.setImage(id, v); else this.setText(id, v); } };
+      if (this.live && this.renderer.animate !== false && this.cfg.pageAnimate !== false) { const ms = this.renderer.transitionOut() || 0; await new Promise(r => setTimeout(r, ms)); swap(); this.renderer.transitionIn(); }
+      else swap();
+      this.emit('pages');
+      return true;
+    }
+    nextPage() { const n = this.pages.length; return n ? this.goPage(((this.cfg.page ?? -1) + 1) % n) : false; }
+    prevPage() { const n = this.pages.length; return n ? this.goPage(((this.cfg.page ?? 0) - 1 + n) % n) : false; }
     serialize() { const s = super.serialize(); s.cfg.template = U.deepClone(this.renderer ? this.renderer.t : this.cfg.template); return s; }
   }
 

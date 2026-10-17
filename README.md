@@ -4,7 +4,9 @@ Free, open-source live production software for students and creators — switch 
 
 Website & downloads: https://studio.btspl.tech · User guide: https://studio.btspl.tech/docs/
 
-## Features (v1.6)
+## Features (v1.7)
+
+New in 1.7 (production): **layers on every input**, **3D LUT / blur / alpha-mask** effects, **digital PTZ** presets, **title pages** (storyboard), **replay tags** with tag highlights, **image-sequence stingers** and **YouTube / Twitch comments** on air. See CHANGELOG.md.
 
 New in 1.6 (outputs): per-output **source** (program, clean feed, preview, multiview or any input) for every stream and recorder, **vertical / square** streams with fill-crop, **stream delay**, **multi-track** recording (buses as separate audio tracks), **WAV** recording and **file splitting**. See CHANGELOG.md.
 

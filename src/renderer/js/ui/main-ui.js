@@ -197,6 +197,7 @@
       U.$('#btnSettings').onclick = (e) => BTS.Dialog.ctxMenu(e.clientX, e.clientY - 220, [
         { label: 'Settings…', onClick: () => BTS.SettingsUI.open() },
         { label: 'Data Sources…', onClick: () => BTS.SettingsUI.dataSources() },
+        { label: 'Social Comments (YouTube / Twitch)…', onClick: () => BTS.SocialUI.open() },
         { label: 'Title Editor…', onClick: () => BTS.TitleDesigner.open() },
         { label: 'Telestrator…', onClick: () => BTS.TelestratorUI.open() },
         { label: 'Statistics', onClick: () => BTS.SettingsUI.stats() },

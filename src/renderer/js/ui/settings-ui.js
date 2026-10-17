@@ -137,7 +137,11 @@
     const trans = U.el('div', {}, [
       F([{ section: 'Quick Play' }, { label: 'Effect', key: 'type', type: 'select', options: tOpts }, { label: 'Duration (ms)', key: 'duration', type: 'number', min: 0 }], tr.quickPlay),
       ...tr.buttons.map((b, i) => F([{ section: `Transition ${i + 1}` }, { label: 'Effect', key: 'type', type: 'select', options: tOpts }, { label: 'Duration (ms)', key: 'duration', type: 'number', min: 0 }], b)),
-      ...Object.entries(tr.stingers).map(([k, v]) => F([{ section: k + ' (video with alpha: WebM VP9 or MOV ProRes4444 → convert to WebM)' }, { label: 'Video', key: 'path', type: 'file', filters: [{ name: 'Video', extensions: U.VIDEO_EXT }] }, { label: 'Cut point (ms)', key: 'cutPoint', type: 'number', hint: 'When the switch happens behind the stinger.' }], v)),
+      ...Object.entries(tr.stingers).map(([k, v]) => F([{ section: k + ' (video with alpha — WebM VP9 — or a folder of PNG frames)' },
+        { label: 'Type', key: 'sequence', type: 'select', options: [[false, 'Video file'], [true, 'Image sequence (folder of PNGs)']], onChange: (val) => { v.sequence = val === true || val === 'true'; v.path = ''; } },
+        { label: 'Video / folder', key: 'path', type: 'file', filters: [{ name: 'Video or image frame', extensions: [...U.VIDEO_EXT, 'png', 'webp'] }], hint: 'For an image sequence choose any frame inside the folder — all PNG / WebP frames in it are played in name order.', onChange: () => { if (v.sequence && /\.[a-z0-9]+$/i.test(v.path)) v.path = v.path.replace(/[\\/][^\\/]+$/, ''); } },
+        { label: 'Sequence frame rate', key: 'fps', type: 'number', min: 1, max: 120, hint: 'Image sequences only (default: project frame rate).' },
+        { label: 'Cut point (ms)', key: 'cutPoint', type: 'number', hint: 'When the switch happens behind the stinger.' }], v)),
       ...st.overlays.map((o, i) => F([{ section: `Overlay channel ${i + 1}` }, { label: 'Transition', key: 'type', type: 'select', options: ovlOpts }, { label: 'Duration (ms)', key: 'duration', type: 'number', min: 0 }], o))
     ]);
 
