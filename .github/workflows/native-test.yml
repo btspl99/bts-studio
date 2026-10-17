@@ -1,0 +1,25 @@
+name: Native test build
+
+# Build the native helpers on Windows from any branch (Actions → Run workflow), without making a release.
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: 'native/<name> to build (empty = all)'
+        required: false
+        default: ''
+
+jobs:
+  native:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - name: Build native helpers
+        shell: pwsh
+        run: ./native/build-all.ps1 -Only "${{ github.event.inputs.component }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ github.event.inputs.component || 'all' }}
+          path: vendor/native/win32-x64
+          if-no-files-found: warn

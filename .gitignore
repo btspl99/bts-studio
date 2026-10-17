@@ -7,3 +7,4 @@ release/
 website/link/data/*
 !website/link/data/.htaccess
 node_modules
+vendor/native/

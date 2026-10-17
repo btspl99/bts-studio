@@ -28,6 +28,12 @@ jobs:
       - name: Fetch FFmpeg (Windows x64)
         run: node scripts/fetch-ffmpeg.js
 
+      - uses: microsoft/setup-msbuild@v2
+
+      - name: Build native helpers (virtual camera, audio/ASIO/VST3, DeckLink keyer)
+        shell: pwsh
+        run: ./native/build-all.ps1
+
       - name: Build installer (NSIS)
         run: npx electron-builder --win nsis --x64 --publish never
 
