@@ -1,4 +1,4 @@
-# Builds bts-audio.exe (PortAudio with ASIO / WASAPI / WDM-KS / MME + VST3 host) — Windows x64, VS 2022.
+# Builds bts-audio.exe (PortAudio with ASIO / WASAPI / WDM-KS / MME + VST3 host) — Windows x64, Visual Studio (2022 or newer).
 param([Parameter(Mandatory = $true)][string]$OutDir)
 $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot
@@ -28,7 +28,7 @@ if (-not (Test-Path (Join-Path $asio 'common/asio.h'))) {
 }
 
 $build = Join-Path $here 'build'
-cmake -S $here -B $build -G 'Visual Studio 17 2022' -A x64 "-DDEPS_DIR=$deps"
+cmake -S $here -B $build -A x64 "-DDEPS_DIR=$deps"  # newest Visual Studio on the runner
 if ($LASTEXITCODE) { throw 'cmake configure failed' }
 cmake --build $build --config Release --target bts-audio --parallel
 if ($LASTEXITCODE) { throw 'cmake build failed' }
