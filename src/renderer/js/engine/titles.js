@@ -326,86 +326,183 @@
       return e.countUp ? tm.value + el : Math.max(0, tm.value - el);
     }
 
-    transitionIn() { if (!this.animate || !this.t.animIn || this.t.animIn.type === 'none') { this.progress = 1; this.animDir = 0; return 0; } this.animDir = 1; this.animStart = performance.now(); this.progress = 0; return this.t.animIn.duration || 500; }
-    transitionOut() { if (!this.animate || !this.t.animOut || this.t.animOut.type === 'none') { this.progress = 0; this.animDir = 0; return 0; } this.animDir = -1; this.animStart = performance.now(); return (this.t.animOut.duration || 400) + this._maxDelay(); }
+    /* ---- animation model ----
+     * Template default: t.animIn / t.animOut {type, duration} + per-element `delay` (legacy).
+     * Per element (GT-style storyboard): e.animIn / e.animOut {type, duration, delay, ease} override the template.
+     */
+    _anim(e, dir) {
+      const t = this.t, base = dir > 0 ? (t.animIn || { type: 'fade', duration: 500 }) : (t.animOut || { type: 'fade', duration: 400 });
+      const own = dir > 0 ? e.animIn : e.animOut;
+      return {
+        type: (own && own.type) || base.type || 'fade',
+        duration: own && own.duration != null ? own.duration : (base.duration ?? 500),
+        delay: own && own.delay != null ? own.delay : (dir > 0 ? (e.delay || 0) : 0),
+        ease: (own && own.ease) || base.ease || (dir > 0 ? 'out' : 'in')
+      };
+    }
+    totalTime(dir) { return Math.max(0, ...this.t.elements.filter(e => !e.hidden).map(e => { const a = this._anim(e, dir); return a.type === 'none' ? 0 : a.delay + a.duration; })); }
+    transitionIn() { if (!this.animate || !this.t.animIn || this.t.animIn.type === 'none' && !this.t.elements.some(e => e.animIn && e.animIn.type !== 'none')) { this.progress = 1; this.animDir = 0; return 0; } this.animDir = 1; this.animStart = performance.now(); this.progress = 0; return this.totalTime(1); }
+    transitionOut() { if (!this.animate || !this.t.animOut || this.t.animOut.type === 'none' && !this.t.elements.some(e => e.animOut && e.animOut.type !== 'none')) { this.progress = 0; this.animDir = 0; return 0; } this.animDir = -1; this.animStart = performance.now(); return this.totalTime(-1); }
     show() { this.progress = 1; this.animDir = 0; }
     _maxDelay() { return Math.max(0, ...this.t.elements.map(e => e.delay || 0)); }
+    /** Editor scrubbing: render the In (dir 1) or Out (dir -1) animation at time ms */
+    renderAt(dir, ms) { const save = [this.animDir, this.animStart, this.progress]; this.animDir = dir; this.animStart = performance.now() - ms; this.progress = dir > 0 ? 0 : 1; this.render(performance.now(), false, true); [this.animDir, this.animStart, this.progress] = save; return this.canvas; }
 
-    render(now = performance.now(), editing = false) {
+    static ease(name, x) {
+      switch (name) {
+        case 'linear': return x;
+        case 'in': return x * x * x;
+        case 'inout': return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+        case 'back': { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); }
+        case 'bounce': { const n = 7.5625, d = 2.75; if (x < 1 / d) return n * x * x; if (x < 2 / d) return n * (x -= 1.5 / d) * x + 0.75; if (x < 2.5 / d) return n * (x -= 2.25 / d) * x + 0.9375; return n * (x -= 2.625 / d) * x + 0.984375; }
+        case 'elastic': return x === 0 || x === 1 ? x : Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * (2 * Math.PI) / 3) + 1;
+        case 'out': default: return 1 - Math.pow(1 - x, 3);
+      }
+    }
+
+    render(now = performance.now(), editing = false, scrub = false) {
       const { ctx, t } = this;
       const W = this.canvas.width, H = this.canvas.height;
       ctx.clearRect(0, 0, W, H);
       const dir = this.animDir;
-      const anim = dir > 0 ? t.animIn : t.animOut;
       const elapsed = now - this.animStart;
-      if (dir !== 0) {
-        const total = (anim.duration || 500) + this._maxDelay();
-        if (elapsed >= total) { this.progress = dir > 0 ? 1 : 0; this.animDir = 0; }
-      }
+      if (dir !== 0 && !scrub && elapsed >= this.totalTime(dir)) { this.progress = dir > 0 ? 1 : 0; this.animDir = 0; }
       if (!editing && this.animDir === 0 && this.progress === 0) return this.canvas;
       for (const e of t.elements) {
         if (e.hidden) continue;
-        let p = 1;
+        let p = 1, a = null;
         if (!editing && this.animDir !== 0) {
-          const d = anim.duration || 500;
-          const local = U.clamp((elapsed - (dir > 0 ? (e.delay || 0) : 0)) / d, 0, 1);
-          p = dir > 0 ? U.ease.out(local) : 1 - U.ease.in(local);
+          a = this._anim(e, this.animDir);
+          if (a.type === 'none') p = this.animDir > 0 ? (elapsed >= a.delay ? 1 : 0) : (elapsed >= a.delay ? 0 : 1);
+          else {
+            const local = U.clamp((elapsed - a.delay) / Math.max(1, a.duration), 0, 1);
+            p = this.animDir > 0 ? TitleRenderer.ease(a.ease, local) : 1 - TitleRenderer.ease(a.ease === 'out' ? 'in' : a.ease, local);
+          }
         } else if (!editing) p = this.progress;
-        if (p <= 0) continue;
+        if (p <= 0 && !(a && (a.type === 'pop' || a.type === 'back'))) continue;
         ctx.save();
-        if (!(e.typewriter && this.animDir > 0)) this._applyAnim(ctx, e, anim ? anim.type : 'fade', p, W, H);
+        if (e.rotation) { const cx = e.x + e.w / 2, cy = e.y + e.h / 2; ctx.translate(cx, cy); ctx.rotate(e.rotation * Math.PI / 180); ctx.translate(-cx, -cy); }
+        const typing = a && a.type === 'typewriter';
+        if (!typing && !(e.typewriter && this.animDir > 0)) this._applyAnim(ctx, e, a ? a.type : (t.animIn ? t.animIn.type : 'fade'), p, W, H);
         ctx.globalAlpha *= (e.opacity ?? 1);
-        this._drawEl(ctx, e, now, editing ? 1 : p);
+        if (e.blend && e.blend !== 'normal') ctx.globalCompositeOperation = e.blend;
+        this._typingNow = typing;
+        this._drawEl(ctx, e, now, editing ? 1 : (typing || e.typewriter ? p : 1));
+        this._typingNow = false;
         ctx.restore();
       }
       return this.canvas;
     }
 
     _applyAnim(ctx, e, type, p, W, H) {
-      if (p >= 1) return;
+      if (p >= 1 || type === 'none') return;
+      const cx = e.x + e.w / 2, cy = e.y + e.h / 2;
+      const q = Math.max(0, p);
       switch (type) {
         case 'slide-left': ctx.translate(-(1 - p) * (e.x + e.w + 40), 0); break;
         case 'slide-right': ctx.translate((1 - p) * (W - e.x + 40), 0); break;
         case 'slide-up': ctx.translate(0, (1 - p) * (H - e.y + 40)); break;
         case 'slide-down': ctx.translate(0, -(1 - p) * (e.y + e.h + 40)); break;
-        case 'wipe': ctx.beginPath(); ctx.rect(e.x, e.y - 2, e.w * p, e.h + 4); ctx.clip(); break;
-        case 'zoom': { const cx = e.x + e.w / 2, cy = e.y + e.h / 2; ctx.translate(cx, cy); ctx.scale(0.6 + 0.4 * p, 0.6 + 0.4 * p); ctx.translate(-cx, -cy); ctx.globalAlpha *= p; break; }
-        case 'fade': default: ctx.globalAlpha *= p;
+        case 'nudge-left': ctx.translate(-(1 - p) * 80, 0); ctx.globalAlpha *= q; break;
+        case 'nudge-right': ctx.translate((1 - p) * 80, 0); ctx.globalAlpha *= q; break;
+        case 'nudge-up': ctx.translate(0, (1 - p) * 60); ctx.globalAlpha *= q; break;
+        case 'wipe': case 'wipe-right': ctx.beginPath(); ctx.rect(e.x - 4, e.y - 4, (e.w + 8) * q, e.h + 8); ctx.clip(); break;
+        case 'wipe-left': ctx.beginPath(); ctx.rect(e.x - 4 + (e.w + 8) * (1 - q), e.y - 4, (e.w + 8) * q, e.h + 8); ctx.clip(); break;
+        case 'wipe-down': ctx.beginPath(); ctx.rect(e.x - 4, e.y - 4, e.w + 8, (e.h + 8) * q); ctx.clip(); break;
+        case 'wipe-up': ctx.beginPath(); ctx.rect(e.x - 4, e.y - 4 + (e.h + 8) * (1 - q), e.w + 8, (e.h + 8) * q); ctx.clip(); break;
+        case 'reveal': ctx.beginPath(); ctx.rect(e.x - 4 + (e.w + 8) * (1 - q) / 2, e.y - 4, (e.w + 8) * q, e.h + 8); ctx.clip(); break;
+        case 'zoom': ctx.translate(cx, cy); ctx.scale(0.6 + 0.4 * p, 0.6 + 0.4 * p); ctx.translate(-cx, -cy); ctx.globalAlpha *= q; break;
+        case 'pop': { const s = Math.max(0.001, p); ctx.translate(cx, cy); ctx.scale(s, s); ctx.translate(-cx, -cy); break; }
+        case 'stretch': ctx.translate(e.x, cy); ctx.scale(Math.max(0.001, q), 1); ctx.translate(-e.x, -cy); break;
+        case 'flip': ctx.translate(cx, cy); ctx.scale(1, Math.max(0.001, Math.cos((1 - q) * Math.PI / 2))); ctx.translate(-cx, -cy); ctx.globalAlpha *= q; break;
+        case 'spin': ctx.translate(cx, cy); ctx.rotate((1 - p) * -Math.PI); ctx.scale(Math.max(0.001, q), Math.max(0.001, q)); ctx.translate(-cx, -cy); break;
+        case 'blur': ctx.filter = `blur(${Math.round((1 - q) * 24)}px)`; ctx.globalAlpha *= q; break;
+        case 'drop': ctx.translate(0, -(1 - p) * (e.y + e.h + 40)); break;
+        case 'fade': default: ctx.globalAlpha *= q;
       }
     }
 
-    _fillStyle(ctx, e) {
-      if (e.fill2) { const g = ctx.createLinearGradient(e.x, e.y, e.x + e.w, e.y + e.h); g.addColorStop(0, e.fill); g.addColorStop(1, e.fill2); return g; }
-      return e.fill || '#000';
+    _fillStyle(ctx, e, a = 'fill', b = 'fill2') {
+      const c1 = e[a], c2 = e[b];
+      if (c2) {
+        const ang = ((e.gradAngle ?? 135) - 90) * Math.PI / 180;
+        const cx = e.x + e.w / 2, cy = e.y + e.h / 2, r = Math.abs(e.w * Math.cos(ang)) / 2 + Math.abs(e.h * Math.sin(ang)) / 2;
+        const g = e.gradType === 'radial' ? ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(e.w, e.h) / 2) : ctx.createLinearGradient(cx - Math.cos(ang) * r, cy - Math.sin(ang) * r, cx + Math.cos(ang) * r, cy + Math.sin(ang) * r);
+        g.addColorStop(0, c1 || '#000'); g.addColorStop(1, c2); return g;
+      }
+      return c1 || (a === 'fill' ? '#000' : '#fff');
+    }
+    _shadow(ctx, e, size) {
+      if (e.shadowColor) { ctx.shadowColor = e.shadowColor; ctx.shadowBlur = e.shadowBlur ?? 10; ctx.shadowOffsetX = e.shadowX ?? 0; ctx.shadowOffsetY = e.shadowY ?? 4; }
+      else if (e.shadow) { ctx.shadowColor = 'rgba(0,0,0,.65)'; ctx.shadowBlur = (size || 40) * 0.15; ctx.shadowOffsetY = (size || 40) * 0.05; }
+    }
+    _noShadow(ctx) { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0; }
+
+    _lines(ctx, str, maxW) {
+      const out = [];
+      for (const para of String(str).split(/\r?\n/)) {
+        const words = para.split(/(\s+)/); let line = '';
+        for (const w of words) { const test = line + w; if (ctx.measureText(test).width > maxW && line.trim()) { out.push(line.trimEnd()); line = w.trimStart(); } else line = test; }
+        out.push(line);
+      }
+      return out;
     }
 
     _text(ctx, e, str) {
       if (e.uppercase) str = str.toUpperCase();
       let size = e.size || 32;
-      const font = (s) => `${e.italic ? 'italic ' : ''}${e.weight || 600} ${s}px "${e.font || 'Segoe UI'}", "Segoe UI", system-ui, sans-serif`;
+      const font = (sz) => `${e.italic ? 'italic ' : ''}${e.weight || 600} ${sz}px "${e.font || 'Segoe UI'}", "Segoe UI", system-ui, sans-serif`;
       ctx.font = font(size);
-      if (e.autoFit !== false) { let w = ctx.measureText(str).width; while (w > e.w && size > 8) { size -= 1; ctx.font = font(size); w = ctx.measureText(str).width; } }
-      ctx.fillStyle = e.color || '#fff';
+      if ('letterSpacing' in ctx) ctx.letterSpacing = (e.letterSpacing || 0) + 'px';
+      const pad = e.bg ? (e.pad ?? Math.round(size * 0.25)) : 0;
+      const innerW = Math.max(10, e.w - pad * 2);
+      const lh = (e.lineHeight || 1.2) * size;
+      let lines = e.wrap || /\n/.test(str) ? this._lines(ctx, str, innerW) : [str];
+      if (e.autoFit !== false) {
+        const fits = () => (e.wrap ? lines.length * lh <= e.h - pad * 2 + 1 && lines.every(l => ctx.measureText(l).width <= innerW + 1) : lines.every(l => ctx.measureText(l).width <= innerW + 1));
+        while (!fits() && size > 8) { size -= 1; ctx.font = font(size); lines = e.wrap || /\n/.test(str) ? this._lines(ctx, str, innerW) : [str]; }
+      }
+      const lineH = (e.lineHeight || 1.2) * size;
+      const blockH = lines.length * lineH;
+      const x = e.align === 'center' ? e.x + e.w / 2 : e.align === 'right' ? e.x + e.w - pad : e.x + pad;
+      const top = e.valign === 'top' ? e.y + pad : e.valign === 'bottom' ? e.y + e.h - pad - blockH : e.y + (e.h - blockH) / 2;
+      if (e.bg) {
+        const widest = Math.max(...lines.map(l => ctx.measureText(l).width));
+        const bw = e.bgFull ? e.w : Math.min(e.w, widest + pad * 2), bx = e.align === 'center' ? e.x + (e.w - bw) / 2 : e.align === 'right' ? e.x + e.w - bw : e.x;
+        ctx.save(); this._shadow(ctx, e, size); ctx.fillStyle = e.bg; ctx.beginPath(); ctx.roundRect(bx, top - pad, bw, blockH + pad * 2, e.bgRadius || 0); ctx.fill(); ctx.restore();
+      }
       ctx.textAlign = e.align || 'left';
       ctx.textBaseline = 'middle';
-      if (e.shadow) { ctx.shadowColor = 'rgba(0,0,0,.65)'; ctx.shadowBlur = size * 0.15; ctx.shadowOffsetY = size * 0.05; }
-      const x = e.align === 'center' ? e.x + e.w / 2 : e.align === 'right' ? e.x + e.w : e.x;
-      const y = e.valign === 'top' ? e.y + size * 0.6 : e.valign === 'bottom' ? e.y + e.h - size * 0.45 : e.y + e.h / 2 + size * 0.04;
-      if (e.stroke && e.strokeWidth) { ctx.lineWidth = e.strokeWidth; ctx.strokeStyle = e.stroke; ctx.strokeText(str, x, y); }
-      ctx.fillText(str, x, y);
+      ctx.fillStyle = e.color2 ? this._fillStyle(ctx, e, 'color', 'color2') : (e.color || '#fff');
+      if (!e.bg) this._shadow(ctx, e, size);
+      lines.forEach((l, i) => {
+        const y = top + lineH * i + lineH / 2 + size * 0.04;
+        if (e.stroke && e.strokeWidth) { ctx.save(); ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = e.strokeWidth * 2; ctx.strokeStyle = e.stroke; ctx.strokeText(l, x, y); ctx.restore(); }
+        ctx.fillText(l, x, y);
+      });
+      if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
     }
 
     _drawEl(ctx, e, now, p = 1) {
       switch (e.type) {
-        case 'rect': {
+        case 'rect': case 'ellipse': {
           ctx.fillStyle = this._fillStyle(ctx, e);
+          this._shadow(ctx, e, 40);
           ctx.beginPath();
-          if (e.radius) ctx.roundRect(e.x, e.y, e.w, e.h, Math.min(e.radius, e.h / 2, e.w / 2)); else ctx.rect(e.x, e.y, e.w, e.h);
-          ctx.fill();
+          if (e.type === 'ellipse') ctx.ellipse(e.x + e.w / 2, e.y + e.h / 2, Math.abs(e.w / 2), Math.abs(e.h / 2), 0, 0, Math.PI * 2);
+          else if (e.radius) ctx.roundRect(e.x, e.y, e.w, e.h, Math.min(e.radius, e.h / 2, e.w / 2)); else ctx.rect(e.x, e.y, e.w, e.h);
+          if (e.noFill !== true) ctx.fill();
+          this._noShadow(ctx);
           if (e.stroke && e.strokeWidth) { ctx.lineWidth = e.strokeWidth; ctx.strokeStyle = e.stroke; ctx.stroke(); }
           break;
         }
-        case 'text': { const t = String(e.text ?? ''); this._text(ctx, e, e.typewriter && p < 1 ? t.slice(0, Math.ceil(t.length * p)) : t); break; }
+        case 'line': {
+          ctx.lineWidth = e.strokeWidth || 4; ctx.strokeStyle = e.stroke || e.fill || '#fff'; ctx.lineCap = e.cap || 'round';
+          this._shadow(ctx, e, 20);
+          ctx.beginPath(); ctx.moveTo(e.x, e.y + (e.h < 0 ? -e.h : 0)); ctx.lineTo(e.x + e.w, e.y + Math.max(0, e.h)); ctx.stroke();
+          break;
+        }
+        case 'text': { const t = String(e.text ?? ''); this._text(ctx, e, (e.typewriter || this._typingNow) && p < 1 ? t.slice(0, Math.max(0, Math.ceil(t.length * p))) : t); break; }
         case 'crawl': {
           ctx.beginPath(); ctx.rect(e.x, e.y, e.w, e.h); ctx.clip();
           const size = e.size || 40, lh = size * (e.lineHeight || 1.5);
@@ -427,6 +524,7 @@
           if (img && img.complete && img.naturalWidth) {
             const r = U.fit(img.naturalWidth, img.naturalHeight, e.w, e.h, e.fit || 'contain');
             if (e.radius) { ctx.beginPath(); ctx.roundRect(e.x, e.y, e.w, e.h, e.radius); ctx.clip(); }
+            this._shadow(ctx, e, 30);
             ctx.drawImage(img, e.x + r.x, e.y + r.y, r.w, r.h);
           } else if (!e.src) {
             ctx.strokeStyle = 'rgba(255,255,255,.3)'; ctx.setLineDash([6, 6]); ctx.strokeRect(e.x, e.y, e.w, e.h);
